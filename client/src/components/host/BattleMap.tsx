@@ -65,7 +65,9 @@ function TroopCircle({
   );
 }
 
-function CityNode({ player }: { player: CityPlayerInfo }) {
+const CASTLE_IMAGES = ['/red_castle_1.png', '/blue_castle_1.png', '/green_castle_1.png'];
+
+function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex: number }) {
   const cx = player.x * 1000;
   const cy = player.y * 1000;
   const hpPct = player.maxHp > 0 ? player.hp / player.maxHp : 0;
@@ -117,18 +119,29 @@ function CityNode({ player }: { player: CityPlayerInfo }) {
         {Math.ceil(player.hp)}/{player.maxHp}
       </text>
 
-      {/* City square */}
-      <rect
-        x={cx - HALF}
-        y={cy - HALF}
-        width={HALF * 2}
-        height={HALF * 2}
-        rx={6}
-        fill={player.color}
-        fillOpacity={isDead ? 0.3 : 0.85}
-        stroke={player.color}
-        strokeWidth={3}
-      />
+      {/* City — castle image for first 3 players, colored square for rest */}
+      {playerIndex < CASTLE_IMAGES.length ? (
+        <image
+          href={CASTLE_IMAGES[playerIndex]}
+          x={cx - 64}
+          y={cy - 64}
+          width={128}
+          height={128}
+          opacity={isDead ? 0.3 : 1}
+        />
+      ) : (
+        <rect
+          x={cx - HALF}
+          y={cy - HALF}
+          width={HALF * 2}
+          height={HALF * 2}
+          rx={6}
+          fill={player.color}
+          fillOpacity={isDead ? 0.3 : 0.85}
+          stroke={player.color}
+          strokeWidth={3}
+        />
+      )}
 
       {/* Troops at home */}
       <text
@@ -263,6 +276,13 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
       xmlns="http://www.w3.org/2000/svg"
       preserveAspectRatio="xMidYMid meet"
     >
+      <defs>
+        <pattern id="grass" x="0" y="0" width="64" height="64" patternUnits="userSpaceOnUse">
+          <image href="/grass-tile.png" x="0" y="0" width="64" height="64" />
+        </pattern>
+      </defs>
+      <rect width="1000" height="1000" fill="url(#grass)" />
+
       {/* Attack trail lines */}
       {troopsInTransit.map((troop) => (
         <AttackLine key={troop.id} troop={troop} playerMap={playerMap} />
@@ -284,8 +304,8 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
       })}
 
       {/* Cities — rendered last so they paint over troop lines */}
-      {players.map((player) => (
-        <CityNode key={player.playerId} player={player} />
+      {players.map((player, index) => (
+        <CityNode key={player.playerId} player={player} playerIndex={index} />
       ))}
     </svg>
   );
