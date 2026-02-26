@@ -2,10 +2,8 @@ import { useEffect, useState } from 'react';
 import { useRoomState } from '../hooks/useRoomState';
 import JoinForm from '../components/player/JoinForm';
 import WaitingRoom from '../components/player/WaitingRoom';
-import AnswerButtons from '../components/player/AnswerButtons';
-import Submitted from '../components/player/Submitted';
-import PlayerResults from '../components/player/PlayerResults';
-import type { OptionKey } from '../../../shared/types';
+import GameControls from '../components/player/GameControls';
+import GameOver from '../components/player/GameOver';
 import '../styles/player.css';
 
 const PLAYER_ID_KEY = 'party_game_player_id';
@@ -26,7 +24,6 @@ export default function JoinPage() {
   const [playerId] = useState(getOrCreatePlayerId);
   const [joined, setJoined] = useState(false);
   const [playerName, setPlayerName] = useState('');
-  const [submittedKey, setSubmittedKey] = useState<OptionKey | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
 
   // Attempt reconnection on mount
@@ -42,7 +39,6 @@ export default function JoinPage() {
             setJoined(true);
             setPlayerName(savedName);
           } else {
-            // Room gone, clear saved data
             localStorage.removeItem(ROOM_ID_KEY);
             localStorage.removeItem(NAME_KEY);
           }
@@ -50,17 +46,6 @@ export default function JoinPage() {
       );
     }
   }, [socket, playerId]);
-
-  // Reset submitted answer when phase changes back to question (new round)
-  useEffect(() => {
-    if (roomState?.phase === 'question') {
-      // Check if we already answered this question
-      // (handles page refresh during question phase)
-    }
-    if (roomState?.phase === 'lobby') {
-      setSubmittedKey(null);
-    }
-  }, [roomState?.phase]);
 
   const handleJoin = (roomId: string, name: string) => {
     setJoinError(null);
@@ -81,17 +66,6 @@ export default function JoinPage() {
     );
   };
 
-  const handleAnswer = (optionKey: OptionKey) => {
-    if (!roomState || submittedKey) return;
-    setSubmittedKey(optionKey);
-    socket.emit('player:submit_answer', {
-      roomId: roomState.roomId,
-      playerId,
-      optionKey,
-    });
-  };
-
-  // Not joined yet - show join form
   if (!joined) {
     return (
       <div className="player-container">
@@ -100,7 +74,6 @@ export default function JoinPage() {
     );
   }
 
-  // Joined but no room state yet (waiting for first broadcast)
   if (!roomState) {
     return (
       <div className="player-container">
@@ -119,15 +92,13 @@ export default function JoinPage() {
         <WaitingRoom roomState={roomState} playerName={playerName} />
       )}
 
-      {roomState.phase === 'question' && !submittedKey && (
-        <AnswerButtons roomState={roomState} onAnswer={handleAnswer} />
+      {roomState.phase === 'playing' && (
+        <GameControls roomState={roomState} playerId={playerId} socket={socket} />
       )}
 
-      {roomState.phase === 'question' && submittedKey && (
-        <Submitted chosenKey={submittedKey} />
+      {roomState.phase === 'gameover' && (
+        <GameOver roomState={roomState} playerId={playerId} />
       )}
-
-      {roomState.phase === 'results' && <PlayerResults />}
     </div>
   );
 }

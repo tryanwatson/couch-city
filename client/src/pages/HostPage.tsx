@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRoomState } from '../hooks/useRoomState';
 import Lobby from '../components/host/Lobby';
-import Question from '../components/host/Question';
-import Results from '../components/host/Results';
 import '../styles/host.css';
 
 const STORAGE_KEY = 'party_game_host_room';
@@ -64,7 +62,7 @@ export default function HostPage() {
     return (
       <div className="host-container">
         <div className="loading">
-          <h1 className="host-title">Party Game</h1>
+          <h1 className="host-title">CityWars</h1>
           <p>Creating room...</p>
         </div>
       </div>
@@ -78,11 +76,29 @@ export default function HostPage() {
       {roomState.phase === 'lobby' && (
         <Lobby roomState={roomState} onStart={handleStart} />
       )}
-      {roomState.phase === 'question' && (
-        <Question roomState={roomState} />
+
+      {roomState.phase === 'playing' && (
+        <div className="loading">
+          <h2 className="host-title">Battle in Progress</h2>
+          <p>{roomState.players.filter((p) => p.alive).length} cities remaining</p>
+        </div>
       )}
-      {roomState.phase === 'results' && (
-        <Results roomState={roomState} onPlayAgain={handlePlayAgain} />
+
+      {roomState.phase === 'gameover' && (
+        <div className="loading">
+          <h2 className="host-title">Game Over</h2>
+          {roomState.winnerPlayerId && (
+            <p>
+              Winner:{' '}
+              <strong style={{ color: roomState.players.find((p) => p.playerId === roomState.winnerPlayerId)?.color }}>
+                {roomState.players.find((p) => p.playerId === roomState.winnerPlayerId)?.name}
+              </strong>
+            </p>
+          )}
+          <button className="btn btn-primary" style={{ marginTop: '24px' }} onClick={handlePlayAgain}>
+            Play Again
+          </button>
+        </div>
       )}
     </div>
   );

@@ -1,71 +1,70 @@
-// Game phases
-export type Phase = 'lobby' | 'question' | 'results';
+export type Phase = 'lobby' | 'playing' | 'gameover';
 
-// Option keys
-export type OptionKey = 'A' | 'B' | 'C' | 'D';
-
-// A question option
-export interface QuestionOption {
-  key: OptionKey;
-  text: string;
-}
-
-// A question
-export interface Question {
-  id: string;
-  text: string;
-  options: QuestionOption[];
-  correctKey: OptionKey;
-}
-
-// A player (sanitized, sent to clients)
-export interface PlayerInfo {
+// Client-safe player stats — zeros during lobby, populated on startGame
+export interface CityPlayerInfo {
   playerId: string;
   name: string;
+  color: string;
   connected: boolean;
+  alive: boolean;
+  resourceA: number;
+  resourceB: number;
+  incomeRateA: number;
+  incomeRateB: number;
+  militaryAtHome: number;
+  hp: number;
+  maxHp: number;
+  x: number; // 0–1 normalized map position
+  y: number;
 }
 
-// An answer record
-export interface AnswerRecord {
-  playerId: string;
-  optionKey: OptionKey;
-  submittedAtMs: number;
+export interface TroopGroup {
+  id: string;
+  attackerPlayerId: string;
+  targetPlayerId: string;
+  units: number;
+  departedAtMs: number;
+  arrivalAtMs: number;
 }
 
-// Sanitized room state broadcast to all clients
+// Broadcast payload — everything clients need to render
 export interface RoomStatePayload {
   roomId: string;
   phase: Phase;
-  players: PlayerInfo[];
-  question: {
-    id: string;
-    text: string;
-    options: QuestionOption[];
-  } | null;
-  // Only included during results phase
-  correctKey: OptionKey | null;
-  answers: AnswerRecord[] | null;
-  questionStartAtMs: number | null;
-  answerCount: number;
-  playerCount: number;
+  players: CityPlayerInfo[];
+  troopsInTransit: TroopGroup[];
+  winnerPlayerId: string | null;
 }
 
-// --- Server-side room (not exported to client) ---
+// ============================================================
+// Server-only types
+// ============================================================
 
-export interface ServerPlayer {
+export interface ServerCityPlayer {
   playerId: string;
   name: string;
+  color: string;
   socketId: string | null;
   connected: boolean;
   lastSeen: number;
+  alive: boolean;
+  resourceA: number;
+  resourceB: number;
+  incomeRateA: number;
+  incomeRateB: number;
+  militaryAtHome: number;
+  hp: number;
+  maxHp: number;
+  x: number;
+  y: number;
 }
 
 export interface ServerRoom {
   roomId: string;
   hostSocketId: string | null;
   phase: Phase;
-  players: Map<string, ServerPlayer>;
-  question: Question | null;
-  answers: Map<string, AnswerRecord>;
-  questionStartAtMs: number | null;
+  players: Map<string, ServerCityPlayer>;
+  troopsInTransit: TroopGroup[];
+  tickIntervalId: ReturnType<typeof setInterval> | null;
+  winnerPlayerId: string | null;
 }

@@ -1,5 +1,4 @@
 import type { Server, Socket } from 'socket.io';
-import type { OptionKey } from '../../shared/types';
 import {
   createRoom,
   getRoom,
@@ -7,9 +6,12 @@ import {
   addPlayer,
   disconnectSocket,
   startGame,
-  submitAnswer,
+  spendEconomy,
+  spendMilitary,
+  sendAttack,
   resetRoom,
   sanitizeState,
+  setBroadcastFn,
 } from './roomManager';
 
 function broadcastRoom(io: Server, roomId: string): void {
@@ -19,6 +21,9 @@ function broadcastRoom(io: Server, roomId: string): void {
 }
 
 export function registerSocketHandlers(io: Server, socket: Socket): void {
+  // Inject broadcast function into roomManager so the game tick can broadcast
+  setBroadcastFn((roomId: string) => broadcastRoom(io, roomId));
+
   // --- Host events ---
 
   socket.on('host:create_room', (callback) => {
@@ -46,47 +51,23 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
   });
 
   socket.on('host:start_game', (data) => {
-    if (!data?.roomId) {
-      socket.emit('room:error', { message: 'Missing roomId' });
-      return;
-    }
+    if (!data?.roomId) { socket.emit('room:error', { message: 'Missing roomId' }); return; }
     const room = getRoom(data.roomId);
-    if (!room) {
-      socket.emit('room:error', { message: 'Room not found' });
-      return;
-    }
-    if (room.hostSocketId !== socket.id) {
-      socket.emit('room:error', { message: 'Not the host' });
-      return;
-    }
+    if (!room) { socket.emit('room:error', { message: 'Room not found' }); return; }
+    if (room.hostSocketId !== socket.id) { socket.emit('room:error', { message: 'Not the host' }); return; }
     const result = startGame(data.roomId);
-    if (result.error) {
-      socket.emit('room:error', { message: result.error });
-      return;
-    }
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     console.log(`Game started in room: ${data.roomId}`);
     broadcastRoom(io, data.roomId);
   });
 
   socket.on('host:reset_room', (data) => {
-    if (!data?.roomId) {
-      socket.emit('room:error', { message: 'Missing roomId' });
-      return;
-    }
+    if (!data?.roomId) { socket.emit('room:error', { message: 'Missing roomId' }); return; }
     const room = getRoom(data.roomId);
-    if (!room) {
-      socket.emit('room:error', { message: 'Room not found' });
-      return;
-    }
-    if (room.hostSocketId !== socket.id) {
-      socket.emit('room:error', { message: 'Not the host' });
-      return;
-    }
+    if (!room) { socket.emit('room:error', { message: 'Room not found' }); return; }
+    if (room.hostSocketId !== socket.id) { socket.emit('room:error', { message: 'Not the host' }); return; }
     const result = resetRoom(data.roomId);
-    if (result.error) {
-      socket.emit('room:error', { message: result.error });
-      return;
-    }
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     console.log(`Room reset: ${data.roomId}`);
     broadcastRoom(io, data.roomId);
   });
@@ -120,19 +101,34 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     broadcastRoom(io, data.roomId);
   });
 
-  socket.on('player:submit_answer', (data) => {
-    if (!data?.roomId || !data?.playerId || !data?.optionKey) {
+  socket.on('player:spend_economy', (data) => {
+    if (!data?.roomId || !data?.playerId) {
       socket.emit('room:error', { message: 'Missing required fields' });
       return;
     }
+    const result = spendEconomy(data.roomId, data.playerId);
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
+    broadcastRoom(io, data.roomId);
+  });
 
-    const result = submitAnswer(data.roomId, data.playerId, data.optionKey as OptionKey);
-    if (result.error) {
-      socket.emit('room:error', { message: result.error });
+  socket.on('player:spend_military', (data) => {
+    if (!data?.roomId || !data?.playerId) {
+      socket.emit('room:error', { message: 'Missing required fields' });
       return;
     }
+    const result = spendMilitary(data.roomId, data.playerId);
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
+    broadcastRoom(io, data.roomId);
+  });
 
-    console.log(`Player ${data.playerId} answered ${data.optionKey} in room ${data.roomId}`);
+  socket.on('player:send_attack', (data) => {
+    if (!data?.roomId || !data?.playerId || !data?.targetPlayerId || data?.units == null) {
+      socket.emit('room:error', { message: 'Missing required fields' });
+      return;
+    }
+    const result = sendAttack(data.roomId, data.playerId, data.targetPlayerId, data.units);
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
+    console.log(`Player ${data.playerId} sent ${data.units} troops to ${data.targetPlayerId} in room ${data.roomId}`);
     broadcastRoom(io, data.roomId);
   });
 

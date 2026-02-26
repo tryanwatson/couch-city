@@ -12,7 +12,7 @@ export default function Lobby({ roomState, onStart }: LobbyProps) {
 
   return (
     <div className="host-lobby">
-      <h1 className="host-title">Party Game</h1>
+      <h1 className="host-title">CityWars</h1>
 
       <div className="room-code-section">
         <p className="room-code-label">Room Code</p>
