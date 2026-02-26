@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   server: {
-    allowedHosts: [".ngrok-free.dev"],
+    allowedHosts: ["alexa-uncasual-apogamously.ngrok-free.dev"],
     port: 5173,
     proxy: {
       "/socket.io": {
