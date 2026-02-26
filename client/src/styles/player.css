@@ -1,0 +1,234 @@
+/* Player container */
+.player-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px 16px;
+}
+
+.player-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+/* Join form */
+.join-form-wrapper {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.join-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--color-text-muted);
+}
+
+.form-group input {
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--color-surface-light);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 1.2rem;
+  font-family: var(--font-main);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.form-group input:focus {
+  border-color: var(--color-primary);
+}
+
+.form-group input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 0.6;
+}
+
+.form-error {
+  color: var(--color-wrong);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* Waiting room */
+.waiting-room {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.player-name-display {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.player-count {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 24px;
+  background: var(--color-surface);
+  padding: 20px 32px;
+  border-radius: var(--radius);
+}
+
+.count-number {
+  font-size: 2.5rem;
+  font-weight: 800;
+}
+
+.count-label {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+/* Answer buttons */
+.answer-screen {
+  width: 100%;
+  max-width: 500px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.answer-prompt {
+  font-size: 1.1rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  margin-bottom: 8px;
+}
+
+.answer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  width: 100%;
+}
+
+.answer-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 12px;
+  min-height: 100px;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: white;
+  font-family: var(--font-main);
+  transition: transform 0.1s, filter 0.15s;
+}
+
+.answer-btn:active {
+  transform: scale(0.95);
+}
+
+.answer-key {
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+.answer-text {
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.answer-btn-a { background: var(--color-a); }
+.answer-btn-a:hover { background: var(--color-a-hover); }
+.answer-btn-b { background: var(--color-b); }
+.answer-btn-b:hover { background: var(--color-b-hover); }
+.answer-btn-c { background: var(--color-c); }
+.answer-btn-c:hover { background: var(--color-c-hover); }
+.answer-btn-d { background: var(--color-d); }
+.answer-btn-d:hover { background: var(--color-d-hover); }
+
+/* Submitted */
+.submitted-screen {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.submitted-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--color-correct);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+  color: white;
+  margin-bottom: 8px;
+}
+
+.submitted-title {
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.submitted-choice {
+  font-size: 1.2rem;
+}
+
+/* Player results */
+.player-results-screen {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.results-title {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.results-subtitle {
+  font-size: 1.1rem;
+  color: var(--color-text-muted);
+}
+
+/* Mobile: stack answer buttons vertically on very small screens */
+@media (max-width: 360px) {
+  .answer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .answer-btn {
+    min-height: 80px;
+  }
+}

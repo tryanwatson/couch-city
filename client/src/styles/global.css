@@ -1,0 +1,114 @@
+/* Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --color-bg: #1a1a2e;
+  --color-surface: #16213e;
+  --color-surface-light: #1f2e50;
+  --color-primary: #e94560;
+  --color-primary-hover: #d63851;
+  --color-text: #ffffff;
+  --color-text-muted: #8899b0;
+  --color-a: #e74c3c;
+  --color-a-hover: #c0392b;
+  --color-b: #3498db;
+  --color-b-hover: #2980b9;
+  --color-c: #f1c40f;
+  --color-c-hover: #d4ac0d;
+  --color-d: #2ecc71;
+  --color-d-hover: #27ae60;
+  --color-correct: #2ecc71;
+  --color-wrong: #e74c3c;
+  --font-main: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+html, body {
+  height: 100%;
+  font-family: var(--font-main);
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: var(--font-main);
+  font-weight: 600;
+  font-size: 1rem;
+  padding: 12px 24px;
+  transition: background 0.15s, transform 0.1s, opacity 0.15s;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.btn-large {
+  font-size: 1.2rem;
+  padding: 16px 32px;
+  width: 100%;
+  max-width: 400px;
+}
+
+/* Error banner */
+.error-banner {
+  background: rgba(231, 76, 60, 0.2);
+  border: 1px solid var(--color-wrong);
+  color: var(--color-wrong);
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+/* Loading state */
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 16px;
+  color: var(--color-text-muted);
+}
+
+/* Shared text styles */
+.waiting-text {
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+}

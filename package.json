@@ -1,26 +1,13 @@
 {
-  "name": "party-game-test",
+  "name": "party-game",
   "version": "0.1.0",
   "private": true,
+  "workspaces": ["server", "client"],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "next": "16.1.5",
-    "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w server && npm run build -w client"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.1.5",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "concurrently": "^9.1.0"
   }
 }

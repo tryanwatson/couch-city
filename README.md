@@ -1,36 +1,129 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Party Game - Fastest Finger
 
-## Getting Started
+A minimalist Jackbox-style party game. One host screen displays questions on a TV/monitor, players join from their phones and tap answers as fast as they can.
 
-First, run the development server:
+## Prerequisites
+
+- **Node.js** >= 18
+- **npm** >= 9
+
+## Setup
 
 ```bash
+# Install all dependencies (server + client)
+npm install
+
+# Start both server and client
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The server runs on `http://localhost:3001` and the client on `http://localhost:5173`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## How to Play
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Open `http://localhost:5173/host` on a computer/TV (the host screen)
+2. A room code and QR code appear
+3. On phones, either:
+   - Scan the QR code, or
+   - Open `http://<your-local-ip>:5173/join` and enter the room code + a display name
+4. When all players have joined, the host clicks **Start Game**
+5. A trivia question appears on the host screen; phones show A/B/C/D buttons
+6. Players tap their answer as fast as possible
+7. Once everyone answers (or time runs out), the host screen shows results ranked by speed
+8. Click **Play Again** to return to the lobby with the same room
 
-## Learn More
+### Finding your local IP
 
-To learn more about Next.js, take a look at the following resources:
+For phones on the same Wi-Fi network, replace `localhost` with your computer's local IP:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+# macOS
+ipconfig getifaddr en0
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Linux
+hostname -I
 
-## Deploy on Vercel
+# Windows
+ipconfig
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Architecture
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+party-game-test/
+├── shared/          # Shared TypeScript types
+│   └── types.ts
+├── server/          # Express + Socket.io server
+│   └── src/
+│       ├── index.ts
+│       ├── roomManager.ts
+│       ├── socketHandlers.ts
+│       └── utils.ts
+└── client/          # Vite + React client
+    └── src/
+        ├── pages/
+        │   ├── HostPage.tsx
+        │   └── JoinPage.tsx
+        ├── components/
+        │   ├── host/
+        │   └── player/
+        ├── hooks/
+        ├── styles/
+        └── socket.ts
+```
+
+- **Server owns all state.** Clients are dumb renderers.
+- **Single `room:state` broadcast** after every mutation keeps all clients in sync.
+- **No database.** All state is in-memory. Server restart clears all rooms.
+
+## Event Contract
+
+### Client → Server
+
+| Event | Payload | Description |
+|---|---|---|
+| `host:create_room` | _(callback returns `roomId`)_ | Host creates a new room |
+| `host:attach_room` | `{ roomId }` | Host reconnects to an existing room |
+| `host:start_game` | `{ roomId }` | Host starts the game (picks a question) |
+| `host:reset_room` | `{ roomId }` | Host resets room back to lobby phase |
+| `player:join_room` | `{ roomId, playerId?, name }` | Player joins (or reconnects to) a room. Callback: `{ ok, playerId?, error? }` |
+| `player:submit_answer` | `{ roomId, playerId, optionKey }` | Player submits answer (A/B/C/D) |
+
+### Server → Client
+
+| Event | Payload | Description |
+|---|---|---|
+| `room:state` | `RoomStatePayload` | Broadcast to all clients in the room after any state change |
+| `room:error` | `{ message }` | Error sent to the requesting socket only |
+
+## Server Data Model
+
+```typescript
+Room {
+  roomId: string               // 4-char uppercase code
+  hostSocketId: string | null  // current host socket
+  phase: 'lobby' | 'question' | 'results'
+  players: Map<playerId, {
+    playerId: string
+    name: string
+    socketId: string | null
+    connected: boolean
+    lastSeen: number
+  }>
+  question: Question | null
+  answers: Map<playerId, {
+    playerId: string
+    optionKey: 'A' | 'B' | 'C' | 'D'
+    submittedAtMs: number      // server Date.now()
+  }>
+  questionStartAtMs: number | null
+}
+```
+
+The broadcast `room:state` payload is sanitized: no socket IDs, correct answer hidden during question phase, answers only included during results phase.
+
+## Reconnection
+
+- **Player refresh:** `playerId` and `roomId` are stored in `localStorage`. On page load, the client re-emits `player:join_room` with the stored ID. The server recognizes the returning player and updates their socket.
+- **Host refresh:** `roomId` is stored in `localStorage`. On page load, the host emits `host:attach_room`. The server updates the host socket binding.
+- **Server restart:** Reconnection fails gracefully (room not found). Clients clear stored data and show the create/join screen.

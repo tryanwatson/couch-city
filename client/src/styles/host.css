@@ -1,0 +1,237 @@
+/* Host container */
+.host-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 32px 24px;
+}
+
+.host-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+/* Lobby */
+.host-lobby {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  width: 100%;
+  max-width: 600px;
+}
+
+.room-code-section {
+  text-align: center;
+}
+
+.room-code-label {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+}
+
+.room-code {
+  font-size: 4rem;
+  font-weight: 800;
+  letter-spacing: 12px;
+  color: var(--color-primary);
+}
+
+.qr-wrapper {
+  background: var(--color-surface);
+  padding: 20px;
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.qr-hint {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.player-list-section {
+  width: 100%;
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.player-list-title {
+  font-size: 1.1rem;
+  margin-bottom: 12px;
+}
+
+.player-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.player-chip {
+  background: var(--color-surface-light);
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.player-chip.disconnected {
+  opacity: 0.5;
+}
+
+/* Question phase */
+.host-question {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  width: 100%;
+  max-width: 800px;
+}
+
+.question-text {
+  font-size: 1.8rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.3;
+}
+
+.options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  width: 100%;
+}
+
+.option-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  border-radius: var(--radius);
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+.option-key {
+  font-size: 1.4rem;
+  font-weight: 800;
+  min-width: 36px;
+  text-align: center;
+}
+
+.option-a { background: rgba(231, 76, 60, 0.2); border: 2px solid var(--color-a); }
+.option-b { background: rgba(52, 152, 219, 0.2); border: 2px solid var(--color-b); }
+.option-c { background: rgba(241, 196, 15, 0.2); border: 2px solid var(--color-c); }
+.option-d { background: rgba(46, 204, 113, 0.2); border: 2px solid var(--color-d); }
+
+.answer-progress {
+  text-align: center;
+  width: 100%;
+  max-width: 400px;
+}
+
+.answer-count {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--color-surface);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+/* Results */
+.host-results {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  width: 100%;
+  max-width: 800px;
+}
+
+.correct-answer {
+  font-size: 1.1rem;
+  color: var(--color-correct);
+}
+
+.results-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.results-table th {
+  padding: 14px 16px;
+  text-align: left;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-surface-light);
+}
+
+.results-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.results-table tr.correct td {
+  color: var(--color-correct);
+}
+
+.results-table tr.wrong td {
+  color: var(--color-wrong);
+}
+
+.results-table tr.no-answer td {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.results-table .rank {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+@media (max-width: 600px) {
+  .options-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .room-code {
+    font-size: 3rem;
+    letter-spacing: 8px;
+  }
+
+  .question-text {
+    font-size: 1.4rem;
+  }
+}
