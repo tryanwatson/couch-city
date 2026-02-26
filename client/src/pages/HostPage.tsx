@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRoomState } from '../hooks/useRoomState';
 import Lobby from '../components/host/Lobby';
+import BattleMap from '../components/host/BattleMap';
 import '../styles/host.css';
 
 const STORAGE_KEY = 'party_game_host_room';
@@ -78,28 +79,50 @@ export default function HostPage() {
       )}
 
       {roomState.phase === 'playing' && (
-        <div className="loading">
-          <h2 className="host-title">Battle in Progress</h2>
-          <p>{roomState.players.filter((p) => p.alive).length} cities remaining</p>
+        <div className="battle-screen">
+          <div className="battle-header">
+            <h2 className="host-title battle-title">CityWars</h2>
+            <span className="battle-alive-count">
+              {roomState.players.filter((p) => p.alive).length} cities remaining
+            </span>
+          </div>
+          <div className="battle-map-container">
+            <BattleMap
+              players={roomState.players}
+              troopsInTransit={roomState.troopsInTransit}
+              animate={true}
+            />
+          </div>
         </div>
       )}
 
-      {roomState.phase === 'gameover' && (
-        <div className="loading">
-          <h2 className="host-title">Game Over</h2>
-          {roomState.winnerPlayerId && (
-            <p>
-              Winner:{' '}
-              <strong style={{ color: roomState.players.find((p) => p.playerId === roomState.winnerPlayerId)?.color }}>
-                {roomState.players.find((p) => p.playerId === roomState.winnerPlayerId)?.name}
-              </strong>
-            </p>
-          )}
-          <button className="btn btn-primary" style={{ marginTop: '24px' }} onClick={handlePlayAgain}>
-            Play Again
-          </button>
-        </div>
-      )}
+      {roomState.phase === 'gameover' && (() => {
+        const winner = roomState.winnerPlayerId
+          ? roomState.players.find((p) => p.playerId === roomState.winnerPlayerId) ?? null
+          : null;
+        return (
+          <div className="battle-screen">
+            <div className="battle-map-container">
+              <BattleMap
+                players={roomState.players}
+                troopsInTransit={[]}
+                animate={false}
+              />
+              <div className="gameover-overlay">
+                <h2 className="host-title">Game Over</h2>
+                {winner && (
+                  <p className="gameover-winner-text">
+                    Winner: <strong style={{ color: winner.color }}>{winner.name}</strong>
+                  </p>
+                )}
+                <button className="btn btn-primary btn-large" onClick={handlePlayAgain}>
+                  Play Again
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
