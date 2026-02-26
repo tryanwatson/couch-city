@@ -411,6 +411,82 @@
   font-weight: 600;
 }
 
+/* Resource investment rows */
+.resource-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resource-row {
+  background: var(--color-surface-light);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.resource-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.resource-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  width: 62px;
+  flex-shrink: 0;
+}
+
+.resource-amount {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text);
+  min-width: 36px;
+}
+
+.resource-rate {
+  font-size: 0.75rem;
+  color: var(--color-correct);
+  font-weight: 600;
+  min-width: 36px;
+}
+
+.resource-invest-buttons {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.invest-btn {
+  padding: 5px 9px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: white;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.invest-btn:hover:not(:disabled) {
+  background: var(--color-primary-hover, #5b5ef5);
+}
+
+.invest-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.invest-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 /* Attack section */
 .attack-section {
   background: var(--color-surface);

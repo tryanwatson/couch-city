@@ -1,17 +1,28 @@
-// Economy
-export const INITIAL_RESOURCE_A = 50;
-export const INITIAL_RESOURCE_B = 50;
-export const INITIAL_INCOME_RATE_A = 3; // units/sec
-export const INITIAL_INCOME_RATE_B = 3; // units/sec
+// Economy — initial resource amounts
+export const INITIAL_WOOD = 50;
+export const INITIAL_FOOD = 50;
+export const INITIAL_STONE = 0;
+export const INITIAL_METAL = 0;
 
-export const ECONOMY_UPGRADE_COST_A = 30;
-export const ECONOMY_UPGRADE_COST_B = 20;
-export const ECONOMY_UPGRADE_INCOME_A = 2; // +incomeRateA per upgrade
-export const ECONOMY_UPGRADE_INCOME_B = 2; // +incomeRateB per upgrade
+// Economy — initial income rates (per second)
+export const INITIAL_WOOD_INCOME = 3;
+export const INITIAL_FOOD_INCOME = 3;
+export const INITIAL_STONE_INCOME = 0; // must invest to unlock
+export const INITIAL_METAL_INCOME = 0; // must invest to unlock
+
+// Investment costs per +1 income rate (scales linearly for +5 and +25)
+export const INVEST_WOOD_COST_FOOD = 10;   // wood income costs food
+export const INVEST_FOOD_COST_WOOD = 10;   // food income costs wood
+export const INVEST_STONE_COST_WOOD = 15;  // stone income costs wood + food
+export const INVEST_STONE_COST_FOOD = 15;
+export const INVEST_METAL_COST_STONE = 20; // metal income costs stone + food
+export const INVEST_METAL_COST_FOOD = 10;
+
+export const VALID_INVEST_AMOUNTS = [1, 5, 25] as const;
 
 // Military
-export const MILITARY_UPGRADE_COST_A = 20;
-export const MILITARY_UPGRADE_COST_B = 30;
+export const MILITARY_UPGRADE_COST_WOOD = 20;
+export const MILITARY_UPGRADE_COST_FOOD = 30;
 export const MILITARY_UPGRADE_TROOPS = 10; // troops added per upgrade
 export const INITIAL_MILITARY_AT_HOME = 10;
 

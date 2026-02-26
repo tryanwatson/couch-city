@@ -1,15 +1,21 @@
 import type { Socket } from 'socket.io-client';
 import type { RoomStatePayload } from '../../../../shared/types';
 import {
-  ECONOMY_UPGRADE_COST_A,
-  ECONOMY_UPGRADE_COST_B,
-  ECONOMY_UPGRADE_INCOME_A,
-  ECONOMY_UPGRADE_INCOME_B,
-  MILITARY_UPGRADE_COST_A,
-  MILITARY_UPGRADE_COST_B,
+  INVEST_WOOD_COST_FOOD,
+  INVEST_FOOD_COST_WOOD,
+  INVEST_STONE_COST_WOOD,
+  INVEST_STONE_COST_FOOD,
+  INVEST_METAL_COST_STONE,
+  INVEST_METAL_COST_FOOD,
+  VALID_INVEST_AMOUNTS,
+  MILITARY_UPGRADE_COST_WOOD,
+  MILITARY_UPGRADE_COST_FOOD,
   MILITARY_UPGRADE_TROOPS,
   VALID_ATTACK_AMOUNTS,
 } from '../../../../shared/constants';
+
+type ResourceType = 'wood' | 'food' | 'stone' | 'metal';
+type InvestAmount = typeof VALID_INVEST_AMOUNTS[number];
 
 interface GameControlsProps {
   roomState: RoomStatePayload;
@@ -17,11 +23,66 @@ interface GameControlsProps {
   socket: Socket;
 }
 
+const RESOURCE_CONFIG: {
+  key: ResourceType;
+  label: string;
+  emoji: string;
+  costLabel: (amt: number) => string;
+  canAfford: (me: RoomStatePayload['players'][0], amt: InvestAmount) => boolean;
+}[] = [
+  {
+    key: 'wood',
+    label: 'Wood',
+    emoji: '🪵',
+    costLabel: (amt) => `${INVEST_WOOD_COST_FOOD * amt} food`,
+    canAfford: (me, amt) => me.food >= INVEST_WOOD_COST_FOOD * amt,
+  },
+  {
+    key: 'food',
+    label: 'Food',
+    emoji: '🌾',
+    costLabel: (amt) => `${INVEST_FOOD_COST_WOOD * amt} wood`,
+    canAfford: (me, amt) => me.wood >= INVEST_FOOD_COST_WOOD * amt,
+  },
+  {
+    key: 'stone',
+    label: 'Stone',
+    emoji: '🪨',
+    costLabel: (amt) => `${INVEST_STONE_COST_WOOD * amt} wood + ${INVEST_STONE_COST_FOOD * amt} food`,
+    canAfford: (me, amt) => me.wood >= INVEST_STONE_COST_WOOD * amt && me.food >= INVEST_STONE_COST_FOOD * amt,
+  },
+  {
+    key: 'metal',
+    label: 'Metal',
+    emoji: '⚙️',
+    costLabel: (amt) => `${INVEST_METAL_COST_STONE * amt} stone + ${INVEST_METAL_COST_FOOD * amt} food`,
+    canAfford: (me, amt) => me.stone >= INVEST_METAL_COST_STONE * amt && me.food >= INVEST_METAL_COST_FOOD * amt,
+  },
+];
+
+function getIncome(me: RoomStatePayload['players'][0], resource: ResourceType): number {
+  switch (resource) {
+    case 'wood':  return me.woodIncome;
+    case 'food':  return me.foodIncome;
+    case 'stone': return me.stoneIncome;
+    case 'metal': return me.metalIncome;
+  }
+}
+
+function getAmount(me: RoomStatePayload['players'][0], resource: ResourceType): number {
+  switch (resource) {
+    case 'wood':  return me.wood;
+    case 'food':  return me.food;
+    case 'stone': return me.stone;
+    case 'metal': return me.metal;
+  }
+}
+
 export default function GameControls({ roomState, playerId, socket }: GameControlsProps) {
   const me = roomState.players.find((p) => p.playerId === playerId) ?? null;
 
-  const handleSpendEconomy = () => {
-    socket.emit('player:spend_economy', { roomId: roomState.roomId, playerId });
+  const handleInvest = (resource: ResourceType, amount: InvestAmount) => {
+    socket.emit('player:invest_resource', { roomId: roomState.roomId, playerId, resource, amount });
   };
 
   const handleSpendMilitary = () => {
@@ -63,8 +124,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
     );
   }
 
-  const canAffordEconomy = me.resourceA >= ECONOMY_UPGRADE_COST_A && me.resourceB >= ECONOMY_UPGRADE_COST_B;
-  const canAffordMilitary = me.resourceA >= MILITARY_UPGRADE_COST_A && me.resourceB >= MILITARY_UPGRADE_COST_B;
+  const canAffordMilitary = me.wood >= MILITARY_UPGRADE_COST_WOOD && me.food >= MILITARY_UPGRADE_COST_FOOD;
   const targets = roomState.players.filter((p) => p.alive && p.playerId !== playerId);
   const myTransit = roomState.troopsInTransit.filter((tg) => tg.attackerPlayerId === playerId);
 
@@ -86,43 +146,59 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
 
         <div className="stats-row">
           <div className="stat-block">
-            <span className="stat-label">Resource A</span>
-            <span className="stat-value">{Math.floor(me.resourceA)}</span>
-            <span className="stat-rate">+{me.incomeRateA}/s</span>
-          </div>
-          <div className="stat-block">
-            <span className="stat-label">Resource B</span>
-            <span className="stat-value">{Math.floor(me.resourceB)}</span>
-            <span className="stat-rate">+{me.incomeRateB}/s</span>
-          </div>
-          <div className="stat-block">
             <span className="stat-label">Troops</span>
             <span className="stat-value">{me.militaryAtHome}</span>
           </div>
         </div>
       </div>
 
-      {/* UPGRADES */}
+      {/* RESOURCES */}
       <div className="upgrades-section">
-        <h3 className="section-title">Upgrades</h3>
-        <div className="upgrade-buttons">
-          <button
-            className="upgrade-btn upgrade-economy"
-            onClick={handleSpendEconomy}
-            disabled={!canAffordEconomy}
-          >
-            <span className="upgrade-btn-title">Economy</span>
-            <span className="upgrade-btn-cost">{ECONOMY_UPGRADE_COST_A}A + {ECONOMY_UPGRADE_COST_B}B</span>
-            <span className="upgrade-btn-effect">+{ECONOMY_UPGRADE_INCOME_A}/s income</span>
-          </button>
+        <h3 className="section-title">Resources</h3>
+        <div className="resource-list">
+          {RESOURCE_CONFIG.map((res) => {
+            const income = getIncome(me, res.key);
+            const amount = getAmount(me, res.key);
+            return (
+              <div key={res.key} className="resource-row">
+                <div className="resource-info">
+                  <span className="resource-label">{res.emoji} {res.label}</span>
+                  <span className="resource-amount">{Math.floor(amount)}</span>
+                  <span className="resource-rate">+{income}/s</span>
+                </div>
+                <div className="resource-invest-buttons">
+                  {(VALID_INVEST_AMOUNTS as readonly number[]).map((amt) => {
+                    const canAfford = res.canAfford(me, amt as InvestAmount);
+                    return (
+                      <button
+                        key={amt}
+                        className="invest-btn"
+                        onClick={() => handleInvest(res.key, amt as InvestAmount)}
+                        disabled={!canAfford}
+                        title={`+${amt}/s — costs ${res.costLabel(amt)}`}
+                      >
+                        +{amt}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
+      {/* MILITARY */}
+      <div className="upgrades-section">
+        <h3 className="section-title">Military</h3>
+        <div className="upgrade-buttons">
           <button
             className="upgrade-btn upgrade-military"
             onClick={handleSpendMilitary}
             disabled={!canAffordMilitary}
           >
-            <span className="upgrade-btn-title">Military</span>
-            <span className="upgrade-btn-cost">{MILITARY_UPGRADE_COST_A}A + {MILITARY_UPGRADE_COST_B}B</span>
+            <span className="upgrade-btn-title">Train Troops</span>
+            <span className="upgrade-btn-cost">{MILITARY_UPGRADE_COST_WOOD} wood + {MILITARY_UPGRADE_COST_FOOD} food</span>
             <span className="upgrade-btn-effect">+{MILITARY_UPGRADE_TROOPS} troops</span>
           </button>
         </div>

@@ -6,13 +6,14 @@ import {
   addPlayer,
   disconnectSocket,
   startGame,
-  spendEconomy,
+  investResource,
   spendMilitary,
   sendAttack,
   resetRoom,
   sanitizeState,
   setBroadcastFn,
 } from './roomManager';
+import type { ResourceType, InvestAmount } from './roomManager';
 
 function broadcastRoom(io: Server, roomId: string): void {
   const room = getRoom(roomId);
@@ -101,12 +102,12 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     broadcastRoom(io, data.roomId);
   });
 
-  socket.on('player:spend_economy', (data) => {
-    if (!data?.roomId || !data?.playerId) {
+  socket.on('player:invest_resource', (data) => {
+    if (!data?.roomId || !data?.playerId || !data?.resource || data?.amount == null) {
       socket.emit('room:error', { message: 'Missing required fields' });
       return;
     }
-    const result = spendEconomy(data.roomId, data.playerId);
+    const result = investResource(data.roomId, data.playerId, data.resource as ResourceType, data.amount as InvestAmount);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     broadcastRoom(io, data.roomId);
   });

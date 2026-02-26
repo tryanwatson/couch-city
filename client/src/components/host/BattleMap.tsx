@@ -147,10 +147,10 @@ function CityNode({ player }: { player: CityPlayerInfo }) {
         x={cx}
         y={cy + 46}
         textAnchor="middle"
-        fontSize={16}
+        fontSize={14}
         fill="#8899b0"
       >
-        {`A:${Math.floor(player.resourceA)} B:${Math.floor(player.resourceB)}`}
+        {`W:${Math.floor(player.wood)} F:${Math.floor(player.food)} S:${Math.floor(player.stone)} M:${Math.floor(player.metal)}`}
       </text>
 
       {/* Income rates */}
@@ -158,10 +158,10 @@ function CityNode({ player }: { player: CityPlayerInfo }) {
         x={cx}
         y={cy + 64}
         textAnchor="middle"
-        fontSize={13}
+        fontSize={12}
         fill="#2ecc71"
       >
-        {`+${player.incomeRateA}/s  +${player.incomeRateB}/s`}
+        {`+${player.woodIncome} +${player.foodIncome} +${player.stoneIncome} +${player.metalIncome}/s`}
       </text>
     </g>
   );
