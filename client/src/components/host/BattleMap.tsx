@@ -276,12 +276,7 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
       xmlns="http://www.w3.org/2000/svg"
       preserveAspectRatio="xMidYMid meet"
     >
-      <defs>
-        <pattern id="grass" x="0" y="0" width="64" height="64" patternUnits="userSpaceOnUse">
-          <image href="/grass-tile.png" x="0" y="0" width="64" height="64" />
-        </pattern>
-      </defs>
-      <rect width="1000" height="1000" fill="url(#grass)" />
+      <image href="/map-background.png" x="0" y="0" width="1000" height="1000" />
 
       {/* Attack trail lines */}
       {troopsInTransit.map((troop) => (

@@ -241,11 +241,13 @@
    ========================================= */
 
 .battle-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  width: calc(100% + 48px);
-  margin: -32px -24px;
-  flex: 1;
 }
 
 .battle-header {
