@@ -16,6 +16,8 @@ export interface CityPlayerInfo {
   stoneIncome: number;
   metalIncome: number;
   militaryAtHome: number;
+  population: number;
+  culture: number;
   hp: number;
   maxHp: number;
   x: number; // 0–1 normalized map position
@@ -61,6 +63,8 @@ export interface ServerCityPlayer {
   stoneIncome: number;
   metalIncome: number;
   militaryAtHome: number;
+  population: number;
+  culture: number;
   hp: number;
   maxHp: number;
   x: number;

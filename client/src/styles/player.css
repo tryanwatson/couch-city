@@ -245,6 +245,37 @@
   gap: 0;
 }
 
+/* Culture progress bar */
+.culture-bar-wrapper {
+  position: relative;
+  background: #1a1a2e;
+  height: 28px;
+  overflow: hidden;
+  border-bottom: 1px solid #2a2a4e;
+}
+
+.culture-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #9b59b6, #e91e63);
+  transition: width 0.5s ease;
+}
+
+.culture-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  z-index: 1;
+}
+
 /* Stats header */
 .stats-header {
   background: var(--color-surface);
@@ -375,16 +406,6 @@
   cursor: not-allowed;
 }
 
-.upgrade-economy {
-  background: rgba(52, 152, 219, 0.2);
-  border: 2px solid var(--color-b);
-  color: var(--color-text);
-}
-
-.upgrade-economy:hover:not(:disabled) {
-  background: rgba(52, 152, 219, 0.35);
-}
-
 .upgrade-military {
   background: rgba(231, 76, 60, 0.2);
   border: 2px solid var(--color-a);
@@ -393,6 +414,16 @@
 
 .upgrade-military:hover:not(:disabled) {
   background: rgba(231, 76, 60, 0.35);
+}
+
+.upgrade-science {
+  background: rgba(155, 89, 182, 0.2);
+  border: 2px solid #9b59b6;
+  color: var(--color-text);
+}
+
+.upgrade-science:hover:not(:disabled) {
+  background: rgba(155, 89, 182, 0.35);
 }
 
 .upgrade-btn-title {

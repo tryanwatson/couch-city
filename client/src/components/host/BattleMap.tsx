@@ -142,12 +142,23 @@ function CityNode({ player }: { player: CityPlayerInfo }) {
         {player.militaryAtHome}
       </text>
 
-      {/* Resources */}
+      {/* Population */}
       <text
         x={cx}
         y={cy + 46}
         textAnchor="middle"
-        fontSize={14}
+        fontSize={13}
+        fill="#8899b0"
+      >
+        {`👥 ${Math.floor(player.population)}  ⚔️ ${player.militaryAtHome}`}
+      </text>
+
+      {/* Resources */}
+      <text
+        x={cx}
+        y={cy + 60}
+        textAnchor="middle"
+        fontSize={12}
         fill="#8899b0"
       >
         {`W:${Math.floor(player.wood)} F:${Math.floor(player.food)} S:${Math.floor(player.stone)} M:${Math.floor(player.metal)}`}
@@ -156,13 +167,44 @@ function CityNode({ player }: { player: CityPlayerInfo }) {
       {/* Income rates */}
       <text
         x={cx}
-        y={cy + 64}
+        y={cy + 74}
         textAnchor="middle"
-        fontSize={12}
+        fontSize={11}
         fill="#2ecc71"
       >
         {`+${player.woodIncome} +${player.foodIncome} +${player.stoneIncome} +${player.metalIncome}/s`}
       </text>
+
+      {/* Culture progress */}
+      {player.culture > 0 && (
+        <>
+          <rect
+            x={cx - BAR_W / 2}
+            y={cy + 80}
+            width={BAR_W}
+            height={6}
+            rx={3}
+            fill="#2a1a3e"
+          />
+          <rect
+            x={cx - BAR_W / 2}
+            y={cy + 80}
+            width={BAR_W * Math.min(1, player.culture / 1000)}
+            height={6}
+            rx={3}
+            fill="#9b59b6"
+          />
+          <text
+            x={cx}
+            y={cy + 96}
+            textAnchor="middle"
+            fontSize={11}
+            fill="#9b59b6"
+          >
+            {`🏛️ ${player.culture}/1000`}
+          </text>
+        </>
+      )}
     </g>
   );
 }

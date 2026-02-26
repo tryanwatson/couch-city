@@ -20,6 +20,17 @@ export const INVEST_METAL_COST_FOOD = 10;
 
 export const VALID_INVEST_AMOUNTS = [1, 5, 25] as const;
 
+// Population
+export const INITIAL_POPULATION = 10; // starts equal to INITIAL_MILITARY_AT_HOME (all soldiers)
+export const POP_CAP_MULTIPLIER = 10; // populationCap = foodIncome × POP_CAP_MULTIPLIER
+export const POP_GROWTH_RATE = 0.1;   // pop grows by foodIncome × POP_GROWTH_RATE per tick
+
+// Science / Culture
+export const SCIENCE_COST_STONE = 50;
+export const SCIENCE_COST_METAL = 50;
+export const SCIENCE_CULTURE_GAIN = 100;
+export const CULTURE_WIN_THRESHOLD = 1000;
+
 // Military
 export const MILITARY_UPGRADE_COST_WOOD = 20;
 export const MILITARY_UPGRADE_COST_FOOD = 30;

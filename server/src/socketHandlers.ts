@@ -7,6 +7,7 @@ import {
   disconnectSocket,
   startGame,
   investResource,
+  investScience,
   spendMilitary,
   sendAttack,
   resetRoom,
@@ -108,6 +109,16 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
       return;
     }
     const result = investResource(data.roomId, data.playerId, data.resource as ResourceType, data.amount as InvestAmount);
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
+    broadcastRoom(io, data.roomId);
+  });
+
+  socket.on('player:invest_science', (data) => {
+    if (!data?.roomId || !data?.playerId) {
+      socket.emit('room:error', { message: 'Missing required fields' });
+      return;
+    }
+    const result = investScience(data.roomId, data.playerId);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     broadcastRoom(io, data.roomId);
   });

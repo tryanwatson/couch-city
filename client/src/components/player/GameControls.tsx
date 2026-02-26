@@ -8,6 +8,10 @@ import {
   INVEST_METAL_COST_STONE,
   INVEST_METAL_COST_FOOD,
   VALID_INVEST_AMOUNTS,
+  SCIENCE_COST_STONE,
+  SCIENCE_COST_METAL,
+  SCIENCE_CULTURE_GAIN,
+  CULTURE_WIN_THRESHOLD,
   MILITARY_UPGRADE_COST_WOOD,
   MILITARY_UPGRADE_COST_FOOD,
   MILITARY_UPGRADE_TROOPS,
@@ -85,6 +89,10 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
     socket.emit('player:invest_resource', { roomId: roomState.roomId, playerId, resource, amount });
   };
 
+  const handleInvestScience = () => {
+    socket.emit('player:invest_science', { roomId: roomState.roomId, playerId });
+  };
+
   const handleSpendMilitary = () => {
     socket.emit('player:spend_military', { roomId: roomState.roomId, playerId });
   };
@@ -124,14 +132,26 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
     );
   }
 
+  const currentTotalIncome = me.woodIncome + me.foodIncome + me.stoneIncome + me.metalIncome;
+  const civilians = Math.floor(me.population) - me.militaryAtHome;
   const canAffordMilitary = me.wood >= MILITARY_UPGRADE_COST_WOOD && me.food >= MILITARY_UPGRADE_COST_FOOD;
+  const canTrainTroops = canAffordMilitary && civilians >= MILITARY_UPGRADE_TROOPS;
+  const canAffordScience = me.stone >= SCIENCE_COST_STONE && me.metal >= SCIENCE_COST_METAL;
   const targets = roomState.players.filter((p) => p.alive && p.playerId !== playerId);
   const myTransit = roomState.troopsInTransit.filter((tg) => tg.attackerPlayerId === playerId);
 
   const hpPct = (me.hp / me.maxHp) * 100;
+  const culturePct = Math.min(100, (me.culture / CULTURE_WIN_THRESHOLD) * 100);
+  const populationCap = me.foodIncome * 10;
 
   return (
     <div className="game-controls">
+      {/* CULTURE PROGRESS */}
+      <div className="culture-bar-wrapper">
+        <div className="culture-bar-fill" style={{ width: `${culturePct}%` }} />
+        <span className="culture-label">🏛️ Culture {me.culture} / {CULTURE_WIN_THRESHOLD}</span>
+      </div>
+
       {/* STATS HEADER */}
       <div className="stats-header" style={{ borderTopColor: me.color }}>
         <div className="city-name">{me.name}</div>
@@ -146,8 +166,19 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
 
         <div className="stats-row">
           <div className="stat-block">
-            <span className="stat-label">Troops</span>
+            <span className="stat-label">👥 Pop</span>
+            <span className="stat-value">{Math.floor(me.population)}</span>
+            <span className="stat-rate">cap {populationCap}</span>
+          </div>
+          <div className="stat-block">
+            <span className="stat-label">⚔️ Troops</span>
             <span className="stat-value">{me.militaryAtHome}</span>
+            <span className="stat-rate">{civilians} civ</span>
+          </div>
+          <div className="stat-block">
+            <span className="stat-label">📊 Income</span>
+            <span className="stat-value">{currentTotalIncome}/s</span>
+            <span className="stat-rate">of {Math.floor(me.population)}</span>
           </div>
         </div>
       </div>
@@ -168,14 +199,19 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                 </div>
                 <div className="resource-invest-buttons">
                   {(VALID_INVEST_AMOUNTS as readonly number[]).map((amt) => {
-                    const canAfford = res.canAfford(me, amt as InvestAmount);
+                    const resourceAffordable = res.canAfford(me, amt as InvestAmount);
+                    const popAffordable = currentTotalIncome + amt <= Math.floor(me.population);
+                    const canAfford = resourceAffordable && popAffordable;
+                    const title = !popAffordable
+                      ? `Need ${currentTotalIncome + amt - Math.floor(me.population)} more population`
+                      : `+${amt}/s — costs ${res.costLabel(amt)}`;
                     return (
                       <button
                         key={amt}
                         className="invest-btn"
                         onClick={() => handleInvest(res.key, amt as InvestAmount)}
                         disabled={!canAfford}
-                        title={`+${amt}/s — costs ${res.costLabel(amt)}`}
+                        title={title}
                       >
                         +{amt}
                       </button>
@@ -188,18 +224,29 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
         </div>
       </div>
 
-      {/* MILITARY */}
+      {/* MILITARY & SCIENCE */}
       <div className="upgrades-section">
-        <h3 className="section-title">Military</h3>
+        <h3 className="section-title">Military & Science</h3>
         <div className="upgrade-buttons">
           <button
             className="upgrade-btn upgrade-military"
             onClick={handleSpendMilitary}
-            disabled={!canAffordMilitary}
+            disabled={!canTrainTroops}
+            title={!canAffordMilitary ? 'Not enough resources' : civilians < MILITARY_UPGRADE_TROOPS ? `Need ${MILITARY_UPGRADE_TROOPS - civilians} more civilians` : ''}
           >
-            <span className="upgrade-btn-title">Train Troops</span>
+            <span className="upgrade-btn-title">⚔️ Train Troops</span>
             <span className="upgrade-btn-cost">{MILITARY_UPGRADE_COST_WOOD} wood + {MILITARY_UPGRADE_COST_FOOD} food</span>
-            <span className="upgrade-btn-effect">+{MILITARY_UPGRADE_TROOPS} troops</span>
+            <span className="upgrade-btn-effect">+{MILITARY_UPGRADE_TROOPS} troops ({civilians} civ avail)</span>
+          </button>
+
+          <button
+            className="upgrade-btn upgrade-science"
+            onClick={handleInvestScience}
+            disabled={!canAffordScience}
+          >
+            <span className="upgrade-btn-title">🔬 Science</span>
+            <span className="upgrade-btn-cost">{SCIENCE_COST_STONE} stone + {SCIENCE_COST_METAL} metal</span>
+            <span className="upgrade-btn-effect">+{SCIENCE_CULTURE_GAIN} culture</span>
           </button>
         </div>
       </div>

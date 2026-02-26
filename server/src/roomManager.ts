@@ -16,6 +16,13 @@ import {
   INVEST_METAL_COST_STONE,
   INVEST_METAL_COST_FOOD,
   VALID_INVEST_AMOUNTS,
+  INITIAL_POPULATION,
+  POP_CAP_MULTIPLIER,
+  POP_GROWTH_RATE,
+  SCIENCE_COST_STONE,
+  SCIENCE_COST_METAL,
+  SCIENCE_CULTURE_GAIN,
+  CULTURE_WIN_THRESHOLD,
   MILITARY_UPGRADE_COST_WOOD,
   MILITARY_UPGRADE_COST_FOOD,
   MILITARY_UPGRADE_TROOPS,
@@ -116,6 +123,8 @@ export function addPlayer(
     stoneIncome: 0,
     metalIncome: 0,
     militaryAtHome: 0,
+    population: 0,
+    culture: 0,
     hp: 0,
     maxHp: MAX_HP,
     x: 0,
@@ -171,6 +180,8 @@ export function startGame(
     player.stoneIncome = INITIAL_STONE_INCOME;
     player.metalIncome = INITIAL_METAL_INCOME;
     player.militaryAtHome = INITIAL_MILITARY_AT_HOME;
+    player.population = INITIAL_POPULATION;
+    player.culture = 0;
     player.hp = INITIAL_HP;
     player.maxHp = MAX_HP;
     player.alive = true;
@@ -202,6 +213,14 @@ function gameTick(roomId: string): void {
     player.metal += player.metalIncome;
   }
 
+  // Population growth: grows by foodIncome × POP_GROWTH_RATE per tick, capped at foodIncome × POP_CAP_MULTIPLIER
+  for (const player of alivePlayers) {
+    const populationCap = player.foodIncome * POP_CAP_MULTIPLIER;
+    if (player.population < populationCap) {
+      player.population = Math.min(populationCap, player.population + player.foodIncome * POP_GROWTH_RATE);
+    }
+  }
+
   // HP regeneration
   for (const player of alivePlayers) {
     player.hp = Math.min(player.maxHp, player.hp + HP_REGEN_PER_SECOND);
@@ -214,7 +233,22 @@ function gameTick(roomId: string): void {
     resolveCombat(room, tg);
   }
 
-  // Win condition: <= 1 alive (skip if solo game)
+  // Culture win condition: first player to reach CULTURE_WIN_THRESHOLD
+  const cultureWinner = Array.from(room.players.values()).find(
+    (p) => p.alive && p.culture >= CULTURE_WIN_THRESHOLD
+  );
+  if (cultureWinner) {
+    room.phase = 'gameover';
+    room.winnerPlayerId = cultureWinner.playerId;
+    if (room.tickIntervalId !== null) {
+      clearInterval(room.tickIntervalId);
+      room.tickIntervalId = null;
+    }
+    if (broadcastFn) broadcastFn(roomId);
+    return;
+  }
+
+  // Military win condition: <= 1 alive (skip if solo game)
   const stillAlive = Array.from(room.players.values()).filter((p) => p.alive);
   if (stillAlive.length <= 1 && room.players.size > 1) {
     room.phase = 'gameover';
@@ -274,6 +308,10 @@ function getInvestmentCost(
   }
 }
 
+function totalIncomeRate(player: ServerCityPlayer): number {
+  return player.woodIncome + player.foodIncome + player.stoneIncome + player.metalIncome;
+}
+
 export function investResource(
   roomId: string,
   playerId: string,
@@ -290,6 +328,11 @@ export function investResource(
 
   if (!(VALID_INVEST_AMOUNTS as readonly number[]).includes(amount)) {
     return { error: 'Invalid investment amount' };
+  }
+
+  // Population cap: total income cannot exceed population
+  if (totalIncomeRate(player) + amount > player.population) {
+    return { error: 'Not enough population to support that income' };
   }
 
   const cost = getInvestmentCost(resource, amount);
@@ -312,6 +355,28 @@ export function investResource(
   return { room };
 }
 
+export function investScience(
+  roomId: string,
+  playerId: string
+): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
+  const room = rooms.get(roomId);
+  if (!room) return { error: 'Room not found' };
+  if (room.phase !== 'playing') return { error: 'Game not in progress' };
+
+  const player = room.players.get(playerId);
+  if (!player) return { error: 'Player not found' };
+  if (!player.alive) return { error: 'City is eliminated' };
+
+  if (player.stone < SCIENCE_COST_STONE) return { error: 'Not enough stone' };
+  if (player.metal < SCIENCE_COST_METAL) return { error: 'Not enough metal' };
+
+  player.stone -= SCIENCE_COST_STONE;
+  player.metal -= SCIENCE_COST_METAL;
+  player.culture += SCIENCE_CULTURE_GAIN;
+
+  return { room };
+}
+
 export function spendMilitary(
   roomId: string,
   playerId: string
@@ -328,9 +393,16 @@ export function spendMilitary(
     return { error: 'Not enough resources' };
   }
 
+  // Training converts civilians to troops — need enough civilians
+  const civilians = player.population - player.militaryAtHome;
+  if (civilians < MILITARY_UPGRADE_TROOPS) {
+    return { error: 'Not enough civilians to train' };
+  }
+
   player.wood -= MILITARY_UPGRADE_COST_WOOD;
   player.food -= MILITARY_UPGRADE_COST_FOOD;
   player.militaryAtHome += MILITARY_UPGRADE_TROOPS;
+  // population unchanged — civilians converted to military, not created
 
   return { room };
 }
@@ -361,6 +433,7 @@ export function sendAttack(
   if (attacker.militaryAtHome < units) return { error: 'Not enough troops' };
 
   attacker.militaryAtHome -= units;
+  attacker.population -= units; // troops leaving the city permanently reduce population
 
   const now = Date.now();
   const troopGroup: TroopGroup = {
@@ -404,6 +477,8 @@ export function resetRoom(
     player.stoneIncome = 0;
     player.metalIncome = 0;
     player.militaryAtHome = 0;
+    player.population = 0;
+    player.culture = 0;
     player.hp = 0;
     player.maxHp = MAX_HP;
     player.x = 0;
@@ -429,6 +504,8 @@ export function sanitizeState(room: ServerRoom): RoomStatePayload {
     stoneIncome: p.stoneIncome,
     metalIncome: p.metalIncome,
     militaryAtHome: p.militaryAtHome,
+    population: p.population,
+    culture: p.culture,
     hp: p.hp,
     maxHp: p.maxHp,
     x: p.x,
