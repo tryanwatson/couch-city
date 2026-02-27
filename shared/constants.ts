@@ -25,10 +25,12 @@ export const CULTURE_UPGRADE_COST_FOOD = 30;
 export const CULTURE_UPGRADE_COST_GOLD = 50;
 
 // Monuments
-export const MONUMENT_COST_GOLD = 100;
+export const MONUMENT_COST_GOLD = 100;      // base cost (multiply by MONUMENT_COST_MULTIPLIERS[monuments])
 export const MONUMENT_COST_RESOURCES = 150;
 export const MONUMENT_CULTURE_PER_TICK = 5; // passive culture score per monument per tick
-export const MONUMENT_WIN_COUNT = 5;        // first player to build this many wins
+// Cost multiplier per monument index (0=first, 1=second, ...); length caps max monuments at 5
+export const MONUMENT_COST_MULTIPLIERS = [1, 5, 25, 100, 200] as const;
+export const CULTURE_WIN_THRESHOLD = 1000;  // first player to reach this culture score wins
 
 // Military
 export const MILITARY_COST_FOOD = 20;
@@ -42,7 +44,7 @@ export const MAX_HP = 100;
 export const HP_REGEN_PER_SECOND = 2;
 
 // Combat
-export const TROOP_TRAVEL_MS = 6000; // 6 seconds travel time
+export const TROOP_TRAVEL_MS = 20000; // 20 seconds travel time
 export const DAMAGE_PER_UNIT = 5; // HP damage per surviving attacker
 export const VALID_ATTACK_AMOUNTS = [5, 10, 25] as const;
 

@@ -8,7 +8,9 @@ import {
   CULTURE_UPGRADE_COST_GOLD,
   MONUMENT_COST_GOLD,
   MONUMENT_COST_RESOURCES,
-  MONUMENT_WIN_COUNT,
+  MONUMENT_COST_MULTIPLIERS,
+  MONUMENT_CULTURE_PER_TICK,
+  CULTURE_WIN_THRESHOLD,
   MILITARY_COST_FOOD,
   MILITARY_COST_GOLD,
   MILITARY_UPGRADE_TROOPS,
@@ -111,19 +113,25 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
   const canAffordMilitary = me.food >= MILITARY_COST_FOOD && me.gold >= MILITARY_COST_GOLD;
   const canTrainTroops = canAffordMilitary && civilians >= MILITARY_UPGRADE_TROOPS;
   const canAffordCultureUpgrade = me.food >= CULTURE_UPGRADE_COST_FOOD && me.gold >= CULTURE_UPGRADE_COST_GOLD;
-  const canBuildMonument = me.monuments < me.cultureLevel && me.gold >= MONUMENT_COST_GOLD && me.resources >= MONUMENT_COST_RESOURCES;
+  const nextMonumentMultiplier = MONUMENT_COST_MULTIPLIERS[me.monuments] ?? 0;
+  const nextMonumentGoldCost = MONUMENT_COST_GOLD * nextMonumentMultiplier;
+  const nextMonumentResourcesCost = MONUMENT_COST_RESOURCES * nextMonumentMultiplier;
+  const canBuildMonument = me.monuments < me.cultureLevel
+    && me.monuments < MONUMENT_COST_MULTIPLIERS.length
+    && me.gold >= nextMonumentGoldCost
+    && me.resources >= nextMonumentResourcesCost;
   const targets = roomState.players.filter((p) => p.alive && p.playerId !== playerId);
   const myTransit = roomState.troopsInTransit.filter((tg) => tg.attackerPlayerId === playerId);
 
   const hpPct = (me.hp / me.maxHp) * 100;
-  const monumentPct = Math.min(100, (me.monuments / MONUMENT_WIN_COUNT) * 100);
+  const culturePct = Math.min(100, (me.culture / CULTURE_WIN_THRESHOLD) * 100);
 
   return (
     <div className="game-controls">
-      {/* MONUMENT PROGRESS */}
+      {/* CULTURE PROGRESS */}
       <div className="culture-bar-wrapper">
-        <div className="culture-bar-fill" style={{ width: `${monumentPct}%` }} />
-        <span className="culture-label">🏛️ Monuments {me.monuments} / {MONUMENT_WIN_COUNT}</span>
+        <div className="culture-bar-fill" style={{ width: `${culturePct}%` }} />
+        <span className="culture-label">🏛️ Culture {Math.floor(me.culture)} / {CULTURE_WIN_THRESHOLD}</span>
       </div>
 
       {/* STATS HEADER */}
@@ -212,18 +220,26 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
             className="upgrade-btn upgrade-military"
             onClick={handleBuildMonument}
             disabled={!canBuildMonument}
-            title={me.monuments >= me.cultureLevel ? 'Upgrade culture first' : `Costs ${MONUMENT_COST_GOLD} gold + ${MONUMENT_COST_RESOURCES} resources`}
+            title={
+              me.monuments >= MONUMENT_COST_MULTIPLIERS.length ? 'Maximum monuments built' :
+              me.monuments >= me.cultureLevel ? 'Upgrade culture first' :
+              `Costs ${nextMonumentGoldCost} gold + ${nextMonumentResourcesCost} resources`
+            }
           >
             <span className="upgrade-btn-title">🏛️ Build Monument</span>
-            <span className="upgrade-btn-cost">{MONUMENT_COST_GOLD} gold + {MONUMENT_COST_RESOURCES} resources</span>
-            <span className="upgrade-btn-effect">{me.monuments}/{me.cultureLevel} slots used · {me.monuments}/{MONUMENT_WIN_COUNT} to win</span>
+            <span className="upgrade-btn-cost">
+              {me.monuments < MONUMENT_COST_MULTIPLIERS.length
+                ? `${nextMonumentGoldCost} gold + ${nextMonumentResourcesCost} resources`
+                : 'Max built'}
+            </span>
+            <span className="upgrade-btn-effect">{me.monuments}/{me.cultureLevel} slots used · {me.monuments}/{MONUMENT_COST_MULTIPLIERS.length} max</span>
           </button>
         </div>
         {me.monuments > 0 && (
           <div className="resource-row" style={{ marginTop: 4 }}>
-            <span className="resource-label">🏛️ Culture score</span>
+            <span className="resource-label">✨ Culture/tick</span>
             <span className="resource-amount">{Math.floor(me.culture)}</span>
-            <span className="resource-rate">+{me.monuments * 5}/s</span>
+            <span className="resource-rate">+{me.monuments * MONUMENT_CULTURE_PER_TICK}/s</span>
           </div>
         )}
       </div>

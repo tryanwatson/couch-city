@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import type { CityPlayerInfo, TroopGroup } from '../../../../shared/types';
-import { MONUMENT_WIN_COUNT } from '../../../../shared/constants';
+import { CULTURE_WIN_THRESHOLD } from '../../../../shared/constants';
 // 16-frame horizontal strip: frames 0-7 walk, 8-15 attack, each 32×32px at 100ms
 const TROOP_FRAMES = Array.from({ length: 16 }, (_, i) => ({ x: i * 32, y: 0, w: 32, h: 32 }));
 const TROOP_SHEET = { w: 512, h: 32 };
@@ -223,8 +223,8 @@ function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex
         {`+${player.resourcesIncome} +${player.foodIncome} +${player.goldIncome.toFixed(1)}/s`}
       </text>
 
-      {/* Monument progress */}
-      {player.monuments > 0 && (
+      {/* Culture progress */}
+      {player.culture > 0 && (
         <>
           <rect
             x={cx - BAR_W / 2}
@@ -237,7 +237,7 @@ function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex
           <rect
             x={cx - BAR_W / 2}
             y={cy + 80}
-            width={BAR_W * Math.min(1, player.monuments / MONUMENT_WIN_COUNT)}
+            width={BAR_W * Math.min(1, player.culture / CULTURE_WIN_THRESHOLD)}
             height={6}
             rx={3}
             fill="#9b59b6"
@@ -249,7 +249,7 @@ function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex
             fontSize={11}
             fill="#9b59b6"
           >
-            {`🏛️ ${player.monuments}/${MONUMENT_WIN_COUNT} monuments`}
+            {`🏛️ ${player.monuments} monuments · ${Math.floor(player.culture)}/${CULTURE_WIN_THRESHOLD}`}
           </text>
         </>
       )}

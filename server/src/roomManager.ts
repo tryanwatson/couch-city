@@ -18,7 +18,8 @@ import {
   MONUMENT_COST_GOLD,
   MONUMENT_COST_RESOURCES,
   MONUMENT_CULTURE_PER_TICK,
-  MONUMENT_WIN_COUNT,
+  MONUMENT_COST_MULTIPLIERS,
+  CULTURE_WIN_THRESHOLD,
   MILITARY_COST_FOOD,
   MILITARY_COST_GOLD,
   MILITARY_UPGRADE_TROOPS,
@@ -232,13 +233,13 @@ function gameTick(roomId: string): void {
     resolveCombat(room, tg);
   }
 
-  // Monument win condition: first player to build MONUMENT_WIN_COUNT monuments
-  const monumentWinner = Array.from(room.players.values()).find(
-    (p) => p.alive && p.monuments >= MONUMENT_WIN_COUNT
+  // Culture win condition: first player to reach CULTURE_WIN_THRESHOLD culture points
+  const cultureWinner = Array.from(room.players.values()).find(
+    (p) => p.alive && p.culture >= CULTURE_WIN_THRESHOLD
   );
-  if (monumentWinner) {
+  if (cultureWinner) {
     room.phase = 'gameover';
-    room.winnerPlayerId = monumentWinner.playerId;
+    room.winnerPlayerId = cultureWinner.playerId;
     if (room.tickIntervalId !== null) {
       clearInterval(room.tickIntervalId);
       room.tickIntervalId = null;
@@ -360,11 +361,19 @@ export function buildMonument(
   if (player.monuments >= player.cultureLevel) {
     return { error: 'Upgrade culture first to unlock a monument slot' };
   }
-  if (player.gold < MONUMENT_COST_GOLD) return { error: 'Not enough gold' };
-  if (player.resources < MONUMENT_COST_RESOURCES) return { error: 'Not enough resources' };
+  if (player.monuments >= MONUMENT_COST_MULTIPLIERS.length) {
+    return { error: 'Maximum monuments already built' };
+  }
 
-  player.gold -= MONUMENT_COST_GOLD;
-  player.resources -= MONUMENT_COST_RESOURCES;
+  const multiplier = MONUMENT_COST_MULTIPLIERS[player.monuments];
+  const goldCost = MONUMENT_COST_GOLD * multiplier;
+  const resourcesCost = MONUMENT_COST_RESOURCES * multiplier;
+
+  if (player.gold < goldCost) return { error: 'Not enough gold' };
+  if (player.resources < resourcesCost) return { error: 'Not enough resources' };
+
+  player.gold -= goldCost;
+  player.resources -= resourcesCost;
   player.monuments += 1;
 
   return { room };
