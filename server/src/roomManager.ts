@@ -28,6 +28,7 @@ import {
   MAX_HP,
   HP_REGEN_PER_SECOND,
   TROOP_TRAVEL_MS,
+  TROOP_GROUP_MERGE_WINDOW_MS,
   DAMAGE_PER_UNIT,
   VALID_ATTACK_AMOUNTS,
   TICK_INTERVAL_MS,
@@ -440,16 +441,27 @@ export function sendAttack(
   attacker.population -= units; // troops leaving the city permanently reduce population
 
   const now = Date.now();
-  const troopGroup: TroopGroup = {
-    id: 'tg_' + Math.random().toString(36).substring(2, 10) + now.toString(36),
-    attackerPlayerId,
-    targetPlayerId,
-    units,
-    departedAtMs: now,
-    arrivalAtMs: now + TROOP_TRAVEL_MS,
-  };
 
-  room.troopsInTransit.push(troopGroup);
+  // Merge into existing group if same attacker→target within merge window
+  const existing = room.troopsInTransit.find(
+    (tg) =>
+      tg.attackerPlayerId === attackerPlayerId &&
+      tg.targetPlayerId === targetPlayerId &&
+      now - tg.departedAtMs <= TROOP_GROUP_MERGE_WINDOW_MS,
+  );
+
+  if (existing) {
+    existing.units += units;
+  } else {
+    room.troopsInTransit.push({
+      id: 'tg_' + Math.random().toString(36).substring(2, 10) + now.toString(36),
+      attackerPlayerId,
+      targetPlayerId,
+      units,
+      departedAtMs: now,
+      arrivalAtMs: now + TROOP_TRAVEL_MS,
+    });
+  }
 
   return { room };
 }

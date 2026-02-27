@@ -45,6 +45,7 @@ export const HP_REGEN_PER_SECOND = 2;
 
 // Combat
 export const TROOP_TRAVEL_MS = 20000; // 20 seconds travel time
+export const TROOP_GROUP_MERGE_WINDOW_MS = 2000; // merge attacks within 2s
 export const DAMAGE_PER_UNIT = 5; // HP damage per surviving attacker
 export const VALID_ATTACK_AMOUNTS = [5, 10, 25] as const;
 

@@ -44,6 +44,8 @@ function AttackLine({
   );
 }
 
+const GOLDEN_ANGLE = 2.399963; // radians
+
 function TroopSprite({
   pos,
   units,
@@ -59,17 +61,27 @@ function TroopSprite({
 }) {
   const cx = pos.x * 1000;
   const cy = pos.y * 1000;
-  const fi = isAttacking ? (8 + (frameIndex % 8)) : (frameIndex % 8);
-  const frame = TROOP_FRAMES[fi];
-  const scale = TROOP_DISPLAY_SIZE / frame.w;
-  const flipTransform = facingLeft ? `translate(${2 * cx}, 0) scale(-1, 1)` : undefined;
+  const scale = TROOP_DISPLAY_SIZE / 32;
+  const clusterRadius = units <= 1 ? 0 : 15 + Math.sqrt(units) * 8;
 
-  return (
-    <g>
-      <g transform={flipTransform}>
+  const sprites = [];
+  for (let i = 0; i < units; i++) {
+    // Golden angle spiral for even distribution
+    const angle = i * GOLDEN_ANGLE;
+    const r = units <= 1 ? 0 : Math.sqrt((i + 0.5) / units) * clusterRadius;
+    const sx = cx + r * Math.cos(angle);
+    const sy = cy + r * Math.sin(angle);
+
+    // Stagger frames slightly per unit for visual variety
+    const fi = isAttacking ? (8 + ((frameIndex + i) % 8)) : ((frameIndex + i) % 8);
+    const frame = TROOP_FRAMES[fi];
+    const flipTransform = facingLeft ? `translate(${2 * sx}, 0) scale(-1, 1)` : undefined;
+
+    sprites.push(
+      <g key={i} transform={flipTransform}>
         <svg
-          x={cx - TROOP_DISPLAY_SIZE / 2}
-          y={cy - TROOP_DISPLAY_SIZE / 2}
+          x={sx - TROOP_DISPLAY_SIZE / 2}
+          y={sy - TROOP_DISPLAY_SIZE / 2}
           width={TROOP_DISPLAY_SIZE}
           height={TROOP_DISPLAY_SIZE}
           overflow="hidden"
@@ -82,12 +94,18 @@ function TroopSprite({
             height={TROOP_SHEET.h * scale}
           />
         </svg>
-      </g>
+      </g>,
+    );
+  }
+
+  return (
+    <g>
+      {sprites}
       <text
         x={cx}
-        y={cy + TROOP_DISPLAY_SIZE / 2 + 14}
+        y={cy - clusterRadius - TROOP_DISPLAY_SIZE / 2 - 4}
         textAnchor="middle"
-        fontSize={14}
+        fontSize={18}
         fontWeight="700"
         fill="white"
         stroke="black"
