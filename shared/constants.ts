@@ -60,4 +60,8 @@ export const PLAYER_COLORS = [
   '#e67e22',
   '#1abc9c',
   '#e91e63',
+  '#00bcd4',
+  '#ff5722',
+  '#8bc34a',
+  '#673ab7',
 ];

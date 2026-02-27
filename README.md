@@ -21,6 +21,9 @@ npm run dev
 
 The server runs on `http://localhost:3001` and the client on `http://localhost:5173`.
 
+npm run build -w client
+npm run dev -w server
+
 ## How to Play
 
 1. Open `http://localhost:5173/host` on a computer/TV — the shared map screen

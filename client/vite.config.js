@@ -4,7 +4,7 @@ export default defineConfig({
     plugins: [react()],
     server: {
         allowedHosts: ["alexa-uncasual-apogamously.ngrok-free.dev"],
-        port: 5173,
+        port: 3001,
         proxy: {
             "/socket.io": {
                 target: "http://localhost:3001",

@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import type { CityPlayerInfo, TroopGroup } from '../../../../shared/types';
+// 16-frame horizontal strip: frames 0-7 walk, 8-15 attack, each 32×32px at 100ms
+const TROOP_FRAMES = Array.from({ length: 16 }, (_, i) => ({ x: i * 32, y: 0, w: 32, h: 32 }));
+const TROOP_SHEET = { w: 512, h: 32 };
+const TROOP_DISPLAY_SIZE = 64;
+const ATTACK_STANDOFF = 0.09; // normalized coords (~90 SVG units from target center)
+const ATTACK_LINGER_MS = 5000;
+
+interface LingeringTroop {
+  troop: TroopGroup;
+  pos: { x: number; y: number };
+  facingLeft: boolean;
+}
 
 interface BattleMapProps {
   players: CityPlayerInfo[];
@@ -31,33 +43,55 @@ function AttackLine({
   );
 }
 
-function TroopCircle({
+function TroopSprite({
   pos,
-  color,
   units,
+  frameIndex,
+  isAttacking,
+  facingLeft,
 }: {
   pos: { x: number; y: number };
-  color: string;
   units: number;
+  frameIndex: number;
+  isAttacking: boolean;
+  facingLeft: boolean;
 }) {
+  const cx = pos.x * 1000;
+  const cy = pos.y * 1000;
+  const fi = isAttacking ? (8 + (frameIndex % 8)) : (frameIndex % 8);
+  const frame = TROOP_FRAMES[fi];
+  const scale = TROOP_DISPLAY_SIZE / frame.w;
+  const flipTransform = facingLeft ? `translate(${2 * cx}, 0) scale(-1, 1)` : undefined;
+
   return (
     <g>
-      <circle
-        cx={pos.x * 1000}
-        cy={pos.y * 1000}
-        r={16}
-        fill={color}
-        fillOpacity={0.9}
-        stroke="white"
-        strokeWidth={2}
-      />
+      <g transform={flipTransform}>
+        <svg
+          x={cx - TROOP_DISPLAY_SIZE / 2}
+          y={cy - TROOP_DISPLAY_SIZE / 2}
+          width={TROOP_DISPLAY_SIZE}
+          height={TROOP_DISPLAY_SIZE}
+          overflow="hidden"
+        >
+          <image
+            href="/blue-warrior-ss.png"
+            x={-frame.x * scale}
+            y={0}
+            width={TROOP_SHEET.w * scale}
+            height={TROOP_SHEET.h * scale}
+          />
+        </svg>
+      </g>
       <text
-        x={pos.x * 1000}
-        y={pos.y * 1000 + 5}
+        x={cx}
+        y={cy + TROOP_DISPLAY_SIZE / 2 + 14}
         textAnchor="middle"
         fontSize={14}
         fontWeight="700"
         fill="white"
+        stroke="black"
+        strokeWidth={3}
+        paintOrder="stroke"
       >
         {units}
       </text>
@@ -228,38 +262,69 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
     [players],
   );
 
-  const [troopPositions, setTroopPositions] = useState<Map<string, { x: number; y: number }>>(
+  const [troopPositions, setTroopPositions] = useState<Map<string, { x: number; y: number; facingLeft: boolean }>>(
     new Map(),
   );
+  const [frameIndex, setFrameIndex] = useState(0);
+  const [attackingTroops, setAttackingTroops] = useState<Map<string, LingeringTroop>>(new Map());
+  const lingeringRef = useRef<Map<string, LingeringTroop>>(new Map());
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!animate) {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
       setTroopPositions(new Map());
+      setAttackingTroops(new Map());
+      lingeringRef.current.clear();
       return;
     }
 
     const tick = () => {
       const now = Date.now();
-      const positions = new Map<string, { x: number; y: number }>();
+      const positions = new Map<string, { x: number; y: number; facingLeft: boolean }>();
 
       for (const troop of troopsInTransit) {
         const attacker = playerMap.get(troop.attackerPlayerId);
         const target = playerMap.get(troop.targetPlayerId);
         if (!attacker || !target) continue;
 
-        const t = Math.min(
-          1,
-          Math.max(0, (now - troop.departedAtMs) / (troop.arrivalAtMs - troop.departedAtMs)),
-        );
-        positions.set(troop.id, {
-          x: attacker.x + (target.x - attacker.x) * t,
-          y: attacker.y + (target.y - attacker.y) * t,
-        });
+        const dx = target.x - attacker.x;
+        const dy = target.y - attacker.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const nx = dist > 0 ? dx / dist : 0;
+        const ny = dist > 0 ? dy / dist : 0;
+        const facingLeft = dx < 0;
+
+        if (now >= troop.arrivalAtMs) {
+          if (!lingeringRef.current.has(troop.id)) {
+            lingeringRef.current.set(troop.id, {
+              troop,
+              pos: {
+                x: target.x - nx * ATTACK_STANDOFF,
+                y: target.y - ny * ATTACK_STANDOFF,
+              },
+              facingLeft,
+            });
+          }
+        } else {
+          const t = Math.max(0, (now - troop.departedAtMs) / (troop.arrivalAtMs - troop.departedAtMs));
+          positions.set(troop.id, {
+            x: attacker.x + dx * t,
+            y: attacker.y + dy * t,
+            facingLeft,
+          });
+        }
+      }
+
+      for (const [id, lingering] of lingeringRef.current) {
+        if (now >= lingering.troop.arrivalAtMs + ATTACK_LINGER_MS) {
+          lingeringRef.current.delete(id);
+        }
       }
 
       setTroopPositions(positions);
+      setAttackingTroops(new Map(lingeringRef.current));
+      setFrameIndex(Math.floor((now % (TROOP_FRAMES.length * 100)) / 100));
       rafRef.current = requestAnimationFrame(tick);
     };
 
@@ -283,20 +348,33 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
         <AttackLine key={troop.id} troop={troop} playerMap={playerMap} />
       ))}
 
-      {/* Animated troop circles */}
+      {/* Walking troops */}
       {troopsInTransit.map((troop) => {
-        const pos = troopPositions.get(troop.id);
-        if (!pos) return null;
-        const attacker = playerMap.get(troop.attackerPlayerId);
+        const posData = troopPositions.get(troop.id);
+        if (!posData) return null;
         return (
-          <TroopCircle
+          <TroopSprite
             key={troop.id}
-            pos={pos}
-            color={attacker?.color ?? '#ffffff'}
+            pos={posData}
             units={troop.units}
+            frameIndex={frameIndex}
+            isAttacking={false}
+            facingLeft={posData.facingLeft}
           />
         );
       })}
+
+      {/* Attacking troops (linger at castle for 5s) */}
+      {Array.from(attackingTroops.values()).map((lingering) => (
+        <TroopSprite
+          key={`attack-${lingering.troop.id}`}
+          pos={lingering.pos}
+          units={lingering.troop.units}
+          frameIndex={frameIndex}
+          isAttacking={true}
+          facingLeft={lingering.facingLeft}
+        />
+      ))}
 
       {/* Cities — rendered last so they paint over troop lines */}
       {players.map((player, index) => (
