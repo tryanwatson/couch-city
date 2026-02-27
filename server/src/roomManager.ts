@@ -265,9 +265,15 @@ function detectFieldCollisions(room: ServerRoom, now: number): void {
       const tCollision = (threshold + tg1.departedAtMs / d1 + tg2.departedAtMs / d2) / (1 / d1 + 1 / d2);
       const p1AtCollision = Math.max(0, Math.min(1, (tCollision - tg1.departedAtMs) / d1));
 
-      // Contact point (midpoint between the two group fronts)
-      const collisionX = att1.x + (tgt1.x - att1.x) * p1AtCollision;
-      const collisionY = att1.y + (tgt1.y - att1.y) * p1AtCollision;
+      // Group 1 center at collision time
+      const center1X = att1.x + (tgt1.x - att1.x) * p1AtCollision;
+      const center1Y = att1.y + (tgt1.y - att1.y) * p1AtCollision;
+
+      // Contact point: offset from group 1's center toward target by r1
+      const nxLane = laneDist > 0 ? (tgt1.x - att1.x) / laneDist : 0;
+      const nyLane = laneDist > 0 ? (tgt1.y - att1.y) / laneDist : 0;
+      const collisionX = center1X + r1 * nxLane;
+      const collisionY = center1Y + r1 * nyLane;
 
       const cp1 = tg1.units * COMBAT_POWER[tg1.troopType];
       const cp2 = tg2.units * COMBAT_POWER[tg2.troopType];
@@ -280,14 +286,19 @@ function detectFieldCollisions(room: ServerRoom, now: number): void {
         tg1.units = result.survivorsA;
         tg2.units = result.survivorsB;
 
-        // Recalculate arrival for survivors from collision point
+        // Recalculate arrival for survivors: offset from contact point to each group's center
         for (const tg of [tg1, tg2]) {
           if (tg.units <= 0) continue;
           const target = room.players.get(tg.targetPlayerId);
           const attacker = room.players.get(tg.attackerPlayerId);
           if (!target || !attacker) continue;
           const totalDist = Math.hypot(target.x - attacker.x, target.y - attacker.y);
-          const remainDist = Math.hypot(target.x - collisionX, target.y - collisionY);
+          const backNx = totalDist > 0 ? (attacker.x - target.x) / totalDist : 0;
+          const backNy = totalDist > 0 ? (attacker.y - target.y) / totalDist : 0;
+          const r = troopGroupRadius(tg.units);
+          const centerX = collisionX + backNx * r;
+          const centerY = collisionY + backNy * r;
+          const remainDist = Math.hypot(target.x - centerX, target.y - centerY);
           const remainFrac = totalDist > 0 ? remainDist / totalDist : 0;
           tg.arrivalAtMs = now + remainFrac * TROOP_TRAVEL_MS;
           tg.departedAtMs = now - (1 - remainFrac) * TROOP_TRAVEL_MS;
@@ -337,12 +348,17 @@ function resolveFieldCombats(room: ServerRoom, now: number): void {
 
     // Clear field combat state for survivors so they resume travel
     if (tg.units > 0) {
-      // Recalculate arrivalAtMs: remaining distance from combat pos to target
+      // Recalculate arrivalAtMs: offset from contact point to group center, then measure to target
       const target = room.players.get(tg.targetPlayerId);
       const attacker = room.players.get(tg.attackerPlayerId);
       if (target && attacker) {
         const totalDist = Math.hypot(target.x - attacker.x, target.y - attacker.y);
-        const remainDist = Math.hypot(target.x - tg.fieldCombatX!, target.y - tg.fieldCombatY!);
+        const backNx = totalDist > 0 ? (attacker.x - target.x) / totalDist : 0;
+        const backNy = totalDist > 0 ? (attacker.y - target.y) / totalDist : 0;
+        const r = troopGroupRadius(tg.units);
+        const centerX = tg.fieldCombatX! + backNx * r;
+        const centerY = tg.fieldCombatY! + backNy * r;
+        const remainDist = Math.hypot(target.x - centerX, target.y - centerY);
         const remainFrac = totalDist > 0 ? remainDist / totalDist : 0;
         tg.arrivalAtMs = now + remainFrac * TROOP_TRAVEL_MS;
         tg.departedAtMs = now - (1 - remainFrac) * TROOP_TRAVEL_MS;

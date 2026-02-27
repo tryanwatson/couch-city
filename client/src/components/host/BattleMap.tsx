@@ -217,6 +217,41 @@ function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex
         {Math.ceil(player.hp)}/{player.maxHp}
       </text>
 
+      {/* Combat power shield */}
+      {(() => {
+        const shieldCx = cx + BAR_W / 2 + 30;
+        const shieldCy = cy - 67;
+        const sw = 36;
+        const sh = 44;
+        const cp = TROOP_TYPES.reduce((s, t) => s + player.militaryAtHome[t] * COMBAT_POWER[t], 0);
+        const cpStr = String(cp);
+        const fs = cpStr.length <= 2 ? 18 : cpStr.length <= 3 ? 15 : cpStr.length <= 4 ? 12 : 10;
+        return (
+          <>
+            <path
+              d={`M${shieldCx},${shieldCy - sh / 2}
+                  l${sw / 2},0 l${sw * 0.08},${sh * 0.15}
+                  l0,${sh * 0.45} l-${sw / 2 + sw * 0.08},${sh * 0.4}
+                  l-${sw / 2 + sw * 0.08},-${sh * 0.4}
+                  l0,-${sh * 0.45} l${sw * 0.08},-${sh * 0.15} z`}
+              fill="#3a3a3a"
+              stroke="black"
+              strokeWidth={2}
+            />
+            <text
+              x={shieldCx}
+              y={shieldCy + fs * 0.35}
+              textAnchor="middle"
+              fontSize={fs}
+              fontWeight="800"
+              fill="#f0c040"
+            >
+              {cp}
+            </text>
+          </>
+        );
+      })()}
+
       {/* City — castle image for first 3 players, colored square for rest */}
       {playerIndex < CASTLE_IMAGES.length ? (
         <image
@@ -241,23 +276,11 @@ function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex
         />
       )}
 
-      {/* Combat power at home */}
-      <text
-        x={cx}
-        y={cy + 9}
-        textAnchor="middle"
-        fontSize={24}
-        fontWeight="800"
-        fill="white"
-      >
-        {TROOP_TYPES.reduce((s, t) => s + player.militaryAtHome[t] * COMBAT_POWER[t], 0)}
-      </text>
-
       {/* Stats box */}
       {(() => {
         const hasCulture = player.culture > 0;
         const BOX_W = 150;
-        const BOX_H = hasCulture ? 100 : 72;
+        const BOX_H = hasCulture ? 72 : 42;
         const BOX_X = cx - BOX_W / 2;
         const BOX_Y = cy + 66;
         return (
@@ -283,7 +306,7 @@ function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex
             >
               {player.name}
             </text>
-            {/* Population & Combat */}
+            {/* Population */}
             <text
               x={cx}
               y={BOX_Y + 34}
@@ -291,34 +314,14 @@ function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex
               fontSize={13}
               fill="white"
             >
-              {`👥 ${Math.floor(player.population)}  ⚔️ ${TROOP_TYPES.reduce((s, t) => s + player.militaryAtHome[t] * COMBAT_POWER[t], 0)}`}
-            </text>
-            {/* Resources */}
-            <text
-              x={cx}
-              y={BOX_Y + 50}
-              textAnchor="middle"
-              fontSize={12}
-              fill="#ccc"
-            >
-              {`R:${Math.floor(player.resources)}  F:${Math.floor(player.food)}  G:${Math.floor(player.gold)}`}
-            </text>
-            {/* Income */}
-            <text
-              x={cx}
-              y={BOX_Y + 64}
-              textAnchor="middle"
-              fontSize={11}
-              fill="#2ecc71"
-            >
-              {`+${player.resourcesIncome}  +${player.foodIncome}  +${player.goldIncome.toFixed(1)}/s`}
+              {`👥 ${Math.floor(player.population)}`}
             </text>
             {/* Culture progress */}
             {hasCulture && (
               <>
                 <rect
                   x={BOX_X + 6}
-                  y={BOX_Y + 72}
+                  y={BOX_Y + 42}
                   width={BOX_W - 12}
                   height={6}
                   rx={3}
@@ -326,7 +329,7 @@ function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex
                 />
                 <rect
                   x={BOX_X + 6}
-                  y={BOX_Y + 72}
+                  y={BOX_Y + 42}
                   width={(BOX_W - 12) * Math.min(1, player.culture / CULTURE_WIN_THRESHOLD)}
                   height={6}
                   rx={3}
@@ -334,7 +337,7 @@ function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex
                 />
                 <text
                   x={cx}
-                  y={BOX_Y + 92}
+                  y={BOX_Y + 62}
                   textAnchor="middle"
                   fontSize={11}
                   fill="#c88de8"
@@ -395,7 +398,7 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
           // Offset toward this troop's origin (attacker) so fronts barely touch
           const backNx = dist > 0 ? (attacker.x - target.x) / dist : 0;
           const backNy = dist > 0 ? (attacker.y - target.y) / dist : 0;
-          const r = troopGroupRadius(troop.units);
+          const r = troopGroupRadius(troop.units) * 0.5;
           const renderX = troop.fieldCombatX + backNx * r;
           const renderY = troop.fieldCombatY! + backNy * r;
           if (now < troop.fieldCombatEndMs) {
@@ -407,12 +410,12 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
               isFieldCombat: true,
             });
           } else {
-            // Combat ended, waiting for server to clear — hold position
+            // Combat ended, waiting for server to clear — keep attack animation
             positions.set(troop.id, {
               x: renderX,
               y: renderY,
               facingLeft: combatFacingLeft,
-              isFieldCombat: false,
+              isFieldCombat: true,
             });
           }
         } else if (now >= troop.arrivalAtMs) {
@@ -440,58 +443,6 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
         }
       }
 
-      // Client-side collision prediction: prevent opposing troops from passing through each other
-      const traveling = troopsInTransit.filter(
-        (t) => t.fieldCombatEndMs == null && positions.has(t.id),
-      );
-      for (let i = 0; i < traveling.length; i++) {
-        for (let j = i + 1; j < traveling.length; j++) {
-          const tA = traveling[i];
-          const tB = traveling[j];
-          // Only opposing lanes (A→B vs B→A)
-          if (
-            tA.attackerPlayerId !== tB.targetPlayerId ||
-            tB.attackerPlayerId !== tA.targetPlayerId
-          ) continue;
-
-          const dA = tA.arrivalAtMs - tA.departedAtMs;
-          const dB = tB.arrivalAtMs - tB.departedAtMs;
-          if (dA <= 0 || dB <= 0) continue;
-
-          // Account for visual group radius — collide when fronts touch
-          const attA = playerMap.get(tA.attackerPlayerId)!;
-          const tgtA = playerMap.get(tA.targetPlayerId)!;
-          const attB = playerMap.get(tB.attackerPlayerId)!;
-          const tgtB = playerMap.get(tB.targetPlayerId)!;
-          const laneDist = Math.sqrt(
-            (tgtA.x - attA.x) ** 2 + (tgtA.y - attA.y) ** 2,
-          );
-          const rA = troopGroupRadius(tA.units);
-          const rB = troopGroupRadius(tB.units);
-          const radiusOffset = laneDist > 0 ? (rA + rB) / laneDist : 0;
-          const threshold = 1 - radiusOffset;
-
-          const pA = (now - tA.departedAtMs) / dA;
-          const pB = (now - tB.departedAtMs) / dB;
-          if (pA + pB < threshold) continue; // fronts haven't touched yet
-
-          // Solve for exact collision time: pA(t) + pB(t) = threshold
-          const tColl = (threshold + tA.departedAtMs / dA + tB.departedAtMs / dB) / (1 / dA + 1 / dB);
-          const pAColl = Math.max(0, Math.min(1, (tColl - tA.departedAtMs) / dA));
-          const pBColl = Math.max(0, Math.min(1, (tColl - tB.departedAtMs) / dB));
-
-          // Each group at its own center position at collision time (fronts barely touching)
-          const meetAx = attA.x + (tgtA.x - attA.x) * pAColl;
-          const meetAy = attA.y + (tgtA.y - attA.y) * pAColl;
-          const meetBx = attB.x + (tgtB.x - attB.x) * pBColl;
-          const meetBy = attB.y + (tgtB.y - attB.y) * pBColl;
-
-          const posA = positions.get(tA.id)!;
-          const posB = positions.get(tB.id)!;
-          positions.set(tA.id, { x: meetAx, y: meetAy, facingLeft: posA.facingLeft, isFieldCombat: true });
-          positions.set(tB.id, { x: meetBx, y: meetBy, facingLeft: posB.facingLeft, isFieldCombat: true });
-        }
-      }
 
       for (const [id, lingering] of lingeringRef.current) {
         if (now >= lingering.troop.arrivalAtMs + ATTACK_LINGER_MS) {
