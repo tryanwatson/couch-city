@@ -1,4 +1,5 @@
 export type Phase = 'lobby' | 'playing' | 'gameover';
+export type TroopType = 'warrior' | 'cavalry' | 'rifleman' | 'truck';
 
 // Client-safe player stats — zeros during lobby, populated on startGame
 export interface CityPlayerInfo {
@@ -13,7 +14,7 @@ export interface CityPlayerInfo {
   foodIncome: number;
   resourcesIncome: number;
   goldIncome: number; // derived: population × GOLD_INCOME_PER_POP, updated each tick
-  militaryAtHome: number;
+  militaryAtHome: Record<TroopType, number>;
   population: number;
   culture: number;       // passive score from monuments (display/historical)
   cultureLevel: number;  // upgrade count — gates how many monuments can be built
@@ -28,9 +29,14 @@ export interface TroopGroup {
   id: string;
   attackerPlayerId: string;
   targetPlayerId: string;
+  troopType: TroopType;
   units: number;
   departedAtMs: number;
   arrivalAtMs: number;
+  // Field combat (set when opposing groups collide mid-map)
+  fieldCombatX?: number;
+  fieldCombatY?: number;
+  fieldCombatEndMs?: number;
 }
 
 // Broadcast payload — everything clients need to render
@@ -61,7 +67,7 @@ export interface ServerCityPlayer {
   foodIncome: number;
   resourcesIncome: number;
   goldIncome: number;
-  militaryAtHome: number;
+  militaryAtHome: Record<TroopType, number>;
   population: number;
   culture: number;
   cultureLevel: number;

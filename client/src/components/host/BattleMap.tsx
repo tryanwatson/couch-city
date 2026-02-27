@@ -281,7 +281,7 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
     [players],
   );
 
-  const [troopPositions, setTroopPositions] = useState<Map<string, { x: number; y: number; facingLeft: boolean }>>(
+  const [troopPositions, setTroopPositions] = useState<Map<string, { x: number; y: number; facingLeft: boolean; isFieldCombat: boolean }>>(
     new Map(),
   );
   const [frameIndex, setFrameIndex] = useState(0);
@@ -300,7 +300,7 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
 
     const tick = () => {
       const now = Date.now();
-      const positions = new Map<string, { x: number; y: number; facingLeft: boolean }>();
+      const positions = new Map<string, { x: number; y: number; facingLeft: boolean; isFieldCombat: boolean }>();
 
       for (const troop of troopsInTransit) {
         const attacker = playerMap.get(troop.attackerPlayerId);
@@ -314,7 +314,27 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
         const ny = dist > 0 ? dy / dist : 0;
         const facingLeft = dx < 0;
 
-        if (now >= troop.arrivalAtMs) {
+        // Field combat: frozen at collision point
+        if (troop.fieldCombatX != null && troop.fieldCombatEndMs != null) {
+          const combatFacingLeft = (target.x - troop.fieldCombatX) < 0;
+          if (now < troop.fieldCombatEndMs) {
+            // In combat — attack animation
+            positions.set(troop.id, {
+              x: troop.fieldCombatX,
+              y: troop.fieldCombatY!,
+              facingLeft: combatFacingLeft,
+              isFieldCombat: true,
+            });
+          } else {
+            // Combat ended, waiting for server to clear — hold position
+            positions.set(troop.id, {
+              x: troop.fieldCombatX,
+              y: troop.fieldCombatY!,
+              facingLeft: combatFacingLeft,
+              isFieldCombat: false,
+            });
+          }
+        } else if (now >= troop.arrivalAtMs) {
           if (!lingeringRef.current.has(troop.id)) {
             lingeringRef.current.set(troop.id, {
               troop,
@@ -326,12 +346,47 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
             });
           }
         } else {
-          const t = Math.max(0, (now - troop.departedAtMs) / (troop.arrivalAtMs - troop.departedAtMs));
+          // Clamp t so troops stop at standoff distance from target (city edge)
+          const standoffFrac = dist > 0 ? ATTACK_STANDOFF / dist : 0;
+          const tRaw = (now - troop.departedAtMs) / (troop.arrivalAtMs - troop.departedAtMs);
+          const t = Math.max(0, Math.min(tRaw, 1 - standoffFrac));
           positions.set(troop.id, {
             x: attacker.x + dx * t,
             y: attacker.y + dy * t,
             facingLeft,
+            isFieldCombat: false,
           });
+        }
+      }
+
+      // Client-side collision prediction: prevent opposing troops from passing through each other
+      const traveling = troopsInTransit.filter(
+        (t) => t.fieldCombatEndMs == null && positions.has(t.id),
+      );
+      for (let i = 0; i < traveling.length; i++) {
+        for (let j = i + 1; j < traveling.length; j++) {
+          const tA = traveling[i];
+          const tB = traveling[j];
+          // Only opposing lanes (A→B vs B→A)
+          if (
+            tA.attackerPlayerId !== tB.targetPlayerId ||
+            tB.attackerPlayerId !== tA.targetPlayerId
+          ) continue;
+
+          const pA = (now - tA.departedAtMs) / (tA.arrivalAtMs - tA.departedAtMs);
+          const pB = (now - tB.departedAtMs) / (tB.arrivalAtMs - tB.departedAtMs);
+          if (pA + pB < 1) continue; // haven't met yet
+
+          // Compute meeting point on A's attacker→target line
+          const attA = playerMap.get(tA.attackerPlayerId)!;
+          const tgtA = playerMap.get(tA.targetPlayerId)!;
+          const meetX = attA.x + (tgtA.x - attA.x) * pA;
+          const meetY = attA.y + (tgtA.y - attA.y) * pA;
+
+          const posA = positions.get(tA.id)!;
+          const posB = positions.get(tB.id)!;
+          positions.set(tA.id, { x: meetX, y: meetY, facingLeft: posA.facingLeft, isFieldCombat: true });
+          positions.set(tB.id, { x: meetX, y: meetY, facingLeft: posB.facingLeft, isFieldCombat: true });
         }
       }
 
@@ -367,7 +422,7 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
         <AttackLine key={troop.id} troop={troop} playerMap={playerMap} />
       ))}
 
-      {/* Walking troops */}
+      {/* Walking / field-combat troops */}
       {troopsInTransit.map((troop) => {
         const posData = troopPositions.get(troop.id);
         if (!posData) return null;
@@ -377,7 +432,7 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
             pos={posData}
             units={troop.units}
             frameIndex={frameIndex}
-            isAttacking={false}
+            isAttacking={posData.isFieldCombat}
             facingLeft={posData.facingLeft}
           />
         );

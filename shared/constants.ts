@@ -49,6 +49,11 @@ export const TROOP_GROUP_MERGE_WINDOW_MS = 2000; // merge attacks within 2s
 export const DAMAGE_PER_UNIT = 5; // HP damage per surviving attacker
 export const VALID_ATTACK_AMOUNTS = [5, 10, 25] as const;
 
+// Field combat (opposing troops collide mid-map)
+export const FIELD_COMBAT_INSTANT_RATIO = 0.2; // power ratio below this → instant resolve
+export const FIELD_COMBAT_MS_PER_UNIT = 100;   // 0.1s per unit at equal strength
+export const FIELD_COMBAT_MIN_MS = 1000;        // minimum animation duration
+
 // Tick
 export const TICK_INTERVAL_MS = 1000;
 
