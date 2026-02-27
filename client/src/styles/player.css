@@ -245,6 +245,24 @@
   gap: 0;
 }
 
+/* Screen edge flash on attack */
+@keyframes screen-flash {
+  0%   { opacity: 1; }
+  25%  { opacity: 0.3; }
+  50%  { opacity: 1; }
+  75%  { opacity: 0.3; }
+  100% { opacity: 0; }
+}
+
+.attack-flash-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  box-shadow: inset 0 0 80px 30px rgba(231, 76, 60, 0.7);
+  animation: screen-flash 0.8s ease-out forwards;
+}
+
 /* Culture progress bar */
 .culture-bar-wrapper {
   position: relative;
@@ -292,13 +310,34 @@
   font-weight: 700;
 }
 
+/* Sticky HP bar container */
+.hp-bar-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--color-bg);
+  padding: 8px 12px;
+}
+
 /* HP bar */
 .hp-bar-wrapper {
   position: relative;
   background: var(--color-surface-light);
   border-radius: 6px;
-  height: 22px;
+  height: 26px;
   overflow: hidden;
+}
+
+@keyframes hp-flash {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  20% { box-shadow: 0 0 12px 4px rgba(231, 76, 60, 0.8); }
+  40% { box-shadow: 0 0 4px 1px rgba(231, 76, 60, 0.3); }
+  60% { box-shadow: 0 0 12px 4px rgba(231, 76, 60, 0.8); }
+  80% { box-shadow: 0 0 4px 1px rgba(231, 76, 60, 0.3); }
+}
+
+.hp-bar-wrapper.hp-hit {
+  animation: hp-flash 0.6s ease-out;
 }
 
 .hp-bar-fill {

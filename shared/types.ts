@@ -39,6 +39,7 @@ export interface RoomStatePayload {
   phase: Phase;
   players: CityPlayerInfo[];
   troopsInTransit: TroopGroup[];
+  combatHitPlayerIds: string[];
   winnerPlayerId: string | null;
 }
 
@@ -77,6 +78,7 @@ export interface ServerRoom {
   phase: Phase;
   players: Map<string, ServerCityPlayer>;
   troopsInTransit: TroopGroup[];
+  combatHitPlayerIds: string[];
   tickIntervalId: ReturnType<typeof setInterval> | null;
   winnerPlayerId: string | null;
 }

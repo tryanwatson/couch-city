@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { RoomStatePayload } from '../../../../shared/types';
 import {
@@ -57,6 +58,16 @@ const INCOME_CONFIG: {
 
 export default function GameControls({ roomState, playerId, socket }: GameControlsProps) {
   const me = roomState.players.find((p) => p.playerId === playerId) ?? null;
+
+  const [hit, setHit] = useState(false);
+
+  useEffect(() => {
+    if (roomState.combatHitPlayerIds.includes(playerId)) {
+      setHit(true);
+      const id = setTimeout(() => setHit(false), 800);
+      return () => clearTimeout(id);
+    }
+  }, [roomState.combatHitPlayerIds, playerId]);
 
   const handleInvestIncome = (income: IncomeType, amount: InvestAmount) => {
     socket.emit('player:invest_income', { roomId: roomState.roomId, playerId, income, amount });
@@ -128,6 +139,20 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
 
   return (
     <div className="game-controls">
+      {/* SCREEN EDGE FLASH ON ATTACK */}
+      {hit && <div className="attack-flash-overlay" />}
+
+      {/* STICKY HP BAR */}
+      <div className="hp-bar-sticky">
+        <div className={`hp-bar-wrapper${hit ? ' hp-hit' : ''}`}>
+          <div
+            className={`hp-bar-fill${hpPct <= 30 ? ' hp-low' : ''}`}
+            style={{ width: `${hpPct}%` }}
+          />
+          <span className="hp-label">{Math.ceil(me.hp)} / {me.maxHp} HP</span>
+        </div>
+      </div>
+
       {/* CULTURE PROGRESS */}
       <div className="culture-bar-wrapper">
         <div className="culture-bar-fill" style={{ width: `${culturePct}%` }} />
@@ -137,14 +162,6 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
       {/* STATS HEADER */}
       <div className="stats-header" style={{ borderTopColor: me.color }}>
         <div className="city-name">{me.name}</div>
-
-        <div className="hp-bar-wrapper">
-          <div
-            className={`hp-bar-fill${hpPct <= 30 ? ' hp-low' : ''}`}
-            style={{ width: `${hpPct}%` }}
-          />
-          <span className="hp-label">{Math.ceil(me.hp)} / {me.maxHp} HP</span>
-        </div>
 
         <div className="stats-row">
           <div className="stat-block">

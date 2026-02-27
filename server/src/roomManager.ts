@@ -53,6 +53,7 @@ export function createRoom(hostSocketId: string): ServerRoom {
     phase: 'lobby',
     players: new Map(),
     troopsInTransit: [],
+    combatHitPlayerIds: [],
     tickIntervalId: null,
     winnerPlayerId: null,
   };
@@ -229,6 +230,7 @@ function gameTick(roomId: string): void {
   // Resolve arrived troop groups
   const arrived = room.troopsInTransit.filter((tg) => tg.arrivalAtMs <= now);
   room.troopsInTransit = room.troopsInTransit.filter((tg) => tg.arrivalAtMs > now);
+  room.combatHitPlayerIds = arrived.map((tg) => tg.targetPlayerId);
   for (const tg of arrived) {
     resolveCombat(room, tg);
   }
@@ -519,6 +521,7 @@ export function sanitizeState(room: ServerRoom): RoomStatePayload {
     phase: room.phase,
     players,
     troopsInTransit: room.troopsInTransit,
+    combatHitPlayerIds: room.combatHitPlayerIds,
     winnerPlayerId: room.winnerPlayerId,
   };
 }
