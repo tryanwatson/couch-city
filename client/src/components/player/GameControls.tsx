@@ -122,7 +122,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
 
   const totalMilitary = Object.values(me.militaryAtHome).reduce((s, n) => s + n, 0);
   const civilians = Math.floor(me.population) - totalMilitary;
-  const canAffordCultureUpgrade = me.food >= CULTURE_UPGRADE_COST_FOOD && me.gold >= CULTURE_UPGRADE_COST_GOLD;
+  const canAffordCultureUpgrade = me.cultureLevel < MONUMENT_COST_MULTIPLIERS.length && me.food >= CULTURE_UPGRADE_COST_FOOD && me.gold >= CULTURE_UPGRADE_COST_GOLD;
   const nextMonumentMultiplier = MONUMENT_COST_MULTIPLIERS[me.monuments] ?? 0;
   const nextMonumentGoldCost = MONUMENT_COST_GOLD * nextMonumentMultiplier;
   const nextMonumentResourcesCost = MONUMENT_COST_RESOURCES * nextMonumentMultiplier;

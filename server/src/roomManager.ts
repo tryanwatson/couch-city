@@ -596,6 +596,7 @@ export function upgradeCulture(
   if (!player) return { error: 'Player not found' };
   if (!player.alive) return { error: 'City is eliminated' };
 
+  if (player.cultureLevel >= MONUMENT_COST_MULTIPLIERS.length) return { error: 'Maximum culture level reached' };
   if (player.food < CULTURE_UPGRADE_COST_FOOD) return { error: 'Not enough food' };
   if (player.gold < CULTURE_UPGRADE_COST_GOLD) return { error: 'Not enough gold' };
 

@@ -240,7 +240,7 @@ function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex
             />
             <text
               x={shieldCx}
-              y={shieldCy + fs * 0.35}
+              y={shieldCy + fs * 0.2}
               textAnchor="middle"
               fontSize={fs}
               fontWeight="800"
