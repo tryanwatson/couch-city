@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { Socket } from 'socket.io-client';
-import type { RoomStatePayload } from '../../../../shared/types';
+import type { RoomStatePayload, TroopType } from '../../../../shared/types';
 import {
   INVEST_FOOD_COST_GOLD,
   INVEST_RESOURCES_COST_GOLD,
@@ -12,9 +12,9 @@ import {
   MONUMENT_COST_MULTIPLIERS,
   MONUMENT_CULTURE_PER_TICK,
   CULTURE_WIN_THRESHOLD,
-  MILITARY_COST_FOOD,
-  MILITARY_COST_GOLD,
-  MILITARY_UPGRADE_TROOPS,
+  TROOP_TYPES,
+  TRAINING_CONFIG,
+  COMBAT_POWER,
   VALID_ATTACK_AMOUNTS,
 } from '../../../../shared/constants';
 
@@ -81,12 +81,12 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
     socket.emit('player:build_monument', { roomId: roomState.roomId, playerId });
   };
 
-  const handleSpendMilitary = () => {
-    socket.emit('player:spend_military', { roomId: roomState.roomId, playerId });
+  const handleSpendMilitary = (troopType: TroopType) => {
+    socket.emit('player:spend_military', { roomId: roomState.roomId, playerId, troopType });
   };
 
-  const handleSendAttack = (targetPlayerId: string, units: number) => {
-    socket.emit('player:send_attack', { roomId: roomState.roomId, playerId, targetPlayerId, units });
+  const handleSendAttack = (targetPlayerId: string, units: number, troopType: TroopType) => {
+    socket.emit('player:send_attack', { roomId: roomState.roomId, playerId, targetPlayerId, units, troopType });
   };
 
   if (!me) {
@@ -120,9 +120,8 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
     );
   }
 
-  const civilians = Math.floor(me.population) - me.militaryAtHome;
-  const canAffordMilitary = me.food >= MILITARY_COST_FOOD && me.gold >= MILITARY_COST_GOLD;
-  const canTrainTroops = canAffordMilitary && civilians >= MILITARY_UPGRADE_TROOPS;
+  const totalMilitary = Object.values(me.militaryAtHome).reduce((s, n) => s + n, 0);
+  const civilians = Math.floor(me.population) - totalMilitary;
   const canAffordCultureUpgrade = me.food >= CULTURE_UPGRADE_COST_FOOD && me.gold >= CULTURE_UPGRADE_COST_GOLD;
   const nextMonumentMultiplier = MONUMENT_COST_MULTIPLIERS[me.monuments] ?? 0;
   const nextMonumentGoldCost = MONUMENT_COST_GOLD * nextMonumentMultiplier;
@@ -171,7 +170,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           </div>
           <div className="stat-block">
             <span className="stat-label">⚔️ Troops</span>
-            <span className="stat-value">{me.militaryAtHome}</span>
+            <span className="stat-value">{totalMilitary}</span>
             <span className="stat-rate">{civilians} civ</span>
           </div>
           <div className="stat-block">
@@ -263,18 +262,27 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
 
       {/* MILITARY */}
       <div className="upgrades-section">
-        <h3 className="section-title">Military</h3>
+        <h3 className="section-title">Military ({civilians} civ avail)</h3>
         <div className="upgrade-buttons">
-          <button
-            className="upgrade-btn upgrade-military"
-            onClick={handleSpendMilitary}
-            disabled={!canTrainTroops}
-            title={!canAffordMilitary ? 'Not enough resources' : civilians < MILITARY_UPGRADE_TROOPS ? `Need ${MILITARY_UPGRADE_TROOPS - civilians} more civilians` : ''}
-          >
-            <span className="upgrade-btn-title">⚔️ Train Troops</span>
-            <span className="upgrade-btn-cost">{MILITARY_COST_FOOD} food + {MILITARY_COST_GOLD} gold</span>
-            <span className="upgrade-btn-effect">+{MILITARY_UPGRADE_TROOPS} troops ({civilians} civ avail)</span>
-          </button>
+          {TROOP_TYPES.map((type) => {
+            const config = TRAINING_CONFIG[type];
+            const count = me.militaryAtHome[type];
+            const canAfford = me.food >= config.food && me.gold >= config.gold;
+            const canTrain = canAfford && civilians >= config.troops;
+            return (
+              <button
+                key={type}
+                className="upgrade-btn upgrade-military"
+                onClick={() => handleSpendMilitary(type)}
+                disabled={!canTrain}
+                title={!canAfford ? 'Not enough resources' : civilians < config.troops ? `Need ${config.troops - civilians} more civilians` : ''}
+              >
+                <span className="upgrade-btn-title">Train {type.charAt(0).toUpperCase() + type.slice(1)} (CP:{COMBAT_POWER[type]})</span>
+                <span className="upgrade-btn-cost">{config.food} food + {config.gold} gold</span>
+                <span className="upgrade-btn-effect">+{config.troops} units | At home: {count}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -292,18 +300,27 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                   <span className="target-name">{target.name}</span>
                   <span className="target-hp-small">{Math.ceil(target.hp)} HP</span>
                 </div>
-                <div className="attack-amounts">
-                  {(VALID_ATTACK_AMOUNTS as readonly number[]).map((amount) => (
-                    <button
-                      key={amount}
-                      className="attack-amount-btn"
-                      onClick={() => handleSendAttack(target.playerId, amount)}
-                      disabled={me.militaryAtHome < amount}
-                    >
-                      Send {amount}
-                    </button>
-                  ))}
-                </div>
+                {TROOP_TYPES.map((type) => {
+                  const count = me.militaryAtHome[type];
+                  if (count === 0) return null;
+                  return (
+                    <div key={type} className="attack-type-row">
+                      <span className="attack-type-label">{type.charAt(0).toUpperCase() + type.slice(1)} ({count})</span>
+                      <div className="attack-amounts">
+                        {(VALID_ATTACK_AMOUNTS as readonly number[]).map((amount) => (
+                          <button
+                            key={amount}
+                            className="attack-amount-btn"
+                            onClick={() => handleSendAttack(target.playerId, amount, type)}
+                            disabled={count < amount}
+                          >
+                            Send {amount}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </div>
@@ -318,7 +335,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
             const secsLeft = Math.max(0, Math.ceil((tg.arrivalAtMs - Date.now()) / 1000));
             return (
               <div key={tg.id} className="transit-row">
-                {tg.units} troops &#8594; {targetName} (~{secsLeft}s)
+                {tg.units} {tg.troopType} &#8594; {targetName} (~{secsLeft}s)
               </div>
             );
           })}

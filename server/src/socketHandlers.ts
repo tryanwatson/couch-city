@@ -135,23 +135,23 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
   });
 
   socket.on('player:spend_military', (data) => {
-    if (!data?.roomId || !data?.playerId) {
+    if (!data?.roomId || !data?.playerId || !data?.troopType) {
       socket.emit('room:error', { message: 'Missing required fields' });
       return;
     }
-    const result = spendMilitary(data.roomId, data.playerId);
+    const result = spendMilitary(data.roomId, data.playerId, data.troopType);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     broadcastRoom(io, data.roomId);
   });
 
   socket.on('player:send_attack', (data) => {
-    if (!data?.roomId || !data?.playerId || !data?.targetPlayerId || data?.units == null) {
+    if (!data?.roomId || !data?.playerId || !data?.targetPlayerId || data?.units == null || !data?.troopType) {
       socket.emit('room:error', { message: 'Missing required fields' });
       return;
     }
-    const result = sendAttack(data.roomId, data.playerId, data.targetPlayerId, data.units);
+    const result = sendAttack(data.roomId, data.playerId, data.targetPlayerId, data.units, data.troopType);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
-    console.log(`Player ${data.playerId} sent ${data.units} troops to ${data.targetPlayerId} in room ${data.roomId}`);
+    console.log(`Player ${data.playerId} sent ${data.units} ${data.troopType} to ${data.targetPlayerId} in room ${data.roomId}`);
     broadcastRoom(io, data.roomId);
   });
 

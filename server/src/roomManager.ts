@@ -1,4 +1,4 @@
-import type { ServerRoom, ServerCityPlayer, RoomStatePayload, TroopGroup } from '../../shared/types';
+import type { ServerRoom, ServerCityPlayer, RoomStatePayload, TroopGroup, TroopType } from '../../shared/types';
 import {
   PLAYER_COLORS,
   INITIAL_FOOD,
@@ -20,25 +20,42 @@ import {
   MONUMENT_CULTURE_PER_TICK,
   MONUMENT_COST_MULTIPLIERS,
   CULTURE_WIN_THRESHOLD,
-  MILITARY_COST_FOOD,
-  MILITARY_COST_GOLD,
-  MILITARY_UPGRADE_TROOPS,
-  INITIAL_MILITARY_AT_HOME,
+  INITIAL_MILITARY,
+  ZERO_MILITARY,
+  TROOP_TYPES,
+  COMBAT_POWER,
+  TRAINING_CONFIG,
+  DAMAGE_PER_CP,
   INITIAL_HP,
   MAX_HP,
   HP_REGEN_PER_SECOND,
   TROOP_TRAVEL_MS,
   TROOP_GROUP_MERGE_WINDOW_MS,
-  DAMAGE_PER_UNIT,
   VALID_ATTACK_AMOUNTS,
   TICK_INTERVAL_MS,
   FIELD_COMBAT_INSTANT_RATIO,
   FIELD_COMBAT_MS_PER_UNIT,
   FIELD_COMBAT_MIN_MS,
+  troopGroupRadius,
 } from '../../shared/constants';
 import { generateRoomCode } from './utils';
 
 const rooms = new Map<string, ServerRoom>();
+
+function totalMilitaryAtHome(mil: Record<TroopType, number>): number {
+  return Object.values(mil).reduce((sum, n) => sum + n, 0);
+}
+
+function cpBasedTrade(unitsA: number, cpPerA: number, unitsB: number, cpPerB: number): { survivorsA: number; survivorsB: number } {
+  const cpA = unitsA * cpPerA;
+  const cpB = unitsB * cpPerB;
+  if (cpA > cpB) {
+    return { survivorsA: unitsA - Math.ceil(cpB / cpPerA), survivorsB: 0 };
+  } else if (cpB > cpA) {
+    return { survivorsA: 0, survivorsB: unitsB - Math.ceil(cpA / cpPerB) };
+  }
+  return { survivorsA: 0, survivorsB: 0 };
+}
 
 // Injected by socketHandlers to avoid circular dependency
 let broadcastFn: ((roomId: string) => void) | null = null;
@@ -122,7 +139,7 @@ export function addPlayer(
     foodIncome: 0,
     resourcesIncome: 0,
     goldIncome: 0,
-    militaryAtHome: 0,
+    militaryAtHome: { ...ZERO_MILITARY },
     population: 0,
     culture: 0,
     cultureLevel: 0,
@@ -179,7 +196,7 @@ export function startGame(
     player.foodIncome = INITIAL_FOOD_INCOME;
     player.resourcesIncome = INITIAL_RESOURCES_INCOME;
     player.goldIncome = INITIAL_POPULATION * GOLD_INCOME_PER_POP;
-    player.militaryAtHome = INITIAL_MILITARY_AT_HOME;
+    player.militaryAtHome = { ...INITIAL_MILITARY };
     player.population = INITIAL_POPULATION;
     player.culture = 0;
     player.cultureLevel = 0;
@@ -201,10 +218,8 @@ export function startGame(
 }
 
 /** Calculate field combat duration based on power ratio and unit count. */
-function fieldCombatDuration(unitsA: number, unitsB: number): number {
-  const cpA = unitsA; // combat power per unit = 1 (extensible later)
-  const cpB = unitsB;
-  const ratio = Math.min(cpA, cpB) / Math.max(cpA, cpB);
+function fieldCombatDuration(totalCpA: number, totalCpB: number, unitsA: number, unitsB: number): number {
+  const ratio = Math.min(totalCpA, totalCpB) / Math.max(totalCpA, totalCpB);
   if (ratio <= FIELD_COMBAT_INSTANT_RATIO) return 0;
   const scaledRatio = (ratio - FIELD_COMBAT_INSTANT_RATIO) / (1 - FIELD_COMBAT_INSTANT_RATIO);
   const fullDuration = Math.max(FIELD_COMBAT_MIN_MS, (unitsA + unitsB) * FIELD_COMBAT_MS_PER_UNIT);
@@ -233,28 +248,37 @@ function detectFieldCollisions(room: ServerRoom, now: number): void {
       const d2 = tg2.arrivalAtMs - tg2.departedAtMs;
       if (d1 <= 0 || d2 <= 0) continue;
 
-      const p1 = (now - tg1.departedAtMs) / d1;
-      const p2 = (now - tg2.departedAtMs) / d2;
-      if (p1 + p2 < 1) continue; // haven't met yet
-
-      // Solve for exact collision time: p1(t) + p2(t) = 1
-      const tCollision = (1 + tg1.departedAtMs / d1 + tg2.departedAtMs / d2) / (1 / d1 + 1 / d2);
-      const p1AtCollision = Math.max(0, Math.min(1, (tCollision - tg1.departedAtMs) / d1));
-
-      // Collision position on tg1's path at exact meeting time
+      // Account for visual group radius — collide when fronts touch, not centers
       const att1 = room.players.get(tg1.attackerPlayerId)!;
       const tgt1 = room.players.get(tg1.targetPlayerId)!;
+      const laneDist = Math.hypot(tgt1.x - att1.x, tgt1.y - att1.y);
+      const r1 = troopGroupRadius(tg1.units);
+      const r2 = troopGroupRadius(tg2.units);
+      const radiusOffset = laneDist > 0 ? (r1 + r2) / laneDist : 0;
+      const threshold = 1 - radiusOffset;
+
+      const p1 = (now - tg1.departedAtMs) / d1;
+      const p2 = (now - tg2.departedAtMs) / d2;
+      if (p1 + p2 < threshold) continue; // fronts haven't touched yet
+
+      // Solve for exact collision time: p1(t) + p2(t) = threshold
+      const tCollision = (threshold + tg1.departedAtMs / d1 + tg2.departedAtMs / d2) / (1 / d1 + 1 / d2);
+      const p1AtCollision = Math.max(0, Math.min(1, (tCollision - tg1.departedAtMs) / d1));
+
+      // Contact point (midpoint between the two group fronts)
       const collisionX = att1.x + (tgt1.x - att1.x) * p1AtCollision;
       const collisionY = att1.y + (tgt1.y - att1.y) * p1AtCollision;
 
-      const duration = fieldCombatDuration(tg1.units, tg2.units);
+      const cp1 = tg1.units * COMBAT_POWER[tg1.troopType];
+      const cp2 = tg2.units * COMBAT_POWER[tg2.troopType];
+      const duration = fieldCombatDuration(cp1, cp2, tg1.units, tg2.units);
       const combatEndMs = tCollision + duration;
 
       if (duration === 0 || combatEndMs <= now) {
-        // Instant resolve or combat already expired — trade units and recalculate paths
-        const traded = Math.min(tg1.units, tg2.units);
-        tg1.units -= traded;
-        tg2.units -= traded;
+        // Instant resolve or combat already expired — CP-based trade
+        const result = cpBasedTrade(tg1.units, COMBAT_POWER[tg1.troopType], tg2.units, COMBAT_POWER[tg2.troopType]);
+        tg1.units = result.survivorsA;
+        tg2.units = result.survivorsB;
 
         // Recalculate arrival for survivors from collision point
         for (const tg of [tg1, tg2]) {
@@ -303,10 +327,10 @@ function resolveFieldCombats(room: ServerRoom, now: number): void {
     );
 
     if (enemy) {
-      // 1:1 unit trade
-      const traded = Math.min(tg.units, enemy.units);
-      tg.units -= traded;
-      enemy.units -= traded;
+      // CP-based trade
+      const result = cpBasedTrade(tg.units, COMBAT_POWER[tg.troopType], enemy.units, COMBAT_POWER[enemy.troopType]);
+      tg.units = result.survivorsA;
+      enemy.units = result.survivorsB;
       resolved.add(tg.id);
       resolved.add(enemy.id);
     }
@@ -341,7 +365,7 @@ function mergeIntoFieldCombat(room: ServerRoom, now: number): void {
     // Only check traveling groups (not in field combat themselves)
     if (g.fieldCombatEndMs != null || toRemove.has(g.id)) continue;
 
-    // Find a friendly group in field combat on the same lane
+    // Find a friendly group of the same type in field combat on the same lane
     const combatGroup = room.troopsInTransit.find(
       (f) =>
         f.id !== g.id &&
@@ -349,6 +373,7 @@ function mergeIntoFieldCombat(room: ServerRoom, now: number): void {
         f.fieldCombatEndMs > now &&
         f.attackerPlayerId === g.attackerPlayerId &&
         f.targetPlayerId === g.targetPlayerId &&
+        f.troopType === g.troopType &&
         !toRemove.has(f.id),
     );
     if (!combatGroup) continue;
@@ -454,20 +479,53 @@ function resolveCombat(room: ServerRoom, tg: TroopGroup): void {
   const defender = room.players.get(tg.targetPlayerId);
   if (!defender || !defender.alive) return; // troops lost, target already gone
 
-  let attackerUnits = tg.units;
+  const cpPerAttacker = COMBAT_POWER[tg.troopType];
+  const attackerTotalCP = tg.units * cpPerAttacker;
 
-  // Trade phase: troops vs troops
-  const traded = Math.min(attackerUnits, defender.militaryAtHome);
-  attackerUnits -= traded;
-  defender.militaryAtHome -= traded;
+  // Calculate total defender CP from all troop types at home
+  let defenderTotalCP = 0;
+  for (const type of TROOP_TYPES) {
+    defenderTotalCP += defender.militaryAtHome[type] * COMBAT_POWER[type];
+  }
 
-  // Surviving attackers deal HP damage
-  defender.hp -= attackerUnits * DAMAGE_PER_UNIT;
+  if (defenderTotalCP >= attackerTotalCP) {
+    // Defender wins (or tie) — all attackers die
+    if (defenderTotalCP === attackerTotalCP) {
+      // Equal: both sides wiped
+      for (const type of TROOP_TYPES) {
+        defender.militaryAtHome[type] = 0;
+      }
+    } else {
+      // Defender wins: lose units proportionally
+      const lossRatio = attackerTotalCP / defenderTotalCP;
+      for (const type of TROOP_TYPES) {
+        const typeLoss = Math.floor(defender.militaryAtHome[type] * lossRatio);
+        defender.militaryAtHome[type] -= typeLoss;
+      }
+    }
+    // Attackers all die — no city damage
+    return;
+  }
+
+  // Attacker wins — all defenders die
+  for (const type of TROOP_TYPES) {
+    defender.militaryAtHome[type] = 0;
+  }
+
+  // Attacker loses units worth defenderTotalCP
+  const attackerLosses = Math.ceil(defenderTotalCP / cpPerAttacker);
+  const survivingUnits = tg.units - attackerLosses;
+
+  // Surviving attackers deal HP damage scaled by combat power
+  const damage = survivingUnits * cpPerAttacker * DAMAGE_PER_CP;
+  defender.hp -= damage;
 
   if (defender.hp <= 0) {
     defender.hp = 0;
     defender.alive = false;
-    defender.militaryAtHome = 0;
+    for (const type of TROOP_TYPES) {
+      defender.militaryAtHome[type] = 0;
+    }
     // Cancel any in-flight attacks from the eliminated city
     room.troopsInTransit = room.troopsInTransit.filter(
       (t) => t.attackerPlayerId !== defender.playerId
@@ -567,7 +625,8 @@ export function buildMonument(
 
 export function spendMilitary(
   roomId: string,
-  playerId: string
+  playerId: string,
+  troopType: TroopType
 ): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
   const room = rooms.get(roomId);
   if (!room) return { error: 'Room not found' };
@@ -577,19 +636,22 @@ export function spendMilitary(
   if (!player) return { error: 'Player not found' };
   if (!player.alive) return { error: 'City is eliminated' };
 
-  if (player.food < MILITARY_COST_FOOD || player.gold < MILITARY_COST_GOLD) {
+  const config = TRAINING_CONFIG[troopType];
+  if (!config) return { error: 'Invalid troop type' };
+
+  if (player.food < config.food || player.gold < config.gold) {
     return { error: 'Not enough resources' };
   }
 
   // Training converts civilians to troops — need enough civilians
-  const civilians = player.population - player.militaryAtHome;
-  if (civilians < MILITARY_UPGRADE_TROOPS) {
+  const civilians = Math.floor(player.population) - totalMilitaryAtHome(player.militaryAtHome);
+  if (civilians < config.troops) {
     return { error: 'Not enough civilians to train' };
   }
 
-  player.food -= MILITARY_COST_FOOD;
-  player.gold -= MILITARY_COST_GOLD;
-  player.militaryAtHome += MILITARY_UPGRADE_TROOPS;
+  player.food -= config.food;
+  player.gold -= config.gold;
+  player.militaryAtHome[troopType] += config.troops;
   // population unchanged — civilians converted to military, not created
 
   return { room };
@@ -599,7 +661,8 @@ export function sendAttack(
   roomId: string,
   attackerPlayerId: string,
   targetPlayerId: string,
-  units: number
+  units: number,
+  troopType: TroopType
 ): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
   const room = rooms.get(roomId);
   if (!room) return { error: 'Room not found' };
@@ -618,18 +681,20 @@ export function sendAttack(
   if (!(VALID_ATTACK_AMOUNTS as readonly number[]).includes(units)) {
     return { error: 'Invalid unit count' };
   }
-  if (attacker.militaryAtHome < units) return { error: 'Not enough troops' };
+  if (!COMBAT_POWER[troopType]) return { error: 'Invalid troop type' };
+  if (attacker.militaryAtHome[troopType] < units) return { error: 'Not enough troops' };
 
-  attacker.militaryAtHome -= units;
+  attacker.militaryAtHome[troopType] -= units;
   attacker.population -= units; // troops leaving the city permanently reduce population
 
   const now = Date.now();
 
-  // Merge into existing group if same attacker→target within merge window
+  // Merge into existing group if same attacker→target→type within merge window
   const existing = room.troopsInTransit.find(
     (tg) =>
       tg.attackerPlayerId === attackerPlayerId &&
       tg.targetPlayerId === targetPlayerId &&
+      tg.troopType === troopType &&
       now - tg.departedAtMs <= TROOP_GROUP_MERGE_WINDOW_MS,
   );
 
@@ -640,6 +705,7 @@ export function sendAttack(
       id: 'tg_' + Math.random().toString(36).substring(2, 10) + now.toString(36),
       attackerPlayerId,
       targetPlayerId,
+      troopType,
       units,
       departedAtMs: now,
       arrivalAtMs: now + TROOP_TRAVEL_MS,
@@ -673,7 +739,7 @@ export function resetRoom(
     player.foodIncome = 0;
     player.resourcesIncome = 0;
     player.goldIncome = 0;
-    player.militaryAtHome = 0;
+    player.militaryAtHome = { ...ZERO_MILITARY };
     player.population = 0;
     player.culture = 0;
     player.cultureLevel = 0;

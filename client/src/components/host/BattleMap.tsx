@@ -1,9 +1,56 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
-import type { CityPlayerInfo, TroopGroup } from '../../../../shared/types';
-import { CULTURE_WIN_THRESHOLD } from '../../../../shared/constants';
-// 16-frame horizontal strip: frames 0-7 walk, 8-15 attack, each 32×32px at 100ms
-const TROOP_FRAMES = Array.from({ length: 16 }, (_, i) => ({ x: i * 32, y: 0, w: 32, h: 32 }));
-const TROOP_SHEET = { w: 512, h: 32 };
+import type { CityPlayerInfo, TroopGroup, TroopType } from '../../../../shared/types';
+import { CULTURE_WIN_THRESHOLD, COMBAT_POWER, TROOP_TYPES, troopGroupRadius } from '../../../../shared/constants';
+
+interface SpriteSheetConfig {
+  image: string;
+  startFrame: number;   // first usable frame index (skip blank frames)
+  walkFrames: number;
+  attackFrames: number;
+  frameWidth: number;
+  sheetWidth: number;
+  sheetHeight: number;
+}
+
+const SPRITE_SHEETS: Record<TroopType, SpriteSheetConfig> = {
+  warrior: {
+    image: '/blue-warrior-ss.png',
+    startFrame: 0,
+    walkFrames: 8,
+    attackFrames: 8,
+    frameWidth: 32,
+    sheetWidth: 512,
+    sheetHeight: 32,
+  },
+  cavalry: {
+    image: '/blue-horse-ss.png',
+    startFrame: 0,
+    walkFrames: 6,
+    attackFrames: 10,
+    frameWidth: 32,
+    sheetWidth: 512,
+    sheetHeight: 32,
+  },
+  rifleman: {
+    image: '/blue-soldier-rifle.png',
+    startFrame: 1,       // frame 0 is blank
+    walkFrames: 8,
+    attackFrames: 8,
+    frameWidth: 32,
+    sheetWidth: 544,
+    sheetHeight: 32,
+  },
+  truck: {
+    image: '/blue-truck.png',
+    startFrame: 0,
+    walkFrames: 5,
+    attackFrames: 11,
+    frameWidth: 32,
+    sheetWidth: 512,
+    sheetHeight: 32,
+  },
+};
+
 const TROOP_DISPLAY_SIZE = 64;
 const ATTACK_STANDOFF = 0.09; // normalized coords (~90 SVG units from target center)
 const ATTACK_LINGER_MS = 5000;
@@ -52,16 +99,19 @@ function TroopSprite({
   frameIndex,
   isAttacking,
   facingLeft,
+  troopType,
 }: {
   pos: { x: number; y: number };
   units: number;
   frameIndex: number;
   isAttacking: boolean;
   facingLeft: boolean;
+  troopType: TroopType;
 }) {
+  const sheet = SPRITE_SHEETS[troopType];
   const cx = pos.x * 1000;
   const cy = pos.y * 1000;
-  const scale = TROOP_DISPLAY_SIZE / 32;
+  const scale = TROOP_DISPLAY_SIZE / sheet.frameWidth;
   const clusterRadius = units <= 1 ? 0 : 15 + Math.sqrt(units) * 8;
 
   const sprites = [];
@@ -73,8 +123,13 @@ function TroopSprite({
     const sy = cy + r * Math.sin(angle);
 
     // Stagger frames slightly per unit for visual variety
-    const fi = isAttacking ? (8 + ((frameIndex + i) % 8)) : ((frameIndex + i) % 8);
-    const frame = TROOP_FRAMES[fi];
+    let fi: number;
+    if (isAttacking) {
+      fi = sheet.startFrame + sheet.walkFrames + ((frameIndex + i) % sheet.attackFrames);
+    } else {
+      fi = sheet.startFrame + ((frameIndex + i) % sheet.walkFrames);
+    }
+    const frameX = fi * sheet.frameWidth;
     const flipTransform = facingLeft ? `translate(${2 * sx}, 0) scale(-1, 1)` : undefined;
 
     sprites.push(
@@ -87,11 +142,11 @@ function TroopSprite({
           overflow="hidden"
         >
           <image
-            href="/blue-warrior-ss.png"
-            x={-frame.x * scale}
+            href={sheet.image}
+            x={-frameX * scale}
             y={0}
-            width={TROOP_SHEET.w * scale}
-            height={TROOP_SHEET.h * scale}
+            width={sheet.sheetWidth * scale}
+            height={sheet.sheetHeight * scale}
           />
         </svg>
       </g>,
@@ -112,7 +167,7 @@ function TroopSprite({
         strokeWidth={3}
         paintOrder="stroke"
       >
-        {units}
+        {units * COMBAT_POWER[troopType]}
       </text>
     </g>
   );
@@ -130,44 +185,34 @@ function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex
 
   return (
     <g opacity={isDead ? 0.35 : 1}>
-      {/* Player name */}
-      <text
-        x={cx}
-        y={cy - 54}
-        textAnchor="middle"
-        fontSize={22}
-        fontWeight="700"
-        fill={player.color}
-      >
-        {player.name}
-      </text>
-
       {/* HP bar track */}
       <rect
         x={cx - BAR_W / 2}
-        y={cy - 43}
+        y={cy - 75}
         width={BAR_W}
-        height={10}
+        height={16}
         rx={4}
         fill="#1f2e50"
+        stroke="black"
+        strokeWidth={2}
       />
       {/* HP bar fill */}
       <rect
         x={cx - BAR_W / 2}
-        y={cy - 43}
+        y={cy - 75}
         width={BAR_W * hpPct}
-        height={10}
+        height={16}
         rx={4}
-        fill={hpPct <= 0.3 ? '#e74c3c' : '#2ecc71'}
+        fill={hpPct <= 0.3 ? '#e74c3c' : '#1a8a4a'}
       />
       {/* HP label */}
       <text
         x={cx}
-        y={cy - 36}
+        y={cy - 63}
         textAnchor="middle"
-        fontSize={9}
+        fontSize={13}
         fill="white"
-        fontWeight="600"
+        fontWeight="700"
       >
         {Math.ceil(player.hp)}/{player.maxHp}
       </text>
@@ -196,7 +241,7 @@ function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex
         />
       )}
 
-      {/* Troops at home */}
+      {/* Combat power at home */}
       <text
         x={cx}
         y={cy + 9}
@@ -205,72 +250,102 @@ function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex
         fontWeight="800"
         fill="white"
       >
-        {player.militaryAtHome}
+        {TROOP_TYPES.reduce((s, t) => s + player.militaryAtHome[t] * COMBAT_POWER[t], 0)}
       </text>
 
-      {/* Population */}
-      <text
-        x={cx}
-        y={cy + 46}
-        textAnchor="middle"
-        fontSize={13}
-        fill="#8899b0"
-      >
-        {`👥 ${Math.floor(player.population)}  ⚔️ ${player.militaryAtHome}`}
-      </text>
-
-      {/* Resources */}
-      <text
-        x={cx}
-        y={cy + 60}
-        textAnchor="middle"
-        fontSize={12}
-        fill="#8899b0"
-      >
-        {`R:${Math.floor(player.resources)} F:${Math.floor(player.food)} G:${Math.floor(player.gold)}`}
-      </text>
-
-      {/* Income rates */}
-      <text
-        x={cx}
-        y={cy + 74}
-        textAnchor="middle"
-        fontSize={11}
-        fill="#2ecc71"
-      >
-        {`+${player.resourcesIncome} +${player.foodIncome} +${player.goldIncome.toFixed(1)}/s`}
-      </text>
-
-      {/* Culture progress */}
-      {player.culture > 0 && (
-        <>
-          <rect
-            x={cx - BAR_W / 2}
-            y={cy + 80}
-            width={BAR_W}
-            height={6}
-            rx={3}
-            fill="#2a1a3e"
-          />
-          <rect
-            x={cx - BAR_W / 2}
-            y={cy + 80}
-            width={BAR_W * Math.min(1, player.culture / CULTURE_WIN_THRESHOLD)}
-            height={6}
-            rx={3}
-            fill="#9b59b6"
-          />
-          <text
-            x={cx}
-            y={cy + 96}
-            textAnchor="middle"
-            fontSize={11}
-            fill="#9b59b6"
-          >
-            {`🏛️ ${player.monuments} monuments · ${Math.floor(player.culture)}/${CULTURE_WIN_THRESHOLD}`}
-          </text>
-        </>
-      )}
+      {/* Stats box */}
+      {(() => {
+        const hasCulture = player.culture > 0;
+        const BOX_W = 150;
+        const BOX_H = hasCulture ? 100 : 72;
+        const BOX_X = cx - BOX_W / 2;
+        const BOX_Y = cy + 66;
+        return (
+          <>
+            <rect
+              x={BOX_X}
+              y={BOX_Y}
+              width={BOX_W}
+              height={BOX_H}
+              rx={5}
+              fill="#3a3a3a"
+              stroke="black"
+              strokeWidth={2}
+            />
+            {/* Player name */}
+            <text
+              x={cx}
+              y={BOX_Y + 18}
+              textAnchor="middle"
+              fontSize={16}
+              fontWeight="700"
+              fill={player.color}
+            >
+              {player.name}
+            </text>
+            {/* Population & Combat */}
+            <text
+              x={cx}
+              y={BOX_Y + 34}
+              textAnchor="middle"
+              fontSize={13}
+              fill="white"
+            >
+              {`👥 ${Math.floor(player.population)}  ⚔️ ${TROOP_TYPES.reduce((s, t) => s + player.militaryAtHome[t] * COMBAT_POWER[t], 0)}`}
+            </text>
+            {/* Resources */}
+            <text
+              x={cx}
+              y={BOX_Y + 50}
+              textAnchor="middle"
+              fontSize={12}
+              fill="#ccc"
+            >
+              {`R:${Math.floor(player.resources)}  F:${Math.floor(player.food)}  G:${Math.floor(player.gold)}`}
+            </text>
+            {/* Income */}
+            <text
+              x={cx}
+              y={BOX_Y + 64}
+              textAnchor="middle"
+              fontSize={11}
+              fill="#2ecc71"
+            >
+              {`+${player.resourcesIncome}  +${player.foodIncome}  +${player.goldIncome.toFixed(1)}/s`}
+            </text>
+            {/* Culture progress */}
+            {hasCulture && (
+              <>
+                <rect
+                  x={BOX_X + 6}
+                  y={BOX_Y + 72}
+                  width={BOX_W - 12}
+                  height={6}
+                  rx={3}
+                  fill="#2a1a3e"
+                />
+                <rect
+                  x={BOX_X + 6}
+                  y={BOX_Y + 72}
+                  width={(BOX_W - 12) * Math.min(1, player.culture / CULTURE_WIN_THRESHOLD)}
+                  height={6}
+                  rx={3}
+                  fill="#9b59b6"
+                />
+                <text
+                  x={cx}
+                  y={BOX_Y + 92}
+                  textAnchor="middle"
+                  fontSize={11}
+                  fill="#c88de8"
+                >
+                  {`🏛️ ${player.monuments} · ${Math.floor(player.culture)}/${CULTURE_WIN_THRESHOLD}`}
+                </text>
+              </>
+            )}
+          </>
+        );
+      })()}
     </g>
   );
 }
@@ -314,22 +389,28 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
         const ny = dist > 0 ? dy / dist : 0;
         const facingLeft = dx < 0;
 
-        // Field combat: frozen at collision point
+        // Field combat: offset from contact point by visual radius toward origin
         if (troop.fieldCombatX != null && troop.fieldCombatEndMs != null) {
           const combatFacingLeft = (target.x - troop.fieldCombatX) < 0;
+          // Offset toward this troop's origin (attacker) so fronts barely touch
+          const backNx = dist > 0 ? (attacker.x - target.x) / dist : 0;
+          const backNy = dist > 0 ? (attacker.y - target.y) / dist : 0;
+          const r = troopGroupRadius(troop.units);
+          const renderX = troop.fieldCombatX + backNx * r;
+          const renderY = troop.fieldCombatY! + backNy * r;
           if (now < troop.fieldCombatEndMs) {
             // In combat — attack animation
             positions.set(troop.id, {
-              x: troop.fieldCombatX,
-              y: troop.fieldCombatY!,
+              x: renderX,
+              y: renderY,
               facingLeft: combatFacingLeft,
               isFieldCombat: true,
             });
           } else {
             // Combat ended, waiting for server to clear — hold position
             positions.set(troop.id, {
-              x: troop.fieldCombatX,
-              y: troop.fieldCombatY!,
+              x: renderX,
+              y: renderY,
               facingLeft: combatFacingLeft,
               isFieldCombat: false,
             });
@@ -373,20 +454,42 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
             tB.attackerPlayerId !== tA.targetPlayerId
           ) continue;
 
-          const pA = (now - tA.departedAtMs) / (tA.arrivalAtMs - tA.departedAtMs);
-          const pB = (now - tB.departedAtMs) / (tB.arrivalAtMs - tB.departedAtMs);
-          if (pA + pB < 1) continue; // haven't met yet
+          const dA = tA.arrivalAtMs - tA.departedAtMs;
+          const dB = tB.arrivalAtMs - tB.departedAtMs;
+          if (dA <= 0 || dB <= 0) continue;
 
-          // Compute meeting point on A's attacker→target line
+          // Account for visual group radius — collide when fronts touch
           const attA = playerMap.get(tA.attackerPlayerId)!;
           const tgtA = playerMap.get(tA.targetPlayerId)!;
-          const meetX = attA.x + (tgtA.x - attA.x) * pA;
-          const meetY = attA.y + (tgtA.y - attA.y) * pA;
+          const attB = playerMap.get(tB.attackerPlayerId)!;
+          const tgtB = playerMap.get(tB.targetPlayerId)!;
+          const laneDist = Math.sqrt(
+            (tgtA.x - attA.x) ** 2 + (tgtA.y - attA.y) ** 2,
+          );
+          const rA = troopGroupRadius(tA.units);
+          const rB = troopGroupRadius(tB.units);
+          const radiusOffset = laneDist > 0 ? (rA + rB) / laneDist : 0;
+          const threshold = 1 - radiusOffset;
+
+          const pA = (now - tA.departedAtMs) / dA;
+          const pB = (now - tB.departedAtMs) / dB;
+          if (pA + pB < threshold) continue; // fronts haven't touched yet
+
+          // Solve for exact collision time: pA(t) + pB(t) = threshold
+          const tColl = (threshold + tA.departedAtMs / dA + tB.departedAtMs / dB) / (1 / dA + 1 / dB);
+          const pAColl = Math.max(0, Math.min(1, (tColl - tA.departedAtMs) / dA));
+          const pBColl = Math.max(0, Math.min(1, (tColl - tB.departedAtMs) / dB));
+
+          // Each group at its own center position at collision time (fronts barely touching)
+          const meetAx = attA.x + (tgtA.x - attA.x) * pAColl;
+          const meetAy = attA.y + (tgtA.y - attA.y) * pAColl;
+          const meetBx = attB.x + (tgtB.x - attB.x) * pBColl;
+          const meetBy = attB.y + (tgtB.y - attB.y) * pBColl;
 
           const posA = positions.get(tA.id)!;
           const posB = positions.get(tB.id)!;
-          positions.set(tA.id, { x: meetX, y: meetY, facingLeft: posA.facingLeft, isFieldCombat: true });
-          positions.set(tB.id, { x: meetX, y: meetY, facingLeft: posB.facingLeft, isFieldCombat: true });
+          positions.set(tA.id, { x: meetAx, y: meetAy, facingLeft: posA.facingLeft, isFieldCombat: true });
+          positions.set(tB.id, { x: meetBx, y: meetBy, facingLeft: posB.facingLeft, isFieldCombat: true });
         }
       }
 
@@ -398,7 +501,7 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
 
       setTroopPositions(positions);
       setAttackingTroops(new Map(lingeringRef.current));
-      setFrameIndex(Math.floor((now % (TROOP_FRAMES.length * 100)) / 100));
+      setFrameIndex(Math.floor((now % 1600) / 100));
       rafRef.current = requestAnimationFrame(tick);
     };
 
@@ -434,6 +537,7 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
             frameIndex={frameIndex}
             isAttacking={posData.isFieldCombat}
             facingLeft={posData.facingLeft}
+            troopType={troop.troopType}
           />
         );
       })}
@@ -447,6 +551,7 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
           frameIndex={frameIndex}
           isAttacking={true}
           facingLeft={lingering.facingLeft}
+          troopType={lingering.troop.troopType}
         />
       ))}
 
