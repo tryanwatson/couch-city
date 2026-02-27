@@ -11,6 +11,7 @@ import {
   buildMonument,
   spendMilitary,
   sendAttack,
+  endTurn,
   resetRoom,
   sanitizeState,
   setBroadcastFn,
@@ -24,7 +25,7 @@ function broadcastRoom(io: Server, roomId: string): void {
 }
 
 export function registerSocketHandlers(io: Server, socket: Socket): void {
-  // Inject broadcast function into roomManager so the game tick can broadcast
+  // Inject broadcast function into roomManager so the update phase can broadcast
   setBroadcastFn((roomId: string) => broadcastRoom(io, roomId));
 
   // --- Host events ---
@@ -152,6 +153,16 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     const result = sendAttack(data.roomId, data.playerId, data.targetPlayerId, data.units, data.troopType);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     console.log(`Player ${data.playerId} sent ${data.units} ${data.troopType} to ${data.targetPlayerId} in room ${data.roomId}`);
+    broadcastRoom(io, data.roomId);
+  });
+
+  socket.on('player:end_turn', (data) => {
+    if (!data?.roomId || !data?.playerId) {
+      socket.emit('room:error', { message: 'Missing required fields' });
+      return;
+    }
+    const result = endTurn(data.roomId, data.playerId);
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     broadcastRoom(io, data.roomId);
   });
 

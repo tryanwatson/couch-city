@@ -17,7 +17,7 @@ import {
   CULTURE_UPGRADE_COST_GOLD,
   MONUMENT_COST_GOLD,
   MONUMENT_COST_RESOURCES,
-  MONUMENT_CULTURE_PER_TICK,
+  MONUMENT_CULTURE_PER_TURN,
   MONUMENT_COST_MULTIPLIERS,
   CULTURE_WIN_THRESHOLD,
   INITIAL_MILITARY,
@@ -28,14 +28,10 @@ import {
   DAMAGE_PER_CP,
   INITIAL_HP,
   MAX_HP,
-  HP_REGEN_PER_SECOND,
-  TROOP_TRAVEL_MS,
-  TROOP_GROUP_MERGE_WINDOW_MS,
+  HP_REGEN_PER_TURN,
+  TROOP_TRAVEL_TURNS,
   VALID_ATTACK_AMOUNTS,
-  TICK_INTERVAL_MS,
-  FIELD_COMBAT_INSTANT_RATIO,
-  FIELD_COMBAT_MS_PER_UNIT,
-  FIELD_COMBAT_MIN_MS,
+  RESOLVING_PHASE_DURATION_MS,
   troopGroupRadius,
 } from '../../shared/constants';
 import { generateRoomCode } from './utils';
@@ -72,10 +68,11 @@ export function createRoom(hostSocketId: string): ServerRoom {
     roomId,
     hostSocketId,
     phase: 'lobby',
+    subPhase: null,
+    turnNumber: 0,
     players: new Map(),
     troopsInTransit: [],
     combatHitPlayerIds: [],
-    tickIntervalId: null,
     winnerPlayerId: null,
   };
 
@@ -148,6 +145,7 @@ export function addPlayer(
     maxHp: MAX_HP,
     x: 0,
     y: 0,
+    endedTurn: false,
   };
 
   room.players.set(playerId, player);
@@ -165,6 +163,17 @@ export function disconnectSocket(socketId: string): { roomId: string; wasHost: b
         player.connected = false;
         player.socketId = null;
         player.lastSeen = Date.now();
+
+        // Auto-end turn for disconnected player during planning
+        if (room.phase === 'playing' && room.subPhase === 'planning' && player.alive && !player.endedTurn) {
+          player.endedTurn = true;
+          const alivePlayers = Array.from(room.players.values()).filter(p => p.alive);
+          const allEnded = alivePlayers.every(p => p.endedTurn);
+          if (allEnded) {
+            runUpdatePhase(room);
+          }
+        }
+
         return { roomId, wasHost: false };
       }
     }
@@ -204,237 +213,64 @@ export function startGame(
     player.hp = INITIAL_HP;
     player.maxHp = MAX_HP;
     player.alive = true;
+    player.endedTurn = false;
   });
 
   room.phase = 'playing';
+  room.subPhase = 'planning';
+  room.turnNumber = 1;
   room.troopsInTransit = [];
   room.winnerPlayerId = null;
-
-  room.tickIntervalId = setInterval(() => {
-    gameTick(roomId);
-  }, TICK_INTERVAL_MS);
 
   return { room };
 }
 
-/** Calculate field combat duration based on power ratio and unit count. */
-function fieldCombatDuration(totalCpA: number, totalCpB: number, unitsA: number, unitsB: number): number {
-  const ratio = Math.min(totalCpA, totalCpB) / Math.max(totalCpA, totalCpB);
-  if (ratio <= FIELD_COMBAT_INSTANT_RATIO) return 0;
-  const scaledRatio = (ratio - FIELD_COMBAT_INSTANT_RATIO) / (1 - FIELD_COMBAT_INSTANT_RATIO);
-  const fullDuration = Math.max(FIELD_COMBAT_MIN_MS, (unitsA + unitsB) * FIELD_COMBAT_MS_PER_UNIT);
-  return Math.round(scaledRatio * fullDuration);
-}
+// ============================================================
+// Turn-based update phase
+// ============================================================
 
-/** Detect and initiate collisions between opposing troop groups. */
-function detectFieldCollisions(room: ServerRoom, now: number): void {
-  const transit = room.troopsInTransit;
-  for (let i = 0; i < transit.length; i++) {
-    const tg1 = transit[i];
-    // Skip groups already in field combat (but NOT arrived groups — collision takes priority)
-    if (tg1.fieldCombatEndMs != null) continue;
-
-    for (let j = i + 1; j < transit.length; j++) {
-      const tg2 = transit[j];
-      if (tg2.fieldCombatEndMs != null) continue;
-
-      // Only opposing groups on the same lane (A→B vs B→A)
-      if (
-        tg1.attackerPlayerId !== tg2.targetPlayerId ||
-        tg2.attackerPlayerId !== tg1.targetPlayerId
-      ) continue;
-
-      const d1 = tg1.arrivalAtMs - tg1.departedAtMs;
-      const d2 = tg2.arrivalAtMs - tg2.departedAtMs;
-      if (d1 <= 0 || d2 <= 0) continue;
-
-      // Account for visual group radius — collide when fronts touch, not centers
-      const att1 = room.players.get(tg1.attackerPlayerId)!;
-      const tgt1 = room.players.get(tg1.targetPlayerId)!;
-      const laneDist = Math.hypot(tgt1.x - att1.x, tgt1.y - att1.y);
-      const r1 = troopGroupRadius(tg1.units);
-      const r2 = troopGroupRadius(tg2.units);
-      const radiusOffset = laneDist > 0 ? (r1 + r2) / laneDist : 0;
-      const threshold = 1 - radiusOffset;
-
-      const p1 = (now - tg1.departedAtMs) / d1;
-      const p2 = (now - tg2.departedAtMs) / d2;
-      if (p1 + p2 < threshold) continue; // fronts haven't touched yet
-
-      // Solve for exact collision time: p1(t) + p2(t) = threshold
-      const tCollision = (threshold + tg1.departedAtMs / d1 + tg2.departedAtMs / d2) / (1 / d1 + 1 / d2);
-      const p1AtCollision = Math.max(0, Math.min(1, (tCollision - tg1.departedAtMs) / d1));
-
-      // Group 1 center at collision time
-      const center1X = att1.x + (tgt1.x - att1.x) * p1AtCollision;
-      const center1Y = att1.y + (tgt1.y - att1.y) * p1AtCollision;
-
-      // Contact point: offset from group 1's center toward target by r1
-      const nxLane = laneDist > 0 ? (tgt1.x - att1.x) / laneDist : 0;
-      const nyLane = laneDist > 0 ? (tgt1.y - att1.y) / laneDist : 0;
-      const collisionX = center1X + r1 * nxLane;
-      const collisionY = center1Y + r1 * nyLane;
-
-      const cp1 = tg1.units * COMBAT_POWER[tg1.troopType];
-      const cp2 = tg2.units * COMBAT_POWER[tg2.troopType];
-      const duration = fieldCombatDuration(cp1, cp2, tg1.units, tg2.units);
-      const combatEndMs = tCollision + duration;
-
-      if (duration === 0 || combatEndMs <= now) {
-        // Instant resolve or combat already expired — CP-based trade
-        const result = cpBasedTrade(tg1.units, COMBAT_POWER[tg1.troopType], tg2.units, COMBAT_POWER[tg2.troopType]);
-        tg1.units = result.survivorsA;
-        tg2.units = result.survivorsB;
-
-        // Recalculate arrival for survivors: offset from contact point to each group's center
-        for (const tg of [tg1, tg2]) {
-          if (tg.units <= 0) continue;
-          const target = room.players.get(tg.targetPlayerId);
-          const attacker = room.players.get(tg.attackerPlayerId);
-          if (!target || !attacker) continue;
-          const totalDist = Math.hypot(target.x - attacker.x, target.y - attacker.y);
-          const backNx = totalDist > 0 ? (attacker.x - target.x) / totalDist : 0;
-          const backNy = totalDist > 0 ? (attacker.y - target.y) / totalDist : 0;
-          const r = troopGroupRadius(tg.units);
-          const centerX = collisionX + backNx * r;
-          const centerY = collisionY + backNy * r;
-          const remainDist = Math.hypot(target.x - centerX, target.y - centerY);
-          const remainFrac = totalDist > 0 ? remainDist / totalDist : 0;
-          tg.arrivalAtMs = now + remainFrac * TROOP_TRAVEL_MS;
-          tg.departedAtMs = now - (1 - remainFrac) * TROOP_TRAVEL_MS;
-        }
-      } else {
-        // Animated field combat
-        tg1.fieldCombatX = collisionX;
-        tg1.fieldCombatY = collisionY;
-        tg1.fieldCombatEndMs = combatEndMs;
-
-        tg2.fieldCombatX = collisionX;
-        tg2.fieldCombatY = collisionY;
-        tg2.fieldCombatEndMs = combatEndMs;
-      }
-    }
-  }
-  // Remove groups that were instantly killed
-  room.troopsInTransit = room.troopsInTransit.filter((tg) => tg.units > 0);
-}
-
-/** Resolve field combats whose animation has ended. */
-function resolveFieldCombats(room: ServerRoom, now: number): void {
-  const resolved = new Set<string>();
-
-  for (const tg of room.troopsInTransit) {
-    if (tg.fieldCombatEndMs == null || tg.fieldCombatEndMs > now || resolved.has(tg.id)) continue;
-
-    // Find the paired enemy group at the same combat position
-    const enemy = room.troopsInTransit.find(
-      (other) =>
-        other.id !== tg.id &&
-        other.fieldCombatEndMs != null &&
-        other.fieldCombatEndMs <= now &&
-        !resolved.has(other.id) &&
-        other.attackerPlayerId === tg.targetPlayerId &&
-        other.targetPlayerId === tg.attackerPlayerId,
-    );
-
-    if (enemy) {
-      // CP-based trade
-      const result = cpBasedTrade(tg.units, COMBAT_POWER[tg.troopType], enemy.units, COMBAT_POWER[enemy.troopType]);
-      tg.units = result.survivorsA;
-      enemy.units = result.survivorsB;
-      resolved.add(tg.id);
-      resolved.add(enemy.id);
-    }
-
-    // Clear field combat state for survivors so they resume travel
-    if (tg.units > 0) {
-      // Recalculate arrivalAtMs: offset from contact point to group center, then measure to target
-      const target = room.players.get(tg.targetPlayerId);
-      const attacker = room.players.get(tg.attackerPlayerId);
-      if (target && attacker) {
-        const totalDist = Math.hypot(target.x - attacker.x, target.y - attacker.y);
-        const backNx = totalDist > 0 ? (attacker.x - target.x) / totalDist : 0;
-        const backNy = totalDist > 0 ? (attacker.y - target.y) / totalDist : 0;
-        const r = troopGroupRadius(tg.units);
-        const centerX = tg.fieldCombatX! + backNx * r;
-        const centerY = tg.fieldCombatY! + backNy * r;
-        const remainDist = Math.hypot(target.x - centerX, target.y - centerY);
-        const remainFrac = totalDist > 0 ? remainDist / totalDist : 0;
-        tg.arrivalAtMs = now + remainFrac * TROOP_TRAVEL_MS;
-        tg.departedAtMs = now - (1 - remainFrac) * TROOP_TRAVEL_MS;
-      }
-      tg.fieldCombatX = undefined;
-      tg.fieldCombatY = undefined;
-      tg.fieldCombatEndMs = undefined;
-    }
-  }
-
-  // Remove eliminated groups
-  room.troopsInTransit = room.troopsInTransit.filter((tg) => tg.units > 0);
-}
-
-/** Merge friendly traveling groups into allied groups that are in field combat. */
-function mergeIntoFieldCombat(room: ServerRoom, now: number): void {
-  const toRemove = new Set<string>();
-
-  for (const g of room.troopsInTransit) {
-    // Only check traveling groups (not in field combat themselves)
-    if (g.fieldCombatEndMs != null || toRemove.has(g.id)) continue;
-
-    // Find a friendly group of the same type in field combat on the same lane
-    const combatGroup = room.troopsInTransit.find(
-      (f) =>
-        f.id !== g.id &&
-        f.fieldCombatEndMs != null &&
-        f.fieldCombatEndMs > now &&
-        f.attackerPlayerId === g.attackerPlayerId &&
-        f.targetPlayerId === g.targetPlayerId &&
-        f.troopType === g.troopType &&
-        !toRemove.has(f.id),
-    );
-    if (!combatGroup) continue;
-
-    // Check if the traveling group has reached the combat position
-    const attacker = room.players.get(g.attackerPlayerId);
-    const target = room.players.get(g.targetPlayerId);
-    if (!attacker || !target) continue;
-
-    const totalDist = Math.hypot(target.x - attacker.x, target.y - attacker.y);
-    if (totalDist === 0) continue;
-    const progress = (now - g.departedAtMs) / (g.arrivalAtMs - g.departedAtMs);
-    const combatDist = Math.hypot(combatGroup.fieldCombatX! - attacker.x, combatGroup.fieldCombatY! - attacker.y);
-    const combatProgress = combatDist / totalDist;
-
-    if (progress >= combatProgress) {
-      combatGroup.units += g.units;
-      toRemove.add(g.id);
-    }
-  }
-
-  if (toRemove.size > 0) {
-    room.troopsInTransit = room.troopsInTransit.filter((tg) => !toRemove.has(tg.id));
-  }
-}
-
-function gameTick(roomId: string): void {
+export function endTurn(
+  roomId: string,
+  playerId: string
+): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
   const room = rooms.get(roomId);
-  if (!room || room.phase !== 'playing') return;
+  if (!room) return { error: 'Room not found' };
+  if (room.phase !== 'playing') return { error: 'Game not in progress' };
+  if (room.subPhase !== 'planning') return { error: 'Not in planning phase' };
 
-  const now = Date.now();
-  const alivePlayers = Array.from(room.players.values()).filter((p) => p.alive);
+  const player = room.players.get(playerId);
+  if (!player) return { error: 'Player not found' };
+  if (!player.alive) return { error: 'City is eliminated' };
+  if (player.endedTurn) return { error: 'Already ended turn' };
+
+  player.endedTurn = true;
+
+  // Check if all alive players have ended their turn
+  const alivePlayers = Array.from(room.players.values()).filter(p => p.alive);
+  const allEnded = alivePlayers.every(p => p.endedTurn);
+
+  if (allEnded) {
+    runUpdatePhase(room);
+  }
+
+  return { room };
+}
+
+function runUpdatePhase(room: ServerRoom): void {
+  room.subPhase = 'resolving';
+
+  const alivePlayers = Array.from(room.players.values()).filter(p => p.alive);
 
   // Economy accumulation
   for (const player of alivePlayers) {
     player.food += player.foodIncome;
     player.resources += player.resourcesIncome;
-    // Gold income scales with current population
     player.goldIncome = player.population * GOLD_INCOME_PER_POP;
     player.gold += player.goldIncome;
-    // Passive culture score from monuments
-    player.culture += player.monuments * MONUMENT_CULTURE_PER_TICK;
+    player.culture += player.monuments * MONUMENT_CULTURE_PER_TURN;
   }
 
-  // Population growth: grows by foodIncome × POP_GROWTH_RATE per tick, capped at foodIncome × POP_CAP_MULTIPLIER
+  // Population growth
   for (const player of alivePlayers) {
     const populationCap = player.foodIncome * POP_CAP_MULTIPLIER;
     if (player.population < populationCap) {
@@ -444,56 +280,162 @@ function gameTick(roomId: string): void {
 
   // HP regeneration
   for (const player of alivePlayers) {
-    player.hp = Math.min(player.maxHp, player.hp + HP_REGEN_PER_SECOND);
+    player.hp = Math.min(player.maxHp, player.hp + HP_REGEN_PER_TURN);
   }
 
-  // Field combat: detect collisions, resolve ended combats, merge friendlies
-  detectFieldCollisions(room, now);
-  resolveFieldCombats(room, now);
-  mergeIntoFieldCombat(room, now);
+  // Advance all troops by 1 turn
+  for (const tg of room.troopsInTransit) {
+    tg.turnsRemaining = Math.max(0, tg.turnsRemaining - 1);
+  }
 
-  // Resolve arrived troop groups
-  const arrived = room.troopsInTransit.filter((tg) => tg.arrivalAtMs <= now && tg.fieldCombatEndMs == null);
-  room.troopsInTransit = room.troopsInTransit.filter((tg) => tg.arrivalAtMs > now || tg.fieldCombatEndMs != null);
-  room.combatHitPlayerIds = arrived.map((tg) => tg.targetPlayerId);
+  // Detect and resolve field collisions (turn-based)
+  detectFieldCollisions(room);
+
+  // Resolve arrived troop groups (turnsRemaining === 0, skip field combat casualties)
+  const arrived = room.troopsInTransit.filter(tg => tg.turnsRemaining <= 0 && tg.units > 0);
+  // Keep arrived troops in transit for resolving broadcast (removed in setTimeout below)
+  room.combatHitPlayerIds = arrived.map(tg => tg.targetPlayerId);
   for (const tg of arrived) {
     resolveCombat(room, tg);
   }
 
-  // Culture win condition: first player to reach CULTURE_WIN_THRESHOLD culture points
+  // Culture win condition
   const cultureWinner = Array.from(room.players.values()).find(
-    (p) => p.alive && p.culture >= CULTURE_WIN_THRESHOLD
+    p => p.alive && p.culture >= CULTURE_WIN_THRESHOLD
   );
   if (cultureWinner) {
     room.phase = 'gameover';
+    room.subPhase = null;
     room.winnerPlayerId = cultureWinner.playerId;
-    if (room.tickIntervalId !== null) {
-      clearInterval(room.tickIntervalId);
-      room.tickIntervalId = null;
-    }
-    if (broadcastFn) broadcastFn(roomId);
+    if (broadcastFn) broadcastFn(room.roomId);
     return;
   }
 
   // Military win condition: <= 1 alive (skip if solo game)
-  const stillAlive = Array.from(room.players.values()).filter((p) => p.alive);
+  const stillAlive = Array.from(room.players.values()).filter(p => p.alive);
   if (stillAlive.length <= 1 && room.players.size > 1) {
     room.phase = 'gameover';
+    room.subPhase = null;
     room.winnerPlayerId = stillAlive.length === 1 ? stillAlive[0].playerId : null;
-    if (room.tickIntervalId !== null) {
-      clearInterval(room.tickIntervalId);
-      room.tickIntervalId = null;
-    }
+    if (broadcastFn) broadcastFn(room.roomId);
+    return;
   }
 
-  if (broadcastFn) {
-    broadcastFn(roomId);
-  }
+  // Broadcast resolving state (clients can show animation)
+  if (broadcastFn) broadcastFn(room.roomId);
+
+  // After animation duration, transition to next planning phase
+  setTimeout(() => {
+    if (room.phase !== 'playing') return;
+    // Clear field combat markers on survivors
+    for (const tg of room.troopsInTransit) {
+      tg.fieldCombatX = undefined;
+      tg.fieldCombatY = undefined;
+      tg.inFieldCombat = undefined;
+      tg.fieldCombatUnits = undefined;
+    }
+    // Remove arrived troops and field combat casualties now that animation has played
+    room.troopsInTransit = room.troopsInTransit.filter(tg => tg.turnsRemaining > 0 && tg.units > 0);
+    room.subPhase = 'planning';
+    room.turnNumber += 1;
+    for (const [, player] of room.players) {
+      player.endedTurn = false;
+    }
+    if (broadcastFn) broadcastFn(room.roomId);
+  }, RESOLVING_PHASE_DURATION_MS);
 }
+
+// ============================================================
+// Field combat detection (turn-based)
+// ============================================================
+
+function detectFieldCollisions(room: ServerRoom): void {
+  const transit = room.troopsInTransit;
+  for (let i = 0; i < transit.length; i++) {
+    const tg1 = transit[i];
+    if (tg1.units <= 0) continue;
+
+    for (let j = i + 1; j < transit.length; j++) {
+      const tg2 = transit[j];
+      if (tg2.units <= 0) continue;
+
+      // Only opposing groups on the same lane (A→B vs B→A)
+      if (
+        tg1.attackerPlayerId !== tg2.targetPlayerId ||
+        tg2.attackerPlayerId !== tg1.targetPlayerId
+      ) continue;
+
+      // Calculate progress as fraction
+      const p1 = tg1.totalTurns > 0 ? (tg1.totalTurns - tg1.turnsRemaining) / tg1.totalTurns : 1;
+      const p2 = tg2.totalTurns > 0 ? (tg2.totalTurns - tg2.turnsRemaining) / tg2.totalTurns : 1;
+
+      // Account for visual radius
+      const att1 = room.players.get(tg1.attackerPlayerId)!;
+      const tgt1 = room.players.get(tg1.targetPlayerId)!;
+      const laneDist = Math.hypot(tgt1.x - att1.x, tgt1.y - att1.y);
+      const r1 = troopGroupRadius(tg1.units);
+      const r2 = troopGroupRadius(tg2.units);
+      const radiusOffset = laneDist > 0 ? (r1 + r2) / laneDist : 0;
+      const threshold = 1 - radiusOffset;
+
+      if (p1 + p2 < threshold) continue;
+
+      // Collision! CP-based trade
+      const result = cpBasedTrade(
+        tg1.units, COMBAT_POWER[tg1.troopType],
+        tg2.units, COMBAT_POWER[tg2.troopType]
+      );
+
+      // Calculate collision point for client animation
+      const sumP = p1 + p2;
+      const p1AtCollision = sumP > 0 ? (p1 / sumP) * threshold : 0.5;
+      const collisionX = att1.x + (tgt1.x - att1.x) * p1AtCollision;
+      const collisionY = att1.y + (tgt1.y - att1.y) * p1AtCollision;
+
+      // Mark field combat location for animation (preserved until setTimeout cleanup)
+      tg1.fieldCombatX = collisionX;
+      tg1.fieldCombatY = collisionY;
+      tg1.fieldCombatUnits = tg1.units;
+      tg2.fieldCombatX = collisionX;
+      tg2.fieldCombatY = collisionY;
+      tg2.fieldCombatUnits = tg2.units;
+
+      tg1.units = result.survivorsA;
+      tg2.units = result.survivorsB;
+
+      // Recalculate turnsRemaining for survivors, starting from collision point
+      for (const tg of [tg1, tg2]) {
+        if (tg.units > 0) {
+          const target = room.players.get(tg.targetPlayerId)!;
+          const attacker = room.players.get(tg.attackerPlayerId)!;
+          const totalDist = Math.hypot(target.x - attacker.x, target.y - attacker.y);
+          const backNx = totalDist > 0 ? (attacker.x - target.x) / totalDist : 0;
+          const backNy = totalDist > 0 ? (attacker.y - target.y) / totalDist : 0;
+          const r = troopGroupRadius(tg.units);
+          const centerX = collisionX + backNx * r;
+          const centerY = collisionY + backNy * r;
+          const remainDist = Math.hypot(target.x - centerX, target.y - centerY);
+          const remainFrac = totalDist > 0 ? remainDist / totalDist : 0;
+          // Restart journey from collision point so progress=0 maps to here, not home
+          tg.startX = collisionX;
+          tg.startY = collisionY;
+          tg.turnsRemaining = Math.max(1, Math.ceil(remainFrac * TROOP_TRAVEL_TURNS));
+          tg.totalTurns = tg.turnsRemaining;
+        }
+        // Field combat markers preserved for client animation (cleared in setTimeout)
+      }
+    }
+  }
+  // Destroyed groups kept in transit for resolving animation (cleaned up in setTimeout)
+}
+
+// ============================================================
+// Combat resolution
+// ============================================================
 
 function resolveCombat(room: ServerRoom, tg: TroopGroup): void {
   const defender = room.players.get(tg.targetPlayerId);
-  if (!defender || !defender.alive) return; // troops lost, target already gone
+  if (!defender || !defender.alive) return;
 
   const cpPerAttacker = COMBAT_POWER[tg.troopType];
   const attackerTotalCP = tg.units * cpPerAttacker;
@@ -507,19 +449,16 @@ function resolveCombat(room: ServerRoom, tg: TroopGroup): void {
   if (defenderTotalCP >= attackerTotalCP) {
     // Defender wins (or tie) — all attackers die
     if (defenderTotalCP === attackerTotalCP) {
-      // Equal: both sides wiped
       for (const type of TROOP_TYPES) {
         defender.militaryAtHome[type] = 0;
       }
     } else {
-      // Defender wins: lose units proportionally
       const lossRatio = attackerTotalCP / defenderTotalCP;
       for (const type of TROOP_TYPES) {
         const typeLoss = Math.floor(defender.militaryAtHome[type] * lossRatio);
         defender.militaryAtHome[type] -= typeLoss;
       }
     }
-    // Attackers all die — no city damage
     return;
   }
 
@@ -528,11 +467,9 @@ function resolveCombat(room: ServerRoom, tg: TroopGroup): void {
     defender.militaryAtHome[type] = 0;
   }
 
-  // Attacker loses units worth defenderTotalCP
   const attackerLosses = Math.ceil(defenderTotalCP / cpPerAttacker);
   const survivingUnits = tg.units - attackerLosses;
 
-  // Surviving attackers deal HP damage scaled by combat power
   const damage = survivingUnits * cpPerAttacker * DAMAGE_PER_CP;
   defender.hp -= damage;
 
@@ -542,15 +479,28 @@ function resolveCombat(room: ServerRoom, tg: TroopGroup): void {
     for (const type of TROOP_TYPES) {
       defender.militaryAtHome[type] = 0;
     }
-    // Cancel any in-flight attacks from the eliminated city
     room.troopsInTransit = room.troopsInTransit.filter(
-      (t) => t.attackerPlayerId !== defender.playerId
+      t => t.attackerPlayerId !== defender.playerId
     );
   }
 }
 
+// ============================================================
+// Player actions (immediate during planning)
+// ============================================================
+
 export type IncomeType = 'food' | 'resources';
 export type InvestAmount = typeof VALID_INVEST_AMOUNTS[number];
+
+function guardAction(room: ServerRoom, playerId: string): ServerCityPlayer | string {
+  if (room.phase !== 'playing') return 'Game not in progress';
+  if (room.subPhase !== 'planning') return 'Cannot act during update phase';
+  const player = room.players.get(playerId);
+  if (!player) return 'Player not found';
+  if (!player.alive) return 'City is eliminated';
+  if (player.endedTurn) return 'Turn already ended';
+  return player;
+}
 
 export function investIncome(
   roomId: string,
@@ -560,11 +510,10 @@ export function investIncome(
 ): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
   const room = rooms.get(roomId);
   if (!room) return { error: 'Room not found' };
-  if (room.phase !== 'playing') return { error: 'Game not in progress' };
 
-  const player = room.players.get(playerId);
-  if (!player) return { error: 'Player not found' };
-  if (!player.alive) return { error: 'City is eliminated' };
+  const guard = guardAction(room, playerId);
+  if (typeof guard === 'string') return { error: guard };
+  const player = guard;
 
   if (!(VALID_INVEST_AMOUNTS as readonly number[]).includes(amount)) {
     return { error: 'Invalid investment amount' };
@@ -590,11 +539,10 @@ export function upgradeCulture(
 ): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
   const room = rooms.get(roomId);
   if (!room) return { error: 'Room not found' };
-  if (room.phase !== 'playing') return { error: 'Game not in progress' };
 
-  const player = room.players.get(playerId);
-  if (!player) return { error: 'Player not found' };
-  if (!player.alive) return { error: 'City is eliminated' };
+  const guard = guardAction(room, playerId);
+  if (typeof guard === 'string') return { error: guard };
+  const player = guard;
 
   if (player.cultureLevel >= MONUMENT_COST_MULTIPLIERS.length) return { error: 'Maximum culture level reached' };
   if (player.food < CULTURE_UPGRADE_COST_FOOD) return { error: 'Not enough food' };
@@ -613,11 +561,10 @@ export function buildMonument(
 ): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
   const room = rooms.get(roomId);
   if (!room) return { error: 'Room not found' };
-  if (room.phase !== 'playing') return { error: 'Game not in progress' };
 
-  const player = room.players.get(playerId);
-  if (!player) return { error: 'Player not found' };
-  if (!player.alive) return { error: 'City is eliminated' };
+  const guard = guardAction(room, playerId);
+  if (typeof guard === 'string') return { error: guard };
+  const player = guard;
 
   if (player.monuments >= player.cultureLevel) {
     return { error: 'Upgrade culture first to unlock a monument slot' };
@@ -647,11 +594,10 @@ export function spendMilitary(
 ): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
   const room = rooms.get(roomId);
   if (!room) return { error: 'Room not found' };
-  if (room.phase !== 'playing') return { error: 'Game not in progress' };
 
-  const player = room.players.get(playerId);
-  if (!player) return { error: 'Player not found' };
-  if (!player.alive) return { error: 'City is eliminated' };
+  const guard = guardAction(room, playerId);
+  if (typeof guard === 'string') return { error: guard };
+  const player = guard;
 
   const config = TRAINING_CONFIG[troopType];
   if (!config) return { error: 'Invalid troop type' };
@@ -660,7 +606,6 @@ export function spendMilitary(
     return { error: 'Not enough resources' };
   }
 
-  // Training converts civilians to troops — need enough civilians
   const civilians = Math.floor(player.population) - totalMilitaryAtHome(player.militaryAtHome);
   if (civilians < config.troops) {
     return { error: 'Not enough civilians to train' };
@@ -669,7 +614,6 @@ export function spendMilitary(
   player.food -= config.food;
   player.gold -= config.gold;
   player.militaryAtHome[troopType] += config.troops;
-  // population unchanged — civilians converted to military, not created
 
   return { room };
 }
@@ -683,11 +627,10 @@ export function sendAttack(
 ): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
   const room = rooms.get(roomId);
   if (!room) return { error: 'Room not found' };
-  if (room.phase !== 'playing') return { error: 'Game not in progress' };
 
-  const attacker = room.players.get(attackerPlayerId);
-  if (!attacker) return { error: 'Player not found' };
-  if (!attacker.alive) return { error: 'City is eliminated' };
+  const guard = guardAction(room, attackerPlayerId);
+  if (typeof guard === 'string') return { error: guard };
+  const attacker = guard;
 
   if (attackerPlayerId === targetPlayerId) return { error: 'Cannot attack yourself' };
 
@@ -702,35 +645,38 @@ export function sendAttack(
   if (attacker.militaryAtHome[troopType] < units) return { error: 'Not enough troops' };
 
   attacker.militaryAtHome[troopType] -= units;
-  attacker.population -= units; // troops leaving the city permanently reduce population
+  attacker.population -= units;
 
-  const now = Date.now();
-
-  // Merge into existing group if same attacker→target→type within merge window
+  // Merge into existing group sent this same planning phase (same target, same type, freshly created)
   const existing = room.troopsInTransit.find(
-    (tg) =>
+    tg =>
       tg.attackerPlayerId === attackerPlayerId &&
       tg.targetPlayerId === targetPlayerId &&
       tg.troopType === troopType &&
-      now - tg.departedAtMs <= TROOP_GROUP_MERGE_WINDOW_MS,
+      tg.turnsRemaining === TROOP_TRAVEL_TURNS &&
+      tg.totalTurns === TROOP_TRAVEL_TURNS,
   );
 
   if (existing) {
     existing.units += units;
   } else {
     room.troopsInTransit.push({
-      id: 'tg_' + Math.random().toString(36).substring(2, 10) + now.toString(36),
+      id: 'tg_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36),
       attackerPlayerId,
       targetPlayerId,
       troopType,
       units,
-      departedAtMs: now,
-      arrivalAtMs: now + TROOP_TRAVEL_MS,
+      turnsRemaining: TROOP_TRAVEL_TURNS,
+      totalTurns: TROOP_TRAVEL_TURNS,
     });
   }
 
   return { room };
 }
+
+// ============================================================
+// Room management
+// ============================================================
 
 export function resetRoom(
   roomId: string
@@ -738,12 +684,9 @@ export function resetRoom(
   const room = rooms.get(roomId);
   if (!room) return { error: 'Room not found' };
 
-  if (room.tickIntervalId !== null) {
-    clearInterval(room.tickIntervalId);
-    room.tickIntervalId = null;
-  }
-
   room.phase = 'lobby';
+  room.subPhase = null;
+  room.turnNumber = 0;
   room.troopsInTransit = [];
   room.winnerPlayerId = null;
 
@@ -765,6 +708,7 @@ export function resetRoom(
     player.maxHp = MAX_HP;
     player.x = 0;
     player.y = 0;
+    player.endedTurn = false;
   }
 
   return { room };
@@ -792,11 +736,14 @@ export function sanitizeState(room: ServerRoom): RoomStatePayload {
     maxHp: p.maxHp,
     x: p.x,
     y: p.y,
+    endedTurn: p.endedTurn,
   }));
 
   return {
     roomId: room.roomId,
     phase: room.phase,
+    subPhase: room.subPhase,
+    turnNumber: room.turnNumber,
     players,
     troopsInTransit: room.troopsInTransit,
     combatHitPlayerIds: room.combatHitPlayerIds,

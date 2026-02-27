@@ -82,6 +82,9 @@ export default function HostPage() {
         <div className="battle-screen">
           <div className="battle-header">
             <h2 className="host-title battle-title">CityWars</h2>
+            <span className="battle-turn-info">
+              Turn {roomState.turnNumber} &middot; {roomState.subPhase === 'resolving' ? 'Resolving' : 'Planning'}
+            </span>
             <span className="battle-alive-count">
               {roomState.players.filter((p) => p.alive).length} cities remaining
             </span>
@@ -91,7 +94,14 @@ export default function HostPage() {
               players={roomState.players}
               troopsInTransit={roomState.troopsInTransit}
               animate={true}
+              subPhase={roomState.subPhase}
+              turnNumber={roomState.turnNumber}
             />
+            {roomState.subPhase === 'resolving' && (
+              <div className="resolving-overlay">
+                <span className="resolving-text">Resolving Turn {roomState.turnNumber}...</span>
+              </div>
+            )}
           </div>
         </div>
       )}

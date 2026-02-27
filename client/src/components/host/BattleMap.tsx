@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
-import type { CityPlayerInfo, TroopGroup, TroopType } from '../../../../shared/types';
-import { CULTURE_WIN_THRESHOLD, COMBAT_POWER, TROOP_TYPES, troopGroupRadius } from '../../../../shared/constants';
+import type { CityPlayerInfo, TroopGroup, TroopType, PlayingSubPhase } from '../../../../shared/types';
+import { CULTURE_WIN_THRESHOLD, COMBAT_POWER, TROOP_TYPES, RESOLVING_PHASE_DURATION_MS } from '../../../../shared/constants';
 
 interface SpriteSheetConfig {
   image: string;
-  startFrame: number;   // first usable frame index (skip blank frames)
+  startFrame: number;
   walkFrames: number;
   attackFrames: number;
   frameWidth: number;
@@ -33,7 +33,7 @@ const SPRITE_SHEETS: Record<TroopType, SpriteSheetConfig> = {
   },
   rifleman: {
     image: '/blue-soldier-rifle.png',
-    startFrame: 1,       // frame 0 is blank
+    startFrame: 1,
     walkFrames: 8,
     attackFrames: 8,
     frameWidth: 32,
@@ -52,19 +52,15 @@ const SPRITE_SHEETS: Record<TroopType, SpriteSheetConfig> = {
 };
 
 const TROOP_DISPLAY_SIZE = 64;
-const ATTACK_STANDOFF = 0.09; // normalized coords (~90 SVG units from target center)
+const ATTACK_STANDOFF = 0.09;
 const ATTACK_LINGER_MS = 5000;
-
-interface LingeringTroop {
-  troop: TroopGroup;
-  pos: { x: number; y: number };
-  facingLeft: boolean;
-}
 
 interface BattleMapProps {
   players: CityPlayerInfo[];
   troopsInTransit: TroopGroup[];
   animate: boolean;
+  subPhase?: PlayingSubPhase | null;
+  turnNumber?: number;
 }
 
 function AttackLine({
@@ -91,13 +87,14 @@ function AttackLine({
   );
 }
 
-const GOLDEN_ANGLE = 2.399963; // radians
+const GOLDEN_ANGLE = 2.399963;
 
 function TroopSprite({
   pos,
   units,
   frameIndex,
   isAttacking,
+  isIdle,
   facingLeft,
   troopType,
 }: {
@@ -105,6 +102,7 @@ function TroopSprite({
   units: number;
   frameIndex: number;
   isAttacking: boolean;
+  isIdle: boolean;
   facingLeft: boolean;
   troopType: TroopType;
 }) {
@@ -116,16 +114,16 @@ function TroopSprite({
 
   const sprites = [];
   for (let i = 0; i < units; i++) {
-    // Golden angle spiral for even distribution
     const angle = i * GOLDEN_ANGLE;
     const r = units <= 1 ? 0 : Math.sqrt((i + 0.5) / units) * clusterRadius;
     const sx = cx + r * Math.cos(angle);
     const sy = cy + r * Math.sin(angle);
 
-    // Stagger frames slightly per unit for visual variety
     let fi: number;
     if (isAttacking) {
       fi = sheet.startFrame + sheet.walkFrames + ((frameIndex + i) % sheet.attackFrames);
+    } else if (isIdle) {
+      fi = sheet.startFrame;
     } else {
       fi = sheet.startFrame + ((frameIndex + i) % sheet.walkFrames);
     }
@@ -252,6 +250,18 @@ function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex
         );
       })()}
 
+      {/* End turn indicator */}
+      {player.alive && (
+        <circle
+          cx={cx - BAR_W / 2 - 20}
+          cy={cy - 67}
+          r={10}
+          fill={player.endedTurn ? '#2ecc71' : '#e74c3c'}
+          stroke="white"
+          strokeWidth={2}
+        />
+      )}
+
       {/* City — castle image for first 3 players, colored square for rest */}
       {playerIndex < CASTLE_IMAGES.length ? (
         <image
@@ -353,19 +363,46 @@ function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex
   );
 }
 
-export default function BattleMap({ players, troopsInTransit, animate }: BattleMapProps) {
+/** Calculate troop position based on turn-based progress */
+function getTroopProgress(troop: TroopGroup): number {
+  if (troop.totalTurns <= 0) return 1;
+  return (troop.totalTurns - troop.turnsRemaining) / troop.totalTurns;
+}
+
+export default function BattleMap({ players, troopsInTransit, animate, subPhase }: BattleMapProps) {
   const playerMap = useMemo(
     () => new Map(players.map((p) => [p.playerId, p])),
     [players],
   );
 
-  const [troopPositions, setTroopPositions] = useState<Map<string, { x: number; y: number; facingLeft: boolean; isFieldCombat: boolean }>>(
+  const [troopPositions, setTroopPositions] = useState<Map<string, { x: number; y: number; facingLeft: boolean; isAttacking: boolean; isIdle: boolean }>>(
     new Map(),
   );
   const [frameIndex, setFrameIndex] = useState(0);
-  const [attackingTroops, setAttackingTroops] = useState<Map<string, LingeringTroop>>(new Map());
-  const lingeringRef = useRef<Map<string, LingeringTroop>>(new Map());
   const rafRef = useRef<number | null>(null);
+
+  // Track previous positions for resolving animation
+  const prevPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const resolvingStartRef = useRef<number | null>(null);
+  const prevSubPhaseRef = useRef<PlayingSubPhase | null | undefined>(null);
+
+  // Detect transition to resolving phase
+  useEffect(() => {
+    if (subPhase === 'resolving' && prevSubPhaseRef.current !== 'resolving') {
+      // Capture current positions as "before" for animation
+      const prev = new Map<string, { x: number; y: number }>();
+      for (const [id, pos] of troopPositions) {
+        prev.set(id, { x: pos.x, y: pos.y });
+      }
+      prevPositionsRef.current = prev;
+      resolvingStartRef.current = Date.now();
+    }
+    prevSubPhaseRef.current = subPhase;
+  }, [subPhase, troopPositions]);
+
+  // Lingering troops (arrived at target, attack animation)
+  const lingeringRef = useRef<Map<string, { troop: TroopGroup; pos: { x: number; y: number }; facingLeft: boolean; startMs: number }>>(new Map());
+  const [attackingTroops, setAttackingTroops] = useState<Map<string, { troop: TroopGroup; pos: { x: number; y: number }; facingLeft: boolean }>>(new Map());
 
   useEffect(() => {
     if (!animate) {
@@ -378,48 +415,63 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
 
     const tick = () => {
       const now = Date.now();
-      const positions = new Map<string, { x: number; y: number; facingLeft: boolean; isFieldCombat: boolean }>();
+      const positions = new Map<string, { x: number; y: number; facingLeft: boolean; isAttacking: boolean; isIdle: boolean }>();
+
+      // During resolving, animate troops from old to new positions
+      const isResolving = subPhase === 'resolving' && resolvingStartRef.current != null;
+      const animProgress = isResolving
+        ? Math.min(1, (now - resolvingStartRef.current!) / RESOLVING_PHASE_DURATION_MS)
+        : 1;
 
       for (const troop of troopsInTransit) {
         const attacker = playerMap.get(troop.attackerPlayerId);
         const target = playerMap.get(troop.targetPlayerId);
         if (!attacker || !target) continue;
 
-        const dx = target.x - attacker.x;
-        const dy = target.y - attacker.y;
+        const originX = troop.startX ?? attacker.x;
+        const originY = troop.startY ?? attacker.y;
+        const dx = target.x - originX;
+        const dy = target.y - originY;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const nx = dist > 0 ? dx / dist : 0;
-        const ny = dist > 0 ? dy / dist : 0;
         const facingLeft = dx < 0;
 
-        // Field combat: offset from contact point by visual radius toward origin
-        if (troop.fieldCombatX != null && troop.fieldCombatEndMs != null) {
-          const combatFacingLeft = (target.x - troop.fieldCombatX) < 0;
-          // Offset toward this troop's origin (attacker) so fronts barely touch
-          const backNx = dist > 0 ? (attacker.x - target.x) / dist : 0;
-          const backNy = dist > 0 ? (attacker.y - target.y) / dist : 0;
-          const r = troopGroupRadius(troop.units) * 0.5;
-          const renderX = troop.fieldCombatX + backNx * r;
-          const renderY = troop.fieldCombatY! + backNy * r;
-          if (now < troop.fieldCombatEndMs) {
-            // In combat — attack animation
-            positions.set(troop.id, {
-              x: renderX,
-              y: renderY,
-              facingLeft: combatFacingLeft,
-              isFieldCombat: true,
-            });
-          } else {
-            // Combat ended, waiting for server to clear — keep attack animation
-            positions.set(troop.id, {
-              x: renderX,
-              y: renderY,
-              facingLeft: combatFacingLeft,
-              isFieldCombat: true,
-            });
+        // Field combat: position at collision point with attack animation
+        if (isResolving && troop.fieldCombatX != null && troop.fieldCombatY != null) {
+          let fcX = troop.fieldCombatX;
+          let fcY = troop.fieldCombatY;
+          if (animProgress < 1) {
+            const prevPos = prevPositionsRef.current.get(troop.id);
+            if (prevPos) {
+              fcX = prevPos.x + (fcX - prevPos.x) * animProgress;
+              fcY = prevPos.y + (fcY - prevPos.y) * animProgress;
+            }
           }
-        } else if (now >= troop.arrivalAtMs) {
+          positions.set(troop.id, { x: fcX, y: fcY, facingLeft, isAttacking: true, isIdle: false });
+          continue;
+        }
+
+        // Calculate current turn-based position
+        const progress = getTroopProgress(troop);
+        const standoffFrac = dist > 0 ? ATTACK_STANDOFF / dist : 0;
+        const clampedProgress = Math.min(progress, 1 - standoffFrac);
+
+        let displayX = originX + dx * clampedProgress;
+        let displayY = originY + dy * clampedProgress;
+
+        // During resolving animation, lerp from previous position to new position
+        if (isResolving && animProgress < 1) {
+          const prevPos = prevPositionsRef.current.get(troop.id);
+          if (prevPos) {
+            displayX = prevPos.x + (displayX - prevPos.x) * animProgress;
+            displayY = prevPos.y + (displayY - prevPos.y) * animProgress;
+          }
+        }
+
+        // Check if troop has arrived (progress >= 1 - standoffFrac)
+        if (progress >= 1 - standoffFrac && !isResolving) {
           if (!lingeringRef.current.has(troop.id)) {
+            const nx = dist > 0 ? dx / dist : 0;
+            const ny = dist > 0 ? dy / dist : 0;
             lingeringRef.current.set(troop.id, {
               troop,
               pos: {
@@ -427,31 +479,32 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
                 y: target.y - ny * ATTACK_STANDOFF,
               },
               facingLeft,
+              startMs: now,
             });
           }
         } else {
-          // Clamp t so troops stop at standoff distance from target (city edge)
-          const standoffFrac = dist > 0 ? ATTACK_STANDOFF / dist : 0;
-          const tRaw = (now - troop.departedAtMs) / (troop.arrivalAtMs - troop.departedAtMs);
-          const t = Math.max(0, Math.min(tRaw, 1 - standoffFrac));
+          const inArrivalCombat = isResolving && troop.turnsRemaining === 0;
           positions.set(troop.id, {
-            x: attacker.x + dx * t,
-            y: attacker.y + dy * t,
+            x: displayX,
+            y: displayY,
             facingLeft,
-            isFieldCombat: false,
+            isAttacking: inArrivalCombat,
+            isIdle: !isResolving,
           });
         }
       }
 
-
+      // Clean up lingering troops
       for (const [id, lingering] of lingeringRef.current) {
-        if (now >= lingering.troop.arrivalAtMs + ATTACK_LINGER_MS) {
+        if (now >= lingering.startMs + ATTACK_LINGER_MS) {
           lingeringRef.current.delete(id);
         }
       }
 
       setTroopPositions(positions);
-      setAttackingTroops(new Map(lingeringRef.current));
+      setAttackingTroops(new Map(
+        Array.from(lingeringRef.current.entries()).map(([id, l]) => [id, { troop: l.troop, pos: l.pos, facingLeft: l.facingLeft }])
+      ));
       setFrameIndex(Math.floor((now % 1600) / 100));
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -460,7 +513,7 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
-  }, [animate, troopsInTransit, playerMap]);
+  }, [animate, troopsInTransit, playerMap, subPhase]);
 
   return (
     <svg
@@ -476,7 +529,7 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
         <AttackLine key={troop.id} troop={troop} playerMap={playerMap} />
       ))}
 
-      {/* Walking / field-combat troops */}
+      {/* Walking troops */}
       {troopsInTransit.map((troop) => {
         const posData = troopPositions.get(troop.id);
         if (!posData) return null;
@@ -484,16 +537,17 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
           <TroopSprite
             key={troop.id}
             pos={posData}
-            units={troop.units}
+            units={troop.fieldCombatUnits ?? troop.units}
             frameIndex={frameIndex}
-            isAttacking={posData.isFieldCombat}
+            isAttacking={posData.isAttacking}
+            isIdle={posData.isIdle}
             facingLeft={posData.facingLeft}
             troopType={troop.troopType}
           />
         );
       })}
 
-      {/* Attacking troops (linger at castle for 5s) */}
+      {/* Attacking troops (linger at castle) */}
       {Array.from(attackingTroops.values()).map((lingering) => (
         <TroopSprite
           key={`attack-${lingering.troop.id}`}
@@ -501,6 +555,7 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
           units={lingering.troop.units}
           frameIndex={frameIndex}
           isAttacking={true}
+          isIdle={false}
           facingLeft={lingering.facingLeft}
           troopType={lingering.troop.troopType}
         />

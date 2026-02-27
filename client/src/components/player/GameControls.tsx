@@ -10,7 +10,7 @@ import {
   MONUMENT_COST_GOLD,
   MONUMENT_COST_RESOURCES,
   MONUMENT_COST_MULTIPLIERS,
-  MONUMENT_CULTURE_PER_TICK,
+  MONUMENT_CULTURE_PER_TURN,
   CULTURE_WIN_THRESHOLD,
   TROOP_TYPES,
   TRAINING_CONFIG,
@@ -89,6 +89,10 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
     socket.emit('player:send_attack', { roomId: roomState.roomId, playerId, targetPlayerId, units, troopType });
   };
 
+  const handleEndTurn = () => {
+    socket.emit('player:end_turn', { roomId: roomState.roomId, playerId });
+  };
+
   if (!me) {
     return (
       <div className="game-controls">
@@ -120,6 +124,10 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
     );
   }
 
+  const hasEndedTurn = me.endedTurn;
+  const isResolving = roomState.subPhase === 'resolving';
+  const controlsDisabled = hasEndedTurn || isResolving;
+
   const totalMilitary = Object.values(me.militaryAtHome).reduce((s, n) => s + n, 0);
   const civilians = Math.floor(me.population) - totalMilitary;
   const canAffordCultureUpgrade = me.cultureLevel < MONUMENT_COST_MULTIPLIERS.length && me.food >= CULTURE_UPGRADE_COST_FOOD && me.gold >= CULTURE_UPGRADE_COST_GOLD;
@@ -133,11 +141,14 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
   const targets = roomState.players.filter((p) => p.alive && p.playerId !== playerId);
   const myTransit = roomState.troopsInTransit.filter((tg) => tg.attackerPlayerId === playerId);
 
+  const alivePlayers = roomState.players.filter(p => p.alive);
+  const endedCount = alivePlayers.filter(p => p.endedTurn).length;
+
   const hpPct = (me.hp / me.maxHp) * 100;
   const culturePct = Math.min(100, (me.culture / CULTURE_WIN_THRESHOLD) * 100);
 
   return (
-    <div className="game-controls">
+    <div className={`game-controls${controlsDisabled ? ' turn-ended' : ''}`}>
       {/* SCREEN EDGE FLASH ON ATTACK */}
       {hit && <div className="attack-flash-overlay" />}
 
@@ -176,7 +187,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           <div className="stat-block">
             <span className="stat-label">💰 Gold</span>
             <span className="stat-value">{Math.floor(me.gold)}</span>
-            <span className="stat-rate">+{me.goldIncome.toFixed(1)}/s</span>
+            <span className="stat-rate">+{me.goldIncome.toFixed(1)}/turn</span>
           </div>
         </div>
       </div>
@@ -193,7 +204,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                 <div className="resource-info">
                   <span className="resource-label">{res.emoji} {res.label}</span>
                   <span className="resource-amount">{Math.floor(amount)}</span>
-                  <span className="resource-rate">+{income}/s</span>
+                  <span className="resource-rate">+{income}/turn</span>
                 </div>
                 <div className="resource-invest-buttons">
                   {(VALID_INVEST_AMOUNTS as readonly number[]).map((amt) => {
@@ -203,8 +214,8 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                         key={amt}
                         className="invest-btn"
                         onClick={() => handleInvestIncome(res.key, amt as InvestAmount)}
-                        disabled={!canAfford}
-                        title={`+${amt}/s — costs ${res.costLabel(amt)}`}
+                        disabled={!canAfford || controlsDisabled}
+                        title={`+${amt}/turn — costs ${res.costLabel(amt)}`}
                       >
                         +{amt}
                       </button>
@@ -224,7 +235,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           <button
             className="upgrade-btn upgrade-science"
             onClick={handleUpgradeCulture}
-            disabled={!canAffordCultureUpgrade}
+            disabled={!canAffordCultureUpgrade || controlsDisabled}
             title={`Costs ${CULTURE_UPGRADE_COST_FOOD} food + ${CULTURE_UPGRADE_COST_GOLD} gold`}
           >
             <span className="upgrade-btn-title">📜 Upgrade Culture</span>
@@ -235,7 +246,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           <button
             className="upgrade-btn upgrade-military"
             onClick={handleBuildMonument}
-            disabled={!canBuildMonument}
+            disabled={!canBuildMonument || controlsDisabled}
             title={
               me.monuments >= MONUMENT_COST_MULTIPLIERS.length ? 'Maximum monuments built' :
               me.monuments >= me.cultureLevel ? 'Upgrade culture first' :
@@ -253,9 +264,9 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
         </div>
         {me.monuments > 0 && (
           <div className="resource-row" style={{ marginTop: 4 }}>
-            <span className="resource-label">✨ Culture/tick</span>
+            <span className="resource-label">✨ Culture/turn</span>
             <span className="resource-amount">{Math.floor(me.culture)}</span>
-            <span className="resource-rate">+{me.monuments * MONUMENT_CULTURE_PER_TICK}/s</span>
+            <span className="resource-rate">+{me.monuments * MONUMENT_CULTURE_PER_TURN}/turn</span>
           </div>
         )}
       </div>
@@ -274,7 +285,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                 key={type}
                 className="upgrade-btn upgrade-military"
                 onClick={() => handleSpendMilitary(type)}
-                disabled={!canTrain}
+                disabled={!canTrain || controlsDisabled}
                 title={!canAfford ? 'Not enough resources' : civilians < config.troops ? `Need ${config.troops - civilians} more civilians` : ''}
               >
                 <span className="upgrade-btn-title">Train {type.charAt(0).toUpperCase() + type.slice(1)} (CP:{COMBAT_POWER[type]})</span>
@@ -312,7 +323,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                             key={amount}
                             className="attack-amount-btn"
                             onClick={() => handleSendAttack(target.playerId, amount, type)}
-                            disabled={count < amount}
+                            disabled={count < amount || controlsDisabled}
                           >
                             Send {amount}
                           </button>
@@ -332,15 +343,31 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
         <div className="transit-indicator">
           {myTransit.map((tg) => {
             const targetName = roomState.players.find((p) => p.playerId === tg.targetPlayerId)?.name ?? '?';
-            const secsLeft = Math.max(0, Math.ceil((tg.arrivalAtMs - Date.now()) / 1000));
             return (
               <div key={tg.id} className="transit-row">
-                {tg.units} {tg.troopType} &#8594; {targetName} (~{secsLeft}s)
+                {tg.units} {tg.troopType} &#8594; {targetName} ({tg.turnsRemaining} {tg.turnsRemaining === 1 ? 'turn' : 'turns'})
               </div>
             );
           })}
         </div>
       )}
+
+      {/* END TURN BUTTON */}
+      <div className="end-turn-section">
+        <div className="turn-status">
+          <span className="turn-number">Turn {roomState.turnNumber}</span>
+          <span className="ended-count">
+            {endedCount} / {alivePlayers.length} ready
+          </span>
+        </div>
+        <button
+          className={`end-turn-btn${hasEndedTurn ? ' ended' : ''}`}
+          onClick={handleEndTurn}
+          disabled={hasEndedTurn || isResolving}
+        >
+          {isResolving ? 'Resolving...' : hasEndedTurn ? 'Waiting for others...' : 'End Turn'}
+        </button>
+      </div>
     </div>
   );
 }

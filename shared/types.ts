@@ -1,4 +1,5 @@
 export type Phase = 'lobby' | 'playing' | 'gameover';
+export type PlayingSubPhase = 'planning' | 'resolving';
 export type TroopType = 'warrior' | 'cavalry' | 'rifleman' | 'truck';
 
 // Client-safe player stats — zeros during lobby, populated on startGame
@@ -13,7 +14,7 @@ export interface CityPlayerInfo {
   gold: number;
   foodIncome: number;
   resourcesIncome: number;
-  goldIncome: number; // derived: population × GOLD_INCOME_PER_POP, updated each tick
+  goldIncome: number; // derived: population × GOLD_INCOME_PER_POP, updated each turn
   militaryAtHome: Record<TroopType, number>;
   population: number;
   culture: number;       // passive score from monuments (display/historical)
@@ -23,6 +24,7 @@ export interface CityPlayerInfo {
   maxHp: number;
   x: number; // 0–1 normalized map position
   y: number;
+  endedTurn: boolean;    // whether player clicked "End Turn" this round
 }
 
 export interface TroopGroup {
@@ -31,18 +33,24 @@ export interface TroopGroup {
   targetPlayerId: string;
   troopType: TroopType;
   units: number;
-  departedAtMs: number;
-  arrivalAtMs: number;
+  turnsRemaining: number;  // decrements each update phase; arrives at 0
+  totalTurns: number;      // original travel distance in turns (for progress calculation)
+  // Custom journey origin (set after field combat so survivors continue from collision point)
+  startX?: number;
+  startY?: number;
   // Field combat (set when opposing groups collide mid-map)
   fieldCombatX?: number;
   fieldCombatY?: number;
-  fieldCombatEndMs?: number;
+  inFieldCombat?: boolean; // resolved same turn during update phase
+  fieldCombatUnits?: number; // original unit count before field combat (for animation)
 }
 
 // Broadcast payload — everything clients need to render
 export interface RoomStatePayload {
   roomId: string;
   phase: Phase;
+  subPhase: PlayingSubPhase | null;
+  turnNumber: number;
   players: CityPlayerInfo[];
   troopsInTransit: TroopGroup[];
   combatHitPlayerIds: string[];
@@ -76,15 +84,17 @@ export interface ServerCityPlayer {
   maxHp: number;
   x: number;
   y: number;
+  endedTurn: boolean;
 }
 
 export interface ServerRoom {
   roomId: string;
   hostSocketId: string | null;
   phase: Phase;
+  subPhase: PlayingSubPhase | null;
+  turnNumber: number;
   players: Map<string, ServerCityPlayer>;
   troopsInTransit: TroopGroup[];
   combatHitPlayerIds: string[];
-  tickIntervalId: ReturnType<typeof setInterval> | null;
   winnerPlayerId: string | null;
 }
