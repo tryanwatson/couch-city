@@ -386,11 +386,25 @@ function detectFieldCollisions(room: ServerRoom): void {
         tg2.units, COMBAT_POWER[tg2.troopType]
       );
 
-      // Calculate collision point for client animation
-      const sumP = p1 + p2;
-      const p1AtCollision = sumP > 0 ? (p1 / sumP) * threshold : 0.5;
-      const collisionX = att1.x + (tgt1.x - att1.x) * p1AtCollision;
-      const collisionY = att1.y + (tgt1.y - att1.y) * p1AtCollision;
+      // Collision point = midpoint of pre-advance positions (equal walk distances)
+      const att2 = room.players.get(tg2.attackerPlayerId)!;
+      const tgt2 = room.players.get(tg2.targetPlayerId)!;
+
+      const origin1x = tg1.startX ?? att1.x;
+      const origin1y = tg1.startY ?? att1.y;
+      const origin2x = tg2.startX ?? att2.x;
+      const origin2y = tg2.startY ?? att2.y;
+
+      const preP1 = tg1.totalTurns > 0 ? Math.max(0, tg1.totalTurns - tg1.turnsRemaining - 1) / tg1.totalTurns : 0;
+      const preP2 = tg2.totalTurns > 0 ? Math.max(0, tg2.totalTurns - tg2.turnsRemaining - 1) / tg2.totalTurns : 0;
+
+      const pre1x = origin1x + (tgt1.x - origin1x) * preP1;
+      const pre1y = origin1y + (tgt1.y - origin1y) * preP1;
+      const pre2x = origin2x + (tgt2.x - origin2x) * preP2;
+      const pre2y = origin2y + (tgt2.y - origin2y) * preP2;
+
+      const collisionX = (pre1x + pre2x) / 2;
+      const collisionY = (pre1y + pre2y) / 2;
 
       // Mark field combat location for animation (preserved until setTimeout cleanup)
       tg1.fieldCombatX = collisionX;
@@ -406,16 +420,17 @@ function detectFieldCollisions(room: ServerRoom): void {
       tg1.units = result.survivorsA;
       tg2.units = result.survivorsB;
 
-      // Winner advances to "step 2" (2/3 of the way from origin to target), 1 turn from arrival
+      // Winner continues to their post-advance destination step
       for (const tg of [tg1, tg2]) {
         if (tg.units > 0) {
           const attacker = room.players.get(tg.attackerPlayerId)!;
           const target = room.players.get(tg.targetPlayerId)!;
-          const stepFrac = (TROOP_TRAVEL_TURNS - 1) / TROOP_TRAVEL_TURNS; // 2/3
-          tg.startX = attacker.x + (target.x - attacker.x) * stepFrac;
-          tg.startY = attacker.y + (target.y - attacker.y) * stepFrac;
-          tg.turnsRemaining = 1;
-          tg.totalTurns = 1;
+          const originX = tg.startX ?? attacker.x;
+          const originY = tg.startY ?? attacker.y;
+          const postProgress = tg.totalTurns > 0 ? (tg.totalTurns - tg.turnsRemaining) / tg.totalTurns : 1;
+          tg.startX = originX + (target.x - originX) * postProgress;
+          tg.startY = originY + (target.y - originY) * postProgress;
+          tg.totalTurns = tg.turnsRemaining; // remaining journey from new start
         }
       }
     }

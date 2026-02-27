@@ -79,7 +79,7 @@ export const MAX_HP = 100;
 export const HP_REGEN_PER_TURN = 2;
 
 // Combat
-export const TROOP_TRAVEL_TURNS = 3; // turns for troops to reach target
+export const TROOP_TRAVEL_TURNS = 4; // turns for troops to reach target (5 positions: home,1,2,3,enemy)
 export const DAMAGE_PER_CP = 5; // HP damage per surviving combat power
 export const VALID_ATTACK_AMOUNTS = [5, 10, 25] as const;
 
@@ -93,13 +93,13 @@ export function troopGroupRadius(units: number): number {
 // Field combat (opposing troops collide mid-map) — resolved instantly per turn
 export const FIELD_COMBAT_INSTANT_RATIO = 0.2; // power ratio below this → instant resolve
 
-// Field combat animation phase fractions (of RESOLVING_PHASE_DURATION_MS = 3000ms)
-export const FIELD_COMBAT_WALK_FRAC = 1 / 6;    // ~500ms — walk to midpoint
-export const FIELD_COMBAT_FIGHT_FRAC = 4 / 6;   // ~2000ms — fight at midpoint
-export const FIELD_COMBAT_ADVANCE_FRAC = 1 / 6; // ~500ms — winner advances / loser fades
+// Field combat animation phase fractions (of RESOLVING_PHASE_DURATION_MS)
+export const FIELD_COMBAT_WALK_FRAC = 0.3;      // 1500ms — walk to collision point
+export const FIELD_COMBAT_FIGHT_FRAC = 0.5;     // 2500ms — fight at collision point
+export const FIELD_COMBAT_ADVANCE_FRAC = 0.2;   // 1000ms — winner advances to destination / loser fades
 
 // Turn-based timing
-export const RESOLVING_PHASE_DURATION_MS = 3000; // client-side animation duration
+export const RESOLVING_PHASE_DURATION_MS = 5000; // client-side animation duration
 
 // City colors — assigned in join order
 export const PLAYER_COLORS = [

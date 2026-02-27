@@ -467,7 +467,7 @@ export default function BattleMap({ players, troopsInTransit, animate, subPhase 
             posY = midY;
             attacking = true;
           } else {
-            // Phase 3: Winner advances to step 2; loser fades out
+            // Phase 3: Winner advances to destination step; loser fades out
             const t = Math.min(1, (animProgress - fightEnd) / FIELD_COMBAT_ADVANCE_FRAC);
             if (isWinner) {
               posX = midX + (advanceX - midX) * t;
