@@ -93,6 +93,11 @@ export function troopGroupRadius(units: number): number {
 // Field combat (opposing troops collide mid-map) — resolved instantly per turn
 export const FIELD_COMBAT_INSTANT_RATIO = 0.2; // power ratio below this → instant resolve
 
+// Field combat animation phase fractions (of RESOLVING_PHASE_DURATION_MS = 3000ms)
+export const FIELD_COMBAT_WALK_FRAC = 1 / 6;    // ~500ms — walk to midpoint
+export const FIELD_COMBAT_FIGHT_FRAC = 4 / 6;   // ~2000ms — fight at midpoint
+export const FIELD_COMBAT_ADVANCE_FRAC = 1 / 6; // ~500ms — winner advances / loser fades
+
 // Turn-based timing
 export const RESOLVING_PHASE_DURATION_MS = 3000; // client-side animation duration
 

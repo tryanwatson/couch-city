@@ -400,29 +400,23 @@ function detectFieldCollisions(room: ServerRoom): void {
       tg2.fieldCombatY = collisionY;
       tg2.fieldCombatUnits = tg2.units;
 
+      tg1.inFieldCombat = true;
+      tg2.inFieldCombat = true;
+
       tg1.units = result.survivorsA;
       tg2.units = result.survivorsB;
 
-      // Recalculate turnsRemaining for survivors, starting from collision point
+      // Winner advances to "step 2" (2/3 of the way from origin to target), 1 turn from arrival
       for (const tg of [tg1, tg2]) {
         if (tg.units > 0) {
-          const target = room.players.get(tg.targetPlayerId)!;
           const attacker = room.players.get(tg.attackerPlayerId)!;
-          const totalDist = Math.hypot(target.x - attacker.x, target.y - attacker.y);
-          const backNx = totalDist > 0 ? (attacker.x - target.x) / totalDist : 0;
-          const backNy = totalDist > 0 ? (attacker.y - target.y) / totalDist : 0;
-          const r = troopGroupRadius(tg.units);
-          const centerX = collisionX + backNx * r;
-          const centerY = collisionY + backNy * r;
-          const remainDist = Math.hypot(target.x - centerX, target.y - centerY);
-          const remainFrac = totalDist > 0 ? remainDist / totalDist : 0;
-          // Restart journey from collision point so progress=0 maps to here, not home
-          tg.startX = collisionX;
-          tg.startY = collisionY;
-          tg.turnsRemaining = Math.max(1, Math.ceil(remainFrac * TROOP_TRAVEL_TURNS));
-          tg.totalTurns = tg.turnsRemaining;
+          const target = room.players.get(tg.targetPlayerId)!;
+          const stepFrac = (TROOP_TRAVEL_TURNS - 1) / TROOP_TRAVEL_TURNS; // 2/3
+          tg.startX = attacker.x + (target.x - attacker.x) * stepFrac;
+          tg.startY = attacker.y + (target.y - attacker.y) * stepFrac;
+          tg.turnsRemaining = 1;
+          tg.totalTurns = 1;
         }
-        // Field combat markers preserved for client animation (cleared in setTimeout)
       }
     }
   }

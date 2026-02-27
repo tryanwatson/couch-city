@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import type { CityPlayerInfo, TroopGroup, TroopType, PlayingSubPhase } from '../../../../shared/types';
-import { CULTURE_WIN_THRESHOLD, COMBAT_POWER, TROOP_TYPES, RESOLVING_PHASE_DURATION_MS } from '../../../../shared/constants';
+import { CULTURE_WIN_THRESHOLD, COMBAT_POWER, TROOP_TYPES, RESOLVING_PHASE_DURATION_MS, FIELD_COMBAT_WALK_FRAC, FIELD_COMBAT_FIGHT_FRAC, FIELD_COMBAT_ADVANCE_FRAC } from '../../../../shared/constants';
 
 interface SpriteSheetConfig {
   image: string;
@@ -97,6 +97,7 @@ function TroopSprite({
   isIdle,
   facingLeft,
   troopType,
+  opacity = 1,
 }: {
   pos: { x: number; y: number };
   units: number;
@@ -105,6 +106,7 @@ function TroopSprite({
   isIdle: boolean;
   facingLeft: boolean;
   troopType: TroopType;
+  opacity?: number;
 }) {
   const sheet = SPRITE_SHEETS[troopType];
   const cx = pos.x * 1000;
@@ -152,7 +154,7 @@ function TroopSprite({
   }
 
   return (
-    <g>
+    <g opacity={opacity}>
       {sprites}
       <text
         x={cx}
@@ -375,7 +377,7 @@ export default function BattleMap({ players, troopsInTransit, animate, subPhase 
     [players],
   );
 
-  const [troopPositions, setTroopPositions] = useState<Map<string, { x: number; y: number; facingLeft: boolean; isAttacking: boolean; isIdle: boolean }>>(
+  const [troopPositions, setTroopPositions] = useState<Map<string, { x: number; y: number; facingLeft: boolean; isAttacking: boolean; isIdle: boolean; opacity: number; displayUnits: number }>>(
     new Map(),
   );
   const [frameIndex, setFrameIndex] = useState(0);
@@ -415,7 +417,7 @@ export default function BattleMap({ players, troopsInTransit, animate, subPhase 
 
     const tick = () => {
       const now = Date.now();
-      const positions = new Map<string, { x: number; y: number; facingLeft: boolean; isAttacking: boolean; isIdle: boolean }>();
+      const positions = new Map<string, { x: number; y: number; facingLeft: boolean; isAttacking: boolean; isIdle: boolean; opacity: number; displayUnits: number }>();
 
       // During resolving, animate troops from old to new positions
       const isResolving = subPhase === 'resolving' && resolvingStartRef.current != null;
@@ -435,18 +437,50 @@ export default function BattleMap({ players, troopsInTransit, animate, subPhase 
         const dist = Math.sqrt(dx * dx + dy * dy);
         const facingLeft = dx < 0;
 
-        // Field combat: position at collision point with attack animation
+        // Field combat: 3-phase animation (walk → fight → advance/fade)
         if (isResolving && troop.fieldCombatX != null && troop.fieldCombatY != null) {
-          let fcX = troop.fieldCombatX;
-          let fcY = troop.fieldCombatY;
-          if (animProgress < 1) {
-            const prevPos = prevPositionsRef.current.get(troop.id);
-            if (prevPos) {
-              fcX = prevPos.x + (fcX - prevPos.x) * animProgress;
-              fcY = prevPos.y + (fcY - prevPos.y) * animProgress;
+          const midX = troop.fieldCombatX;
+          const midY = troop.fieldCombatY;
+          const prevPos = prevPositionsRef.current.get(troop.id);
+          const fromX = prevPos?.x ?? midX;
+          const fromY = prevPos?.y ?? midY;
+          const isWinner = troop.units > 0;
+          const advanceX = troop.startX ?? midX;
+          const advanceY = troop.startY ?? midY;
+
+          const walkEnd = FIELD_COMBAT_WALK_FRAC;
+          const fightEnd = FIELD_COMBAT_WALK_FRAC + FIELD_COMBAT_FIGHT_FRAC;
+
+          let posX: number, posY: number;
+          let attacking = false;
+          let opacity = 1;
+          let displayUnits = troop.fieldCombatUnits ?? troop.units;
+
+          if (animProgress < walkEnd) {
+            // Phase 1: Walk from previous position to midpoint
+            const t = animProgress / walkEnd;
+            posX = fromX + (midX - fromX) * t;
+            posY = fromY + (midY - fromY) * t;
+          } else if (animProgress < fightEnd) {
+            // Phase 2: Fight at midpoint
+            posX = midX;
+            posY = midY;
+            attacking = true;
+          } else {
+            // Phase 3: Winner advances to step 2; loser fades out
+            const t = Math.min(1, (animProgress - fightEnd) / FIELD_COMBAT_ADVANCE_FRAC);
+            if (isWinner) {
+              posX = midX + (advanceX - midX) * t;
+              posY = midY + (advanceY - midY) * t;
+              displayUnits = troop.units;
+            } else {
+              posX = midX;
+              posY = midY;
+              opacity = 1 - t;
             }
           }
-          positions.set(troop.id, { x: fcX, y: fcY, facingLeft, isAttacking: true, isIdle: false });
+
+          positions.set(troop.id, { x: posX, y: posY, facingLeft, isAttacking: attacking, isIdle: false, opacity, displayUnits });
           continue;
         }
 
@@ -490,6 +524,8 @@ export default function BattleMap({ players, troopsInTransit, animate, subPhase 
             facingLeft,
             isAttacking: inArrivalCombat,
             isIdle: !isResolving,
+            opacity: 1,
+            displayUnits: troop.units,
           });
         }
       }
@@ -537,12 +573,13 @@ export default function BattleMap({ players, troopsInTransit, animate, subPhase 
           <TroopSprite
             key={troop.id}
             pos={posData}
-            units={troop.fieldCombatUnits ?? troop.units}
+            units={posData.displayUnits}
             frameIndex={frameIndex}
             isAttacking={posData.isAttacking}
             isIdle={posData.isIdle}
             facingLeft={posData.facingLeft}
             troopType={troop.troopType}
+            opacity={posData.opacity}
           />
         );
       })}
