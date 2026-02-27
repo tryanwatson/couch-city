@@ -1,24 +1,21 @@
 import type { Socket } from 'socket.io-client';
 import type { RoomStatePayload } from '../../../../shared/types';
 import {
-  INVEST_WOOD_COST_FOOD,
-  INVEST_FOOD_COST_WOOD,
-  INVEST_STONE_COST_WOOD,
-  INVEST_STONE_COST_FOOD,
-  INVEST_METAL_COST_STONE,
-  INVEST_METAL_COST_FOOD,
+  INVEST_FOOD_COST_GOLD,
+  INVEST_RESOURCES_COST_GOLD,
   VALID_INVEST_AMOUNTS,
-  SCIENCE_COST_STONE,
-  SCIENCE_COST_METAL,
-  SCIENCE_CULTURE_GAIN,
-  CULTURE_WIN_THRESHOLD,
-  MILITARY_UPGRADE_COST_WOOD,
-  MILITARY_UPGRADE_COST_FOOD,
+  CULTURE_UPGRADE_COST_FOOD,
+  CULTURE_UPGRADE_COST_GOLD,
+  MONUMENT_COST_GOLD,
+  MONUMENT_COST_RESOURCES,
+  MONUMENT_WIN_COUNT,
+  MILITARY_COST_FOOD,
+  MILITARY_COST_GOLD,
   MILITARY_UPGRADE_TROOPS,
   VALID_ATTACK_AMOUNTS,
 } from '../../../../shared/constants';
 
-type ResourceType = 'wood' | 'food' | 'stone' | 'metal';
+type IncomeType = 'food' | 'resources';
 type InvestAmount = typeof VALID_INVEST_AMOUNTS[number];
 
 interface GameControlsProps {
@@ -27,70 +24,48 @@ interface GameControlsProps {
   socket: Socket;
 }
 
-const RESOURCE_CONFIG: {
-  key: ResourceType;
+const INCOME_CONFIG: {
+  key: IncomeType;
   label: string;
   emoji: string;
   costLabel: (amt: number) => string;
   canAfford: (me: RoomStatePayload['players'][0], amt: InvestAmount) => boolean;
+  getIncome: (me: RoomStatePayload['players'][0]) => number;
+  getAmount: (me: RoomStatePayload['players'][0]) => number;
 }[] = [
   {
-    key: 'wood',
-    label: 'Wood',
-    emoji: '🪵',
-    costLabel: (amt) => `${INVEST_WOOD_COST_FOOD * amt} food`,
-    canAfford: (me, amt) => me.food >= INVEST_WOOD_COST_FOOD * amt,
+    key: 'resources',
+    label: 'Resources',
+    emoji: '🪨',
+    costLabel: (amt) => `${INVEST_RESOURCES_COST_GOLD * amt} gold`,
+    canAfford: (me, amt) => me.gold >= INVEST_RESOURCES_COST_GOLD * amt,
+    getIncome: (me) => me.resourcesIncome,
+    getAmount: (me) => me.resources,
   },
   {
     key: 'food',
     label: 'Food',
     emoji: '🌾',
-    costLabel: (amt) => `${INVEST_FOOD_COST_WOOD * amt} wood`,
-    canAfford: (me, amt) => me.wood >= INVEST_FOOD_COST_WOOD * amt,
-  },
-  {
-    key: 'stone',
-    label: 'Stone',
-    emoji: '🪨',
-    costLabel: (amt) => `${INVEST_STONE_COST_WOOD * amt} wood + ${INVEST_STONE_COST_FOOD * amt} food`,
-    canAfford: (me, amt) => me.wood >= INVEST_STONE_COST_WOOD * amt && me.food >= INVEST_STONE_COST_FOOD * amt,
-  },
-  {
-    key: 'metal',
-    label: 'Metal',
-    emoji: '⚙️',
-    costLabel: (amt) => `${INVEST_METAL_COST_STONE * amt} stone + ${INVEST_METAL_COST_FOOD * amt} food`,
-    canAfford: (me, amt) => me.stone >= INVEST_METAL_COST_STONE * amt && me.food >= INVEST_METAL_COST_FOOD * amt,
+    costLabel: (amt) => `${INVEST_FOOD_COST_GOLD * amt} gold`,
+    canAfford: (me, amt) => me.gold >= INVEST_FOOD_COST_GOLD * amt,
+    getIncome: (me) => me.foodIncome,
+    getAmount: (me) => me.food,
   },
 ];
-
-function getIncome(me: RoomStatePayload['players'][0], resource: ResourceType): number {
-  switch (resource) {
-    case 'wood':  return me.woodIncome;
-    case 'food':  return me.foodIncome;
-    case 'stone': return me.stoneIncome;
-    case 'metal': return me.metalIncome;
-  }
-}
-
-function getAmount(me: RoomStatePayload['players'][0], resource: ResourceType): number {
-  switch (resource) {
-    case 'wood':  return me.wood;
-    case 'food':  return me.food;
-    case 'stone': return me.stone;
-    case 'metal': return me.metal;
-  }
-}
 
 export default function GameControls({ roomState, playerId, socket }: GameControlsProps) {
   const me = roomState.players.find((p) => p.playerId === playerId) ?? null;
 
-  const handleInvest = (resource: ResourceType, amount: InvestAmount) => {
-    socket.emit('player:invest_resource', { roomId: roomState.roomId, playerId, resource, amount });
+  const handleInvestIncome = (income: IncomeType, amount: InvestAmount) => {
+    socket.emit('player:invest_income', { roomId: roomState.roomId, playerId, income, amount });
   };
 
-  const handleInvestScience = () => {
-    socket.emit('player:invest_science', { roomId: roomState.roomId, playerId });
+  const handleUpgradeCulture = () => {
+    socket.emit('player:upgrade_culture', { roomId: roomState.roomId, playerId });
+  };
+
+  const handleBuildMonument = () => {
+    socket.emit('player:build_monument', { roomId: roomState.roomId, playerId });
   };
 
   const handleSpendMilitary = () => {
@@ -132,24 +107,23 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
     );
   }
 
-  const currentTotalIncome = me.woodIncome + me.foodIncome + me.stoneIncome + me.metalIncome;
   const civilians = Math.floor(me.population) - me.militaryAtHome;
-  const canAffordMilitary = me.wood >= MILITARY_UPGRADE_COST_WOOD && me.food >= MILITARY_UPGRADE_COST_FOOD;
+  const canAffordMilitary = me.food >= MILITARY_COST_FOOD && me.gold >= MILITARY_COST_GOLD;
   const canTrainTroops = canAffordMilitary && civilians >= MILITARY_UPGRADE_TROOPS;
-  const canAffordScience = me.stone >= SCIENCE_COST_STONE && me.metal >= SCIENCE_COST_METAL;
+  const canAffordCultureUpgrade = me.food >= CULTURE_UPGRADE_COST_FOOD && me.gold >= CULTURE_UPGRADE_COST_GOLD;
+  const canBuildMonument = me.monuments < me.cultureLevel && me.gold >= MONUMENT_COST_GOLD && me.resources >= MONUMENT_COST_RESOURCES;
   const targets = roomState.players.filter((p) => p.alive && p.playerId !== playerId);
   const myTransit = roomState.troopsInTransit.filter((tg) => tg.attackerPlayerId === playerId);
 
   const hpPct = (me.hp / me.maxHp) * 100;
-  const culturePct = Math.min(100, (me.culture / CULTURE_WIN_THRESHOLD) * 100);
-  const populationCap = me.foodIncome * 10;
+  const monumentPct = Math.min(100, (me.monuments / MONUMENT_WIN_COUNT) * 100);
 
   return (
     <div className="game-controls">
-      {/* CULTURE PROGRESS */}
+      {/* MONUMENT PROGRESS */}
       <div className="culture-bar-wrapper">
-        <div className="culture-bar-fill" style={{ width: `${culturePct}%` }} />
-        <span className="culture-label">🏛️ Culture {me.culture} / {CULTURE_WIN_THRESHOLD}</span>
+        <div className="culture-bar-fill" style={{ width: `${monumentPct}%` }} />
+        <span className="culture-label">🏛️ Monuments {me.monuments} / {MONUMENT_WIN_COUNT}</span>
       </div>
 
       {/* STATS HEADER */}
@@ -168,7 +142,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           <div className="stat-block">
             <span className="stat-label">👥 Pop</span>
             <span className="stat-value">{Math.floor(me.population)}</span>
-            <span className="stat-rate">cap {populationCap}</span>
+            <span className="stat-rate">cap {me.foodIncome * 10}</span>
           </div>
           <div className="stat-block">
             <span className="stat-label">⚔️ Troops</span>
@@ -176,9 +150,9 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
             <span className="stat-rate">{civilians} civ</span>
           </div>
           <div className="stat-block">
-            <span className="stat-label">📊 Income</span>
-            <span className="stat-value">{currentTotalIncome}/s</span>
-            <span className="stat-rate">of {Math.floor(me.population)}</span>
+            <span className="stat-label">💰 Gold</span>
+            <span className="stat-value">{Math.floor(me.gold)}</span>
+            <span className="stat-rate">+{me.goldIncome.toFixed(1)}/s</span>
           </div>
         </div>
       </div>
@@ -187,9 +161,9 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
       <div className="upgrades-section">
         <h3 className="section-title">Resources</h3>
         <div className="resource-list">
-          {RESOURCE_CONFIG.map((res) => {
-            const income = getIncome(me, res.key);
-            const amount = getAmount(me, res.key);
+          {INCOME_CONFIG.map((res) => {
+            const income = res.getIncome(me);
+            const amount = res.getAmount(me);
             return (
               <div key={res.key} className="resource-row">
                 <div className="resource-info">
@@ -199,19 +173,14 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                 </div>
                 <div className="resource-invest-buttons">
                   {(VALID_INVEST_AMOUNTS as readonly number[]).map((amt) => {
-                    const resourceAffordable = res.canAfford(me, amt as InvestAmount);
-                    const popAffordable = currentTotalIncome + amt <= Math.floor(me.population);
-                    const canAfford = resourceAffordable && popAffordable;
-                    const title = !popAffordable
-                      ? `Need ${currentTotalIncome + amt - Math.floor(me.population)} more population`
-                      : `+${amt}/s — costs ${res.costLabel(amt)}`;
+                    const canAfford = res.canAfford(me, amt as InvestAmount);
                     return (
                       <button
                         key={amt}
                         className="invest-btn"
-                        onClick={() => handleInvest(res.key, amt as InvestAmount)}
+                        onClick={() => handleInvestIncome(res.key, amt as InvestAmount)}
                         disabled={!canAfford}
-                        title={title}
+                        title={`+${amt}/s — costs ${res.costLabel(amt)}`}
                       >
                         +{amt}
                       </button>
@@ -224,9 +193,44 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
         </div>
       </div>
 
-      {/* MILITARY & SCIENCE */}
+      {/* CULTURE & MONUMENTS */}
       <div className="upgrades-section">
-        <h3 className="section-title">Military & Science</h3>
+        <h3 className="section-title">Culture & Monuments</h3>
+        <div className="upgrade-buttons">
+          <button
+            className="upgrade-btn upgrade-science"
+            onClick={handleUpgradeCulture}
+            disabled={!canAffordCultureUpgrade}
+            title={`Costs ${CULTURE_UPGRADE_COST_FOOD} food + ${CULTURE_UPGRADE_COST_GOLD} gold`}
+          >
+            <span className="upgrade-btn-title">📜 Upgrade Culture</span>
+            <span className="upgrade-btn-cost">{CULTURE_UPGRADE_COST_FOOD} food + {CULTURE_UPGRADE_COST_GOLD} gold</span>
+            <span className="upgrade-btn-effect">Level {me.cultureLevel} → {me.cultureLevel + 1} (unlocks monument slot)</span>
+          </button>
+
+          <button
+            className="upgrade-btn upgrade-military"
+            onClick={handleBuildMonument}
+            disabled={!canBuildMonument}
+            title={me.monuments >= me.cultureLevel ? 'Upgrade culture first' : `Costs ${MONUMENT_COST_GOLD} gold + ${MONUMENT_COST_RESOURCES} resources`}
+          >
+            <span className="upgrade-btn-title">🏛️ Build Monument</span>
+            <span className="upgrade-btn-cost">{MONUMENT_COST_GOLD} gold + {MONUMENT_COST_RESOURCES} resources</span>
+            <span className="upgrade-btn-effect">{me.monuments}/{me.cultureLevel} slots used · {me.monuments}/{MONUMENT_WIN_COUNT} to win</span>
+          </button>
+        </div>
+        {me.monuments > 0 && (
+          <div className="resource-row" style={{ marginTop: 4 }}>
+            <span className="resource-label">🏛️ Culture score</span>
+            <span className="resource-amount">{Math.floor(me.culture)}</span>
+            <span className="resource-rate">+{me.monuments * 5}/s</span>
+          </div>
+        )}
+      </div>
+
+      {/* MILITARY */}
+      <div className="upgrades-section">
+        <h3 className="section-title">Military</h3>
         <div className="upgrade-buttons">
           <button
             className="upgrade-btn upgrade-military"
@@ -235,18 +239,8 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
             title={!canAffordMilitary ? 'Not enough resources' : civilians < MILITARY_UPGRADE_TROOPS ? `Need ${MILITARY_UPGRADE_TROOPS - civilians} more civilians` : ''}
           >
             <span className="upgrade-btn-title">⚔️ Train Troops</span>
-            <span className="upgrade-btn-cost">{MILITARY_UPGRADE_COST_WOOD} wood + {MILITARY_UPGRADE_COST_FOOD} food</span>
+            <span className="upgrade-btn-cost">{MILITARY_COST_FOOD} food + {MILITARY_COST_GOLD} gold</span>
             <span className="upgrade-btn-effect">+{MILITARY_UPGRADE_TROOPS} troops ({civilians} civ avail)</span>
-          </button>
-
-          <button
-            className="upgrade-btn upgrade-science"
-            onClick={handleInvestScience}
-            disabled={!canAffordScience}
-          >
-            <span className="upgrade-btn-title">🔬 Science</span>
-            <span className="upgrade-btn-cost">{SCIENCE_COST_STONE} stone + {SCIENCE_COST_METAL} metal</span>
-            <span className="upgrade-btn-effect">+{SCIENCE_CULTURE_GAIN} culture</span>
           </button>
         </div>
       </div>

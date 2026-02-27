@@ -7,17 +7,17 @@ export interface CityPlayerInfo {
   color: string;
   connected: boolean;
   alive: boolean;
-  wood: number;
   food: number;
-  stone: number;
-  metal: number;
-  woodIncome: number;
+  resources: number;
+  gold: number;
   foodIncome: number;
-  stoneIncome: number;
-  metalIncome: number;
+  resourcesIncome: number;
+  goldIncome: number; // derived: population × GOLD_INCOME_PER_POP, updated each tick
   militaryAtHome: number;
   population: number;
-  culture: number;
+  culture: number;       // passive score from monuments (display/historical)
+  cultureLevel: number;  // upgrade count — gates how many monuments can be built
+  monuments: number;     // monuments built (win condition)
   hp: number;
   maxHp: number;
   x: number; // 0–1 normalized map position
@@ -54,17 +54,17 @@ export interface ServerCityPlayer {
   connected: boolean;
   lastSeen: number;
   alive: boolean;
-  wood: number;
   food: number;
-  stone: number;
-  metal: number;
-  woodIncome: number;
+  resources: number;
+  gold: number;
   foodIncome: number;
-  stoneIncome: number;
-  metalIncome: number;
+  resourcesIncome: number;
+  goldIncome: number;
   militaryAtHome: number;
   population: number;
   culture: number;
+  cultureLevel: number;
+  monuments: number;
   hp: number;
   maxHp: number;
   x: number;

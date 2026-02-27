@@ -1,30 +1,26 @@
 import type { ServerRoom, ServerCityPlayer, RoomStatePayload, TroopGroup } from '../../shared/types';
 import {
   PLAYER_COLORS,
-  INITIAL_WOOD,
   INITIAL_FOOD,
-  INITIAL_STONE,
-  INITIAL_METAL,
-  INITIAL_WOOD_INCOME,
+  INITIAL_RESOURCES,
+  INITIAL_GOLD,
   INITIAL_FOOD_INCOME,
-  INITIAL_STONE_INCOME,
-  INITIAL_METAL_INCOME,
-  INVEST_WOOD_COST_FOOD,
-  INVEST_FOOD_COST_WOOD,
-  INVEST_STONE_COST_WOOD,
-  INVEST_STONE_COST_FOOD,
-  INVEST_METAL_COST_STONE,
-  INVEST_METAL_COST_FOOD,
+  INITIAL_RESOURCES_INCOME,
+  GOLD_INCOME_PER_POP,
+  INVEST_FOOD_COST_GOLD,
+  INVEST_RESOURCES_COST_GOLD,
   VALID_INVEST_AMOUNTS,
   INITIAL_POPULATION,
   POP_CAP_MULTIPLIER,
   POP_GROWTH_RATE,
-  SCIENCE_COST_STONE,
-  SCIENCE_COST_METAL,
-  SCIENCE_CULTURE_GAIN,
-  CULTURE_WIN_THRESHOLD,
-  MILITARY_UPGRADE_COST_WOOD,
-  MILITARY_UPGRADE_COST_FOOD,
+  CULTURE_UPGRADE_COST_FOOD,
+  CULTURE_UPGRADE_COST_GOLD,
+  MONUMENT_COST_GOLD,
+  MONUMENT_COST_RESOURCES,
+  MONUMENT_CULTURE_PER_TICK,
+  MONUMENT_WIN_COUNT,
+  MILITARY_COST_FOOD,
+  MILITARY_COST_GOLD,
   MILITARY_UPGRADE_TROOPS,
   INITIAL_MILITARY_AT_HOME,
   INITIAL_HP,
@@ -114,17 +110,17 @@ export function addPlayer(
     connected: true,
     lastSeen: Date.now(),
     alive: true,
-    wood: 0,
     food: 0,
-    stone: 0,
-    metal: 0,
-    woodIncome: 0,
+    resources: 0,
+    gold: 0,
     foodIncome: 0,
-    stoneIncome: 0,
-    metalIncome: 0,
+    resourcesIncome: 0,
+    goldIncome: 0,
     militaryAtHome: 0,
     population: 0,
     culture: 0,
+    cultureLevel: 0,
+    monuments: 0,
     hp: 0,
     maxHp: MAX_HP,
     x: 0,
@@ -171,17 +167,17 @@ export function startGame(
     player.x = parseFloat((0.5 + 0.35 * Math.cos(angle)).toFixed(3));
     player.y = parseFloat((0.5 + 0.35 * Math.sin(angle)).toFixed(3));
 
-    player.wood = INITIAL_WOOD;
     player.food = INITIAL_FOOD;
-    player.stone = INITIAL_STONE;
-    player.metal = INITIAL_METAL;
-    player.woodIncome = INITIAL_WOOD_INCOME;
+    player.resources = INITIAL_RESOURCES;
+    player.gold = INITIAL_GOLD;
     player.foodIncome = INITIAL_FOOD_INCOME;
-    player.stoneIncome = INITIAL_STONE_INCOME;
-    player.metalIncome = INITIAL_METAL_INCOME;
+    player.resourcesIncome = INITIAL_RESOURCES_INCOME;
+    player.goldIncome = INITIAL_POPULATION * GOLD_INCOME_PER_POP;
     player.militaryAtHome = INITIAL_MILITARY_AT_HOME;
     player.population = INITIAL_POPULATION;
     player.culture = 0;
+    player.cultureLevel = 0;
+    player.monuments = 0;
     player.hp = INITIAL_HP;
     player.maxHp = MAX_HP;
     player.alive = true;
@@ -207,10 +203,13 @@ function gameTick(roomId: string): void {
 
   // Economy accumulation
   for (const player of alivePlayers) {
-    player.wood += player.woodIncome;
     player.food += player.foodIncome;
-    player.stone += player.stoneIncome;
-    player.metal += player.metalIncome;
+    player.resources += player.resourcesIncome;
+    // Gold income scales with current population
+    player.goldIncome = player.population * GOLD_INCOME_PER_POP;
+    player.gold += player.goldIncome;
+    // Passive culture score from monuments
+    player.culture += player.monuments * MONUMENT_CULTURE_PER_TICK;
   }
 
   // Population growth: grows by foodIncome × POP_GROWTH_RATE per tick, capped at foodIncome × POP_CAP_MULTIPLIER
@@ -233,13 +232,13 @@ function gameTick(roomId: string): void {
     resolveCombat(room, tg);
   }
 
-  // Culture win condition: first player to reach CULTURE_WIN_THRESHOLD
-  const cultureWinner = Array.from(room.players.values()).find(
-    (p) => p.alive && p.culture >= CULTURE_WIN_THRESHOLD
+  // Monument win condition: first player to build MONUMENT_WIN_COUNT monuments
+  const monumentWinner = Array.from(room.players.values()).find(
+    (p) => p.alive && p.monuments >= MONUMENT_WIN_COUNT
   );
-  if (cultureWinner) {
+  if (monumentWinner) {
     room.phase = 'gameover';
-    room.winnerPlayerId = cultureWinner.playerId;
+    room.winnerPlayerId = monumentWinner.playerId;
     if (room.tickIntervalId !== null) {
       clearInterval(room.tickIntervalId);
       room.tickIntervalId = null;
@@ -289,33 +288,13 @@ function resolveCombat(room: ServerRoom, tg: TroopGroup): void {
   }
 }
 
-export type ResourceType = 'wood' | 'food' | 'stone' | 'metal';
+export type IncomeType = 'food' | 'resources';
 export type InvestAmount = typeof VALID_INVEST_AMOUNTS[number];
 
-function getInvestmentCost(
-  resource: ResourceType,
-  amount: InvestAmount
-): { wood?: number; food?: number; stone?: number } {
-  switch (resource) {
-    case 'wood':
-      return { food: INVEST_WOOD_COST_FOOD * amount };
-    case 'food':
-      return { wood: INVEST_FOOD_COST_WOOD * amount };
-    case 'stone':
-      return { wood: INVEST_STONE_COST_WOOD * amount, food: INVEST_STONE_COST_FOOD * amount };
-    case 'metal':
-      return { stone: INVEST_METAL_COST_STONE * amount, food: INVEST_METAL_COST_FOOD * amount };
-  }
-}
-
-function totalIncomeRate(player: ServerCityPlayer): number {
-  return player.woodIncome + player.foodIncome + player.stoneIncome + player.metalIncome;
-}
-
-export function investResource(
+export function investIncome(
   roomId: string,
   playerId: string,
-  resource: ResourceType,
+  income: IncomeType,
   amount: InvestAmount
 ): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
   const room = rooms.get(roomId);
@@ -330,32 +309,21 @@ export function investResource(
     return { error: 'Invalid investment amount' };
   }
 
-  // Population cap: total income cannot exceed population
-  if (totalIncomeRate(player) + amount > player.population) {
-    return { error: 'Not enough population to support that income' };
-  }
+  const goldCost = (income === 'food' ? INVEST_FOOD_COST_GOLD : INVEST_RESOURCES_COST_GOLD) * amount;
+  if (player.gold < goldCost) return { error: 'Not enough gold' };
 
-  const cost = getInvestmentCost(resource, amount);
+  player.gold -= goldCost;
 
-  if (cost.wood !== undefined && player.wood < cost.wood) return { error: 'Not enough wood' };
-  if (cost.food !== undefined && player.food < cost.food) return { error: 'Not enough food' };
-  if (cost.stone !== undefined && player.stone < cost.stone) return { error: 'Not enough stone' };
-
-  if (cost.wood !== undefined) player.wood -= cost.wood;
-  if (cost.food !== undefined) player.food -= cost.food;
-  if (cost.stone !== undefined) player.stone -= cost.stone;
-
-  switch (resource) {
-    case 'wood':  player.woodIncome  += amount; break;
-    case 'food':  player.foodIncome  += amount; break;
-    case 'stone': player.stoneIncome += amount; break;
-    case 'metal': player.metalIncome += amount; break;
+  if (income === 'food') {
+    player.foodIncome += amount;
+  } else {
+    player.resourcesIncome += amount;
   }
 
   return { room };
 }
 
-export function investScience(
+export function upgradeCulture(
   roomId: string,
   playerId: string
 ): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
@@ -367,12 +335,37 @@ export function investScience(
   if (!player) return { error: 'Player not found' };
   if (!player.alive) return { error: 'City is eliminated' };
 
-  if (player.stone < SCIENCE_COST_STONE) return { error: 'Not enough stone' };
-  if (player.metal < SCIENCE_COST_METAL) return { error: 'Not enough metal' };
+  if (player.food < CULTURE_UPGRADE_COST_FOOD) return { error: 'Not enough food' };
+  if (player.gold < CULTURE_UPGRADE_COST_GOLD) return { error: 'Not enough gold' };
 
-  player.stone -= SCIENCE_COST_STONE;
-  player.metal -= SCIENCE_COST_METAL;
-  player.culture += SCIENCE_CULTURE_GAIN;
+  player.food -= CULTURE_UPGRADE_COST_FOOD;
+  player.gold -= CULTURE_UPGRADE_COST_GOLD;
+  player.cultureLevel += 1;
+
+  return { room };
+}
+
+export function buildMonument(
+  roomId: string,
+  playerId: string
+): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
+  const room = rooms.get(roomId);
+  if (!room) return { error: 'Room not found' };
+  if (room.phase !== 'playing') return { error: 'Game not in progress' };
+
+  const player = room.players.get(playerId);
+  if (!player) return { error: 'Player not found' };
+  if (!player.alive) return { error: 'City is eliminated' };
+
+  if (player.monuments >= player.cultureLevel) {
+    return { error: 'Upgrade culture first to unlock a monument slot' };
+  }
+  if (player.gold < MONUMENT_COST_GOLD) return { error: 'Not enough gold' };
+  if (player.resources < MONUMENT_COST_RESOURCES) return { error: 'Not enough resources' };
+
+  player.gold -= MONUMENT_COST_GOLD;
+  player.resources -= MONUMENT_COST_RESOURCES;
+  player.monuments += 1;
 
   return { room };
 }
@@ -389,7 +382,7 @@ export function spendMilitary(
   if (!player) return { error: 'Player not found' };
   if (!player.alive) return { error: 'City is eliminated' };
 
-  if (player.wood < MILITARY_UPGRADE_COST_WOOD || player.food < MILITARY_UPGRADE_COST_FOOD) {
+  if (player.food < MILITARY_COST_FOOD || player.gold < MILITARY_COST_GOLD) {
     return { error: 'Not enough resources' };
   }
 
@@ -399,8 +392,8 @@ export function spendMilitary(
     return { error: 'Not enough civilians to train' };
   }
 
-  player.wood -= MILITARY_UPGRADE_COST_WOOD;
-  player.food -= MILITARY_UPGRADE_COST_FOOD;
+  player.food -= MILITARY_COST_FOOD;
+  player.gold -= MILITARY_COST_GOLD;
   player.militaryAtHome += MILITARY_UPGRADE_TROOPS;
   // population unchanged — civilians converted to military, not created
 
@@ -468,17 +461,17 @@ export function resetRoom(
   for (const [, player] of room.players) {
     player.color = '';
     player.alive = true;
-    player.wood = 0;
     player.food = 0;
-    player.stone = 0;
-    player.metal = 0;
-    player.woodIncome = 0;
+    player.resources = 0;
+    player.gold = 0;
     player.foodIncome = 0;
-    player.stoneIncome = 0;
-    player.metalIncome = 0;
+    player.resourcesIncome = 0;
+    player.goldIncome = 0;
     player.militaryAtHome = 0;
     player.population = 0;
     player.culture = 0;
+    player.cultureLevel = 0;
+    player.monuments = 0;
     player.hp = 0;
     player.maxHp = MAX_HP;
     player.x = 0;
@@ -495,17 +488,17 @@ export function sanitizeState(room: ServerRoom): RoomStatePayload {
     color: p.color,
     connected: p.connected,
     alive: p.alive,
-    wood: p.wood,
     food: p.food,
-    stone: p.stone,
-    metal: p.metal,
-    woodIncome: p.woodIncome,
+    resources: p.resources,
+    gold: p.gold,
     foodIncome: p.foodIncome,
-    stoneIncome: p.stoneIncome,
-    metalIncome: p.metalIncome,
+    resourcesIncome: p.resourcesIncome,
+    goldIncome: p.goldIncome,
     militaryAtHome: p.militaryAtHome,
     population: p.population,
     culture: p.culture,
+    cultureLevel: p.cultureLevel,
+    monuments: p.monuments,
     hp: p.hp,
     maxHp: p.maxHp,
     x: p.x,

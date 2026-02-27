@@ -1,39 +1,38 @@
 // Economy — initial resource amounts
-export const INITIAL_WOOD = 50;
 export const INITIAL_FOOD = 50;
-export const INITIAL_STONE = 0;
-export const INITIAL_METAL = 0;
+export const INITIAL_RESOURCES = 50;
+export const INITIAL_GOLD = 0;
 
 // Economy — initial income rates (per second)
-export const INITIAL_WOOD_INCOME = 3;
 export const INITIAL_FOOD_INCOME = 3;
-export const INITIAL_STONE_INCOME = 0; // must invest to unlock
-export const INITIAL_METAL_INCOME = 0; // must invest to unlock
+export const INITIAL_RESOURCES_INCOME = 3;
+// Gold income is derived: population × GOLD_INCOME_PER_POP per tick (not manually upgradeable)
+export const GOLD_INCOME_PER_POP = 0.5;
 
 // Investment costs per +1 income rate (scales linearly for +5 and +25)
-export const INVEST_WOOD_COST_FOOD = 10;   // wood income costs food
-export const INVEST_FOOD_COST_WOOD = 10;   // food income costs wood
-export const INVEST_STONE_COST_WOOD = 15;  // stone income costs wood + food
-export const INVEST_STONE_COST_FOOD = 15;
-export const INVEST_METAL_COST_STONE = 20; // metal income costs stone + food
-export const INVEST_METAL_COST_FOOD = 10;
+export const INVEST_FOOD_COST_GOLD = 15;      // food income costs gold
+export const INVEST_RESOURCES_COST_GOLD = 15; // resources income costs gold
 
 export const VALID_INVEST_AMOUNTS = [1, 5, 25] as const;
 
 // Population
-export const INITIAL_POPULATION = 10; // starts equal to INITIAL_MILITARY_AT_HOME (all soldiers)
+export const INITIAL_POPULATION = 10;
 export const POP_CAP_MULTIPLIER = 10; // populationCap = foodIncome × POP_CAP_MULTIPLIER
 export const POP_GROWTH_RATE = 0.1;   // pop grows by foodIncome × POP_GROWTH_RATE per tick
 
-// Science / Culture
-export const SCIENCE_COST_STONE = 50;
-export const SCIENCE_COST_METAL = 50;
-export const SCIENCE_CULTURE_GAIN = 100;
-export const CULTURE_WIN_THRESHOLD = 1000;
+// Culture upgrade — unlocks monument building slots
+export const CULTURE_UPGRADE_COST_FOOD = 30;
+export const CULTURE_UPGRADE_COST_GOLD = 50;
+
+// Monuments
+export const MONUMENT_COST_GOLD = 100;
+export const MONUMENT_COST_RESOURCES = 150;
+export const MONUMENT_CULTURE_PER_TICK = 5; // passive culture score per monument per tick
+export const MONUMENT_WIN_COUNT = 5;        // first player to build this many wins
 
 // Military
-export const MILITARY_UPGRADE_COST_WOOD = 20;
-export const MILITARY_UPGRADE_COST_FOOD = 30;
+export const MILITARY_COST_FOOD = 20;
+export const MILITARY_COST_GOLD = 20;
 export const MILITARY_UPGRADE_TROOPS = 10; // troops added per upgrade
 export const INITIAL_MILITARY_AT_HOME = 10;
 

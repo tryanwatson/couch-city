@@ -6,15 +6,16 @@ import {
   addPlayer,
   disconnectSocket,
   startGame,
-  investResource,
-  investScience,
+  investIncome,
+  upgradeCulture,
+  buildMonument,
   spendMilitary,
   sendAttack,
   resetRoom,
   sanitizeState,
   setBroadcastFn,
 } from './roomManager';
-import type { ResourceType, InvestAmount } from './roomManager';
+import type { IncomeType, InvestAmount } from './roomManager';
 
 function broadcastRoom(io: Server, roomId: string): void {
   const room = getRoom(roomId);
@@ -103,22 +104,32 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     broadcastRoom(io, data.roomId);
   });
 
-  socket.on('player:invest_resource', (data) => {
-    if (!data?.roomId || !data?.playerId || !data?.resource || data?.amount == null) {
+  socket.on('player:invest_income', (data) => {
+    if (!data?.roomId || !data?.playerId || !data?.income || data?.amount == null) {
       socket.emit('room:error', { message: 'Missing required fields' });
       return;
     }
-    const result = investResource(data.roomId, data.playerId, data.resource as ResourceType, data.amount as InvestAmount);
+    const result = investIncome(data.roomId, data.playerId, data.income as IncomeType, data.amount as InvestAmount);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     broadcastRoom(io, data.roomId);
   });
 
-  socket.on('player:invest_science', (data) => {
+  socket.on('player:upgrade_culture', (data) => {
     if (!data?.roomId || !data?.playerId) {
       socket.emit('room:error', { message: 'Missing required fields' });
       return;
     }
-    const result = investScience(data.roomId, data.playerId);
+    const result = upgradeCulture(data.roomId, data.playerId);
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
+    broadcastRoom(io, data.roomId);
+  });
+
+  socket.on('player:build_monument', (data) => {
+    if (!data?.roomId || !data?.playerId) {
+      socket.emit('room:error', { message: 'Missing required fields' });
+      return;
+    }
+    const result = buildMonument(data.roomId, data.playerId);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     broadcastRoom(io, data.roomId);
   });
