@@ -6,7 +6,7 @@ import {
   addPlayer,
   disconnectSocket,
   startGame,
-  investIncome,
+  allocateWorkers,
   upgradeCulture,
   buildMonument,
   spendMilitary,
@@ -16,7 +16,6 @@ import {
   sanitizeState,
   setBroadcastFn,
 } from './roomManager';
-import type { IncomeType, InvestAmount } from './roomManager';
 
 function broadcastRoom(io: Server, roomId: string): void {
   const room = getRoom(roomId);
@@ -105,12 +104,12 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     broadcastRoom(io, data.roomId);
   });
 
-  socket.on('player:invest_income', (data) => {
-    if (!data?.roomId || !data?.playerId || !data?.income || data?.amount == null) {
+  socket.on('player:allocate_workers', (data) => {
+    if (!data?.roomId || !data?.playerId || data?.farmers == null || data?.miners == null || data?.merchants == null) {
       socket.emit('room:error', { message: 'Missing required fields' });
       return;
     }
-    const result = investIncome(data.roomId, data.playerId, data.income as IncomeType, data.amount as InvestAmount);
+    const result = allocateWorkers(data.roomId, data.playerId, data.farmers, data.miners, data.merchants);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     broadcastRoom(io, data.roomId);
   });

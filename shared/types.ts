@@ -12,9 +12,10 @@ export interface CityPlayerInfo {
   food: number;
   resources: number;
   gold: number;
-  foodIncome: number;
-  resourcesIncome: number;
-  goldIncome: number; // derived: population × GOLD_INCOME_PER_POP, updated each turn
+  goldIncome: number; // derived: merchants × GOLD_PER_MERCHANT (display convenience)
+  farmers: number;    // worker allocation: food producers
+  miners: number;     // worker allocation: resource producers
+  merchants: number;  // worker allocation: gold producers
   militaryAtHome: Record<TroopType, number>;
   population: number;
   culture: number;       // passive score from monuments (display/historical)
@@ -72,9 +73,10 @@ export interface ServerCityPlayer {
   food: number;
   resources: number;
   gold: number;
-  foodIncome: number;
-  resourcesIncome: number;
   goldIncome: number;
+  farmers: number;
+  miners: number;
+  merchants: number;
   militaryAtHome: Record<TroopType, number>;
   population: number;
   culture: number;

@@ -114,7 +114,8 @@ function TroopSprite({
   const scale = TROOP_DISPLAY_SIZE / sheet.frameWidth;
   const clusterRadius = units <= 1 ? 0 : 15 + Math.sqrt(units) * 8;
 
-  const sprites = [];
+  // Compute sprite positions first, then sort by Y for depth ordering
+  const spriteData = [];
   for (let i = 0; i < units; i++) {
     const angle = i * GOLDEN_ANGLE;
     const r = units <= 1 ? 0 : Math.sqrt((i + 0.5) / units) * clusterRadius;
@@ -132,26 +133,29 @@ function TroopSprite({
     const frameX = fi * sheet.frameWidth;
     const flipTransform = facingLeft ? `translate(${2 * sx}, 0) scale(-1, 1)` : undefined;
 
-    sprites.push(
-      <g key={i} transform={flipTransform}>
-        <svg
-          x={sx - TROOP_DISPLAY_SIZE / 2}
-          y={sy - TROOP_DISPLAY_SIZE / 2}
-          width={TROOP_DISPLAY_SIZE}
-          height={TROOP_DISPLAY_SIZE}
-          overflow="hidden"
-        >
-          <image
-            href={sheet.image}
-            x={-frameX * scale}
-            y={0}
-            width={sheet.sheetWidth * scale}
-            height={sheet.sheetHeight * scale}
-          />
-        </svg>
-      </g>,
-    );
+    spriteData.push({ i, sx, sy, frameX, flipTransform });
   }
+  spriteData.sort((a, b) => a.sy - b.sy);
+
+  const sprites = spriteData.map(({ i, sx, sy, frameX, flipTransform }) => (
+    <g key={i} transform={flipTransform}>
+      <svg
+        x={sx - TROOP_DISPLAY_SIZE / 2}
+        y={sy - TROOP_DISPLAY_SIZE / 2}
+        width={TROOP_DISPLAY_SIZE}
+        height={TROOP_DISPLAY_SIZE}
+        overflow="hidden"
+      >
+        <image
+          href={sheet.image}
+          x={-frameX * scale}
+          y={0}
+          width={sheet.sheetWidth * scale}
+          height={sheet.sheetHeight * scale}
+        />
+      </svg>
+    </g>
+  ));
 
   return (
     <g opacity={opacity}>
@@ -565,11 +569,12 @@ export default function BattleMap({ players, troopsInTransit, animate, subPhase 
         <AttackLine key={troop.id} troop={troop} playerMap={playerMap} />
       ))}
 
-      {/* Walking troops */}
-      {troopsInTransit.map((troop) => {
-        const posData = troopPositions.get(troop.id);
-        if (!posData) return null;
-        return (
+      {/* Walking troops — sorted by Y for depth (lower on screen = closer to camera = rendered on top) */}
+      {troopsInTransit
+        .map((troop) => ({ troop, posData: troopPositions.get(troop.id) }))
+        .filter((entry): entry is { troop: TroopGroup; posData: NonNullable<typeof entry.posData> } => entry.posData != null)
+        .sort((a, b) => a.posData.y - b.posData.y)
+        .map(({ troop, posData }) => (
           <TroopSprite
             key={troop.id}
             pos={posData}
@@ -581,22 +586,23 @@ export default function BattleMap({ players, troopsInTransit, animate, subPhase 
             troopType={troop.troopType}
             opacity={posData.opacity}
           />
-        );
-      })}
+        ))}
 
-      {/* Attacking troops (linger at castle) */}
-      {Array.from(attackingTroops.values()).map((lingering) => (
-        <TroopSprite
-          key={`attack-${lingering.troop.id}`}
-          pos={lingering.pos}
-          units={lingering.troop.units}
-          frameIndex={frameIndex}
-          isAttacking={true}
-          isIdle={false}
-          facingLeft={lingering.facingLeft}
-          troopType={lingering.troop.troopType}
-        />
-      ))}
+      {/* Attacking troops (linger at castle) — sorted by Y for depth */}
+      {Array.from(attackingTroops.values())
+        .sort((a, b) => a.pos.y - b.pos.y)
+        .map((lingering) => (
+          <TroopSprite
+            key={`attack-${lingering.troop.id}`}
+            pos={lingering.pos}
+            units={lingering.troop.units}
+            frameIndex={frameIndex}
+            isAttacking={true}
+            isIdle={false}
+            facingLeft={lingering.facingLeft}
+            troopType={lingering.troop.troopType}
+          />
+        ))}
 
       {/* Cities — rendered last so they paint over troop lines */}
       {players.map((player, index) => (

@@ -4,15 +4,13 @@ import {
   INITIAL_FOOD,
   INITIAL_RESOURCES,
   INITIAL_GOLD,
-  INITIAL_FOOD_INCOME,
-  INITIAL_RESOURCES_INCOME,
-  GOLD_INCOME_PER_POP,
-  INVEST_FOOD_COST_GOLD,
-  INVEST_RESOURCES_COST_GOLD,
-  VALID_INVEST_AMOUNTS,
-  INITIAL_POPULATION,
-  POP_CAP_MULTIPLIER,
+  FOOD_PER_FARMER,
+  RESOURCES_PER_MINER,
+  GOLD_PER_MERCHANT,
+  FOOD_PER_CITIZEN,
   POP_GROWTH_RATE,
+  POP_STARVATION_RATE,
+  INITIAL_POPULATION,
   CULTURE_UPGRADE_COST_FOOD,
   CULTURE_UPGRADE_COST_GOLD,
   MONUMENT_COST_GOLD,
@@ -40,6 +38,24 @@ const rooms = new Map<string, ServerRoom>();
 
 function totalMilitaryAtHome(mil: Record<TroopType, number>): number {
   return Object.values(mil).reduce((sum, n) => sum + n, 0);
+}
+
+function clampWorkers(player: ServerCityPlayer): void {
+  const civilians = Math.max(0, Math.floor(player.population) - totalMilitaryAtHome(player.militaryAtHome));
+  const total = player.farmers + player.miners + player.merchants;
+  if (total <= civilians) return;
+
+  if (civilians <= 0) {
+    player.farmers = 0;
+    player.miners = 0;
+    player.merchants = 0;
+  } else {
+    const ratio = civilians / total;
+    player.farmers = Math.floor(player.farmers * ratio);
+    player.miners = Math.floor(player.miners * ratio);
+    player.merchants = Math.floor(player.merchants * ratio);
+  }
+  player.goldIncome = player.merchants * GOLD_PER_MERCHANT;
 }
 
 function cpBasedTrade(unitsA: number, cpPerA: number, unitsB: number, cpPerB: number): { survivorsA: number; survivorsB: number } {
@@ -133,9 +149,10 @@ export function addPlayer(
     food: 0,
     resources: 0,
     gold: 0,
-    foodIncome: 0,
-    resourcesIncome: 0,
     goldIncome: 0,
+    farmers: 0,
+    miners: 0,
+    merchants: 0,
     militaryAtHome: { ...ZERO_MILITARY },
     population: 0,
     culture: 0,
@@ -202,9 +219,10 @@ export function startGame(
     player.food = INITIAL_FOOD;
     player.resources = INITIAL_RESOURCES;
     player.gold = INITIAL_GOLD;
-    player.foodIncome = INITIAL_FOOD_INCOME;
-    player.resourcesIncome = INITIAL_RESOURCES_INCOME;
-    player.goldIncome = INITIAL_POPULATION * GOLD_INCOME_PER_POP;
+    player.goldIncome = 0;
+    player.farmers = 0;
+    player.miners = 0;
+    player.merchants = 0;
     player.militaryAtHome = { ...INITIAL_MILITARY };
     player.population = INITIAL_POPULATION;
     player.culture = 0;
@@ -261,20 +279,29 @@ function runUpdatePhase(room: ServerRoom): void {
 
   const alivePlayers = Array.from(room.players.values()).filter(p => p.alive);
 
-  // Economy accumulation
+  // Worker-based economy
   for (const player of alivePlayers) {
-    player.food += player.foodIncome;
-    player.resources += player.resourcesIncome;
-    player.goldIncome = player.population * GOLD_INCOME_PER_POP;
+    player.food += player.farmers * FOOD_PER_FARMER;
+    player.resources += player.miners * RESOURCES_PER_MINER;
+    player.goldIncome = player.merchants * GOLD_PER_MERCHANT;
     player.gold += player.goldIncome;
     player.culture += player.monuments * MONUMENT_CULTURE_PER_TURN;
   }
 
-  // Population growth
+  // Food consumption & population growth/starvation
   for (const player of alivePlayers) {
-    const populationCap = player.foodIncome * POP_CAP_MULTIPLIER;
-    if (player.population < populationCap) {
-      player.population = Math.min(populationCap, player.population + player.foodIncome * POP_GROWTH_RATE);
+    const pop = Math.floor(player.population);
+    const foodNeeded = pop * FOOD_PER_CITIZEN;
+
+    if (player.food >= foodNeeded) {
+      // Fed: consume food, then grow 20%
+      player.food -= foodNeeded;
+      player.population = Math.floor(pop * (1 + POP_GROWTH_RATE));
+    } else {
+      // Starving: consume all remaining food, population shrinks 20%
+      player.food = 0;
+      player.population = Math.max(1, Math.floor(pop * (1 - POP_STARVATION_RATE)));
+      clampWorkers(player);
     }
   }
 
@@ -498,9 +525,6 @@ function resolveCombat(room: ServerRoom, tg: TroopGroup): void {
 // Player actions (immediate during planning)
 // ============================================================
 
-export type IncomeType = 'food' | 'resources';
-export type InvestAmount = typeof VALID_INVEST_AMOUNTS[number];
-
 function guardAction(room: ServerRoom, playerId: string): ServerCityPlayer | string {
   if (room.phase !== 'playing') return 'Game not in progress';
   if (room.subPhase !== 'planning') return 'Cannot act during update phase';
@@ -511,11 +535,12 @@ function guardAction(room: ServerRoom, playerId: string): ServerCityPlayer | str
   return player;
 }
 
-export function investIncome(
+export function allocateWorkers(
   roomId: string,
   playerId: string,
-  income: IncomeType,
-  amount: InvestAmount
+  farmers: number,
+  miners: number,
+  merchants: number
 ): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
   const room = rooms.get(roomId);
   if (!room) return { error: 'Room not found' };
@@ -524,20 +549,21 @@ export function investIncome(
   if (typeof guard === 'string') return { error: guard };
   const player = guard;
 
-  if (!(VALID_INVEST_AMOUNTS as readonly number[]).includes(amount)) {
-    return { error: 'Invalid investment amount' };
+  if (!Number.isInteger(farmers) || farmers < 0 ||
+      !Number.isInteger(miners) || miners < 0 ||
+      !Number.isInteger(merchants) || merchants < 0) {
+    return { error: 'Worker counts must be non-negative integers' };
   }
 
-  const goldCost = (income === 'food' ? INVEST_FOOD_COST_GOLD : INVEST_RESOURCES_COST_GOLD) * amount;
-  if (player.gold < goldCost) return { error: 'Not enough gold' };
-
-  player.gold -= goldCost;
-
-  if (income === 'food') {
-    player.foodIncome += amount;
-  } else {
-    player.resourcesIncome += amount;
+  const civilians = Math.floor(player.population) - totalMilitaryAtHome(player.militaryAtHome);
+  if (farmers + miners + merchants > civilians) {
+    return { error: 'Not enough civilians for this allocation' };
   }
+
+  player.farmers = farmers;
+  player.miners = miners;
+  player.merchants = merchants;
+  player.goldIncome = merchants * GOLD_PER_MERCHANT;
 
   return { room };
 }
@@ -623,6 +649,7 @@ export function spendMilitary(
   player.food -= config.food;
   player.gold -= config.gold;
   player.militaryAtHome[troopType] += config.troops;
+  clampWorkers(player);
 
   return { room };
 }
@@ -655,6 +682,7 @@ export function sendAttack(
 
   attacker.militaryAtHome[troopType] -= units;
   attacker.population -= units;
+  clampWorkers(attacker);
 
   // Merge into existing group sent this same planning phase (same target, same type, freshly created)
   const existing = room.troopsInTransit.find(
@@ -705,9 +733,10 @@ export function resetRoom(
     player.food = 0;
     player.resources = 0;
     player.gold = 0;
-    player.foodIncome = 0;
-    player.resourcesIncome = 0;
     player.goldIncome = 0;
+    player.farmers = 0;
+    player.miners = 0;
+    player.merchants = 0;
     player.militaryAtHome = { ...ZERO_MILITARY };
     player.population = 0;
     player.culture = 0;
@@ -733,9 +762,10 @@ export function sanitizeState(room: ServerRoom): RoomStatePayload {
     food: p.food,
     resources: p.resources,
     gold: p.gold,
-    foodIncome: p.foodIncome,
-    resourcesIncome: p.resourcesIncome,
     goldIncome: p.goldIncome,
+    farmers: p.farmers,
+    miners: p.miners,
+    merchants: p.merchants,
     militaryAtHome: p.militaryAtHome,
     population: p.population,
     culture: p.culture,

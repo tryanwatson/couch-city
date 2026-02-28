@@ -526,35 +526,91 @@
   min-width: 36px;
 }
 
-.resource-invest-buttons {
+/* Worker allocation */
+.worker-list {
   display: flex;
-  gap: 5px;
-  flex-shrink: 0;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.invest-btn {
-  padding: 5px 9px;
-  border: none;
+.worker-row {
+  background: var(--color-surface-light);
   border-radius: var(--radius-sm);
-  background: var(--color-primary);
-  color: white;
-  font-size: 0.78rem;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.worker-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.worker-label {
+  font-size: 0.9rem;
+  font-weight: 700;
+  min-width: 100px;
+}
+
+.worker-yield {
+  font-size: 0.75rem;
+  color: var(--color-correct);
+  font-weight: 600;
+}
+
+.worker-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.worker-btn {
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--color-text);
+  font-size: 1.2rem;
   font-weight: 700;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: background 0.15s, transform 0.1s;
 }
 
-.invest-btn:hover:not(:disabled) {
-  background: var(--color-primary-hover, #5b5ef5);
+.worker-btn:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.35);
 }
 
-.invest-btn:active:not(:disabled) {
-  transform: scale(0.95);
+.worker-btn:active:not(:disabled) {
+  transform: scale(0.92);
 }
 
-.invest-btn:disabled {
+.worker-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+.worker-count {
+  font-size: 1.2rem;
+  font-weight: 800;
+  min-width: 28px;
+  text-align: center;
+}
+
+.worker-summary {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rate-negative {
+  color: var(--color-wrong) !important;
 }
 
 /* Attack section */

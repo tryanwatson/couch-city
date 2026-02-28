@@ -3,22 +3,18 @@ export const INITIAL_FOOD = 50;
 export const INITIAL_RESOURCES = 50;
 export const INITIAL_GOLD = 0;
 
-// Economy — initial income rates (per turn)
-export const INITIAL_FOOD_INCOME = 3;
-export const INITIAL_RESOURCES_INCOME = 3;
-// Gold income is derived: population × GOLD_INCOME_PER_POP per turn (not manually upgradeable)
-export const GOLD_INCOME_PER_POP = 0.5;
+// Worker yields (per turn per worker)
+export const FOOD_PER_FARMER = 3;
+export const RESOURCES_PER_MINER = 1;
+export const GOLD_PER_MERCHANT = 1;
 
-// Investment costs per +1 income rate (scales linearly for +5 and +25)
-export const INVEST_FOOD_COST_GOLD = 15; // food income costs gold
-export const INVEST_RESOURCES_COST_GOLD = 15; // resources income costs gold
-
-export const VALID_INVEST_AMOUNTS = [1, 5, 25] as const;
+// Food consumption & population dynamics
+export const FOOD_PER_CITIZEN = 1; // each citizen eats 1 food/turn from stockpile
+export const POP_GROWTH_RATE = 0.2; // +20% population when fed
+export const POP_STARVATION_RATE = 0.2; // -20% population per turn when starving
 
 // Population
 export const INITIAL_POPULATION = 10;
-export const POP_CAP_MULTIPLIER = 10; // populationCap = foodIncome × POP_CAP_MULTIPLIER
-export const POP_GROWTH_RATE = 0.1; // pop grows by foodIncome × POP_GROWTH_RATE per turn
 
 // Culture upgrade — unlocks monument building slots
 export const CULTURE_UPGRADE_COST_FOOD = 30;
@@ -60,7 +56,7 @@ export const TRAINING_CONFIG: Record<
 };
 
 export const INITIAL_MILITARY: Record<TroopType, number> = {
-  warrior: 100,
+  warrior: 0,
   cavalry: 0,
   rifleman: 0,
   truck: 0,
@@ -94,9 +90,9 @@ export function troopGroupRadius(units: number): number {
 export const FIELD_COMBAT_INSTANT_RATIO = 0.2; // power ratio below this → instant resolve
 
 // Field combat animation phase fractions (of RESOLVING_PHASE_DURATION_MS)
-export const FIELD_COMBAT_WALK_FRAC = 0.3;      // 1500ms — walk to collision point
-export const FIELD_COMBAT_FIGHT_FRAC = 0.5;     // 2500ms — fight at collision point
-export const FIELD_COMBAT_ADVANCE_FRAC = 0.2;   // 1000ms — winner advances to destination / loser fades
+export const FIELD_COMBAT_WALK_FRAC = 0.3; // 1500ms — walk to collision point
+export const FIELD_COMBAT_FIGHT_FRAC = 0.5; // 2500ms — fight at collision point
+export const FIELD_COMBAT_ADVANCE_FRAC = 0.2; // 1000ms — winner advances to destination / loser fades
 
 // Turn-based timing
 export const RESOLVING_PHASE_DURATION_MS = 5000; // client-side animation duration
