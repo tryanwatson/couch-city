@@ -490,7 +490,7 @@
   background: var(--color-farming-bg);
   border-left: 3px solid var(--color-farming-accent);
 }
-.section-farming .section-title { color: var(--color-farming-accent); }
+.section-farming .section-header-title { color: var(--color-farming-accent); }
 .section-farming .worker-row,
 .section-farming .resource-row,
 .section-farming .pop-growth-info { background: var(--color-farming-row); }
@@ -516,7 +516,7 @@
   background: var(--color-mining-bg);
   border-left: 3px solid var(--color-mining-accent);
 }
-.section-mining .section-title { color: var(--color-mining-accent); }
+.section-mining .section-header-title { color: var(--color-mining-accent); }
 .section-mining .worker-row,
 .section-mining .resource-row { background: var(--color-mining-row); }
 .section-mining .worker-btn {
@@ -532,7 +532,7 @@
   background: var(--color-trade-bg);
   border-left: 3px solid var(--color-trade-accent);
 }
-.section-trade .section-title { color: var(--color-trade-accent); }
+.section-trade .section-header-title { color: var(--color-trade-accent); }
 .section-trade .worker-row,
 .section-trade .resource-row { background: var(--color-trade-row); }
 .section-trade .worker-btn {
@@ -548,7 +548,7 @@
   background: var(--color-culture-bg);
   border-left: 3px solid var(--color-culture-accent);
 }
-.section-culture .section-title { color: var(--color-culture-accent); }
+.section-culture .section-header-title { color: var(--color-culture-accent); }
 .section-culture .worker-row,
 .section-culture .resource-row { background: var(--color-culture-row); }
 .section-culture .upgrade-science {
@@ -573,7 +573,7 @@
   background: var(--color-military-bg);
   border-left: 3px solid var(--color-military-accent);
 }
-.section-military .section-title { color: var(--color-military-accent); }
+.section-military .section-header-title { color: var(--color-military-accent); }
 .section-military .upgrade-military {
   background: rgba(200, 69, 85, 0.2);
   border-color: var(--color-military-accent);
@@ -587,7 +587,7 @@
   background: var(--color-military-bg);
   border-left: 3px solid var(--color-military-accent);
 }
-.section-attack .section-title { color: var(--color-military-accent); }
+.section-attack .section-header-title { color: var(--color-military-accent); }
 .section-attack .target-row { background: var(--color-military-row); }
 .section-attack .attack-amount-btn {
   background: rgba(200, 69, 85, 0.15);
@@ -595,6 +595,128 @@
 }
 .section-attack .attack-amount-btn:hover:not(:disabled) {
   background: rgba(200, 69, 85, 0.35);
+}
+
+/* =========================================
+   Collapsible Section Headers & Body
+   ========================================= */
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font-family: var(--font-main);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  text-align: left;
+}
+
+.section-header:hover {
+  opacity: 0.85;
+}
+
+.section-chevron {
+  font-size: 0.65rem;
+  color: var(--color-text-muted);
+  transition: transform 0.3s ease;
+  flex-shrink: 0;
+  width: 12px;
+  display: inline-block;
+}
+
+.section-chevron-open {
+  transform: rotate(90deg);
+}
+
+.section-header-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.section-header-workers {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.section-header-workers .worker-count {
+  font-size: 1rem;
+  min-width: 24px;
+}
+
+.section-header-workers .worker-btn {
+  width: 30px;
+  height: 30px;
+  font-size: 1rem;
+}
+
+.section-header-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.section-header-workers + .section-header-summary {
+  margin-left: 8px;
+}
+
+.summary-stockpile {
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.summary-rate {
+  font-weight: 600;
+}
+
+.summary-detail {
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.summary-breakdown {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  font-family: var(--font-main);
+  letter-spacing: 0.3px;
+}
+
+/* Collapsible body animation (CSS grid 0fr/1fr) */
+.section-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.3s ease;
+}
+
+.section-body.collapsed {
+  grid-template-rows: 0fr;
+}
+
+.section-body-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.section-body:not(.collapsed) .section-body-inner {
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 /* Resource investment rows */
@@ -1156,5 +1278,25 @@
 
   .attack-amount-btn {
     min-width: calc(33% - 4px);
+  }
+
+  .section-header {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .section-header-summary {
+    font-size: 0.72rem;
+  }
+
+  .section-header-workers .worker-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 0.9rem;
+  }
+
+  .section-header-workers .worker-count {
+    font-size: 0.9rem;
+    min-width: 20px;
   }
 }

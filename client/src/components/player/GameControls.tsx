@@ -28,6 +28,8 @@ interface GameControlsProps {
   socket: Socket;
 }
 
+type SectionId = 'farming' | 'mining' | 'trade' | 'culture' | 'military' | 'attack';
+
 export default function GameControls({ roomState, playerId, socket }: GameControlsProps) {
   const me = roomState.players.find((p) => p.playerId === playerId) ?? null;
 
@@ -36,6 +38,18 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
   const [localMiners, setLocalMiners] = useState(0);
   const [localMerchants, setLocalMerchants] = useState(0);
   const [localGrowthMultiplier, setLocalGrowthMultiplier] = useState(1);
+  const [expandedSections, setExpandedSections] = useState<Record<SectionId, boolean>>({
+    farming: true,
+    mining: false,
+    trade: false,
+    culture: false,
+    military: false,
+    attack: false,
+  });
+
+  const toggleSection = (id: SectionId) => {
+    setExpandedSections(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   useEffect(() => {
     if (roomState.combatHitPlayerIds.includes(playerId)) {
@@ -157,6 +171,12 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
   const hpPct = (me.hp / me.maxHp) * 100;
   const culturePct = Math.min(100, (me.culture / CULTURE_WIN_THRESHOLD) * 100);
 
+  // Military summary for collapsed header
+  const troopBreakdown = TROOP_TYPES
+    .filter(t => me.militaryAtHome[t] > 0)
+    .map(t => `${t.charAt(0).toUpperCase()}:${me.militaryAtHome[t]}`)
+    .join(' ');
+
   return (
     <div className={`game-controls${controlsDisabled ? ' turn-ended' : ''}`}>
       {/* SCREEN EDGE FLASH ON ATTACK */}
@@ -204,14 +224,11 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
 
       {/* ====== FARMING SECTION ====== */}
       <div className="upgrades-section section-farming">
-        <h3 className="section-title">🌾 Farming</h3>
-
-        <div className="worker-row">
-          <div className="worker-info">
-            <span className="worker-label">Farmers</span>
-            <span className="worker-yield">+{FOOD_PER_FARMER} food/ea</span>
-          </div>
-          <div className="worker-controls">
+        <button className="section-header" onClick={() => toggleSection('farming')}>
+          <span className={`section-chevron${expandedSections.farming ? ' section-chevron-open' : ''}`}>&#9656;</span>
+          <span className="section-header-title">🌾 Farming</span>
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div className="section-header-workers" onClick={e => e.stopPropagation()}>
             <button
               className="worker-btn"
               onClick={() => { const v = localFarmers - 1; setLocalFarmers(v); handleAllocateWorkers(v, localMiners, localMerchants); }}
@@ -224,70 +241,77 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
               disabled={unassigned <= 0 || controlsDisabled}
             >+</button>
           </div>
-        </div>
-
-        {/* Growth multiplier */}
-        <div className="growth-multiplier-row">
-          <span className="growth-multiplier-label">Growth Rate</span>
-          <div className="growth-multiplier-group">
-            {(VALID_GROWTH_MULTIPLIERS as readonly number[]).map((m) => (
-              <button
-                key={m}
-                className={`growth-multiplier-btn${localGrowthMultiplier === m ? ' active' : ''}`}
-                onClick={() => handleSetGrowthMultiplier(m)}
-                disabled={controlsDisabled}
-              >
-                {m}x
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Food breakdown */}
-        <div className="food-breakdown">
-          <div className="food-breakdown-line">
-            <span>🌾 Stockpile</span>
-            <span>{Math.floor(me.food)}</span>
-          </div>
-          <div className="food-breakdown-line">
-            <span>+ Produced</span>
-            <span className="rate-positive">+{foodProduced}</span>
-          </div>
-          <div className="food-breakdown-line">
-            <span>- Consumed ({pop} pop × {FOOD_PER_CITIZEN * localGrowthMultiplier})</span>
-            <span className="rate-negative">-{foodConsumed}</span>
-          </div>
-          <div className={`food-breakdown-line food-breakdown-net${netFood < 0 ? ' rate-negative' : ''}`}>
-            <span>= Net</span>
-            <span>{netFood >= 0 ? '+' : ''}{netFood}/turn</span>
-          </div>
-        </div>
-
-        {/* Population growth projection */}
-        <div className="pop-growth-info">
-          <span className="pop-growth-label">👥 Population</span>
-          <span className={`pop-growth-projection${!isFed ? ' rate-negative' : ''}`}>
-            {pop} → {projectedPop} next turn ({isFed ? `+${Math.round(effectiveGrowthRate * 100)}%` : `-${Math.round(POP_STARVATION_RATE * 100)}%`})
+          <span className="section-header-summary">
+            <span className="summary-stockpile">🌾 {Math.floor(me.food)}</span>
+            <span className={`summary-rate${netFood < 0 ? ' rate-negative' : ' rate-positive'}`}>
+              {netFood >= 0 ? '+' : ''}{netFood}/t
+            </span>
           </span>
-        </div>
+        </button>
 
-        <p className="section-explainer">
-          Each citizen eats {FOOD_PER_CITIZEN} food/turn at 1x.
-          Higher multipliers consume more food but grow population faster.
-          Starving cities lose {Math.round(POP_STARVATION_RATE * 100)}% pop/turn.
-        </p>
+        <div className={`section-body${expandedSections.farming ? '' : ' collapsed'}`}>
+          <div className="section-body-inner">
+            {/* Growth multiplier */}
+            <div className="growth-multiplier-row">
+              <span className="growth-multiplier-label">Growth Rate</span>
+              <div className="growth-multiplier-group">
+                {(VALID_GROWTH_MULTIPLIERS as readonly number[]).map((m) => (
+                  <button
+                    key={m}
+                    className={`growth-multiplier-btn${localGrowthMultiplier === m ? ' active' : ''}`}
+                    onClick={() => handleSetGrowthMultiplier(m)}
+                    disabled={controlsDisabled}
+                  >
+                    {m}x
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Food breakdown */}
+            <div className="food-breakdown">
+              <div className="food-breakdown-line">
+                <span>🌾 Stockpile</span>
+                <span>{Math.floor(me.food)}</span>
+              </div>
+              <div className="food-breakdown-line">
+                <span>+ Produced</span>
+                <span className="rate-positive">+{foodProduced}</span>
+              </div>
+              <div className="food-breakdown-line">
+                <span>- Consumed ({pop} pop × {FOOD_PER_CITIZEN * localGrowthMultiplier})</span>
+                <span className="rate-negative">-{foodConsumed}</span>
+              </div>
+              <div className={`food-breakdown-line food-breakdown-net${netFood < 0 ? ' rate-negative' : ''}`}>
+                <span>= Net</span>
+                <span>{netFood >= 0 ? '+' : ''}{netFood}/turn</span>
+              </div>
+            </div>
+
+            {/* Population growth projection */}
+            <div className="pop-growth-info">
+              <span className="pop-growth-label">👥 Population</span>
+              <span className={`pop-growth-projection${!isFed ? ' rate-negative' : ''}`}>
+                {pop} → {projectedPop} next turn ({isFed ? `+${Math.round(effectiveGrowthRate * 100)}%` : `-${Math.round(POP_STARVATION_RATE * 100)}%`})
+              </span>
+            </div>
+
+            <p className="section-explainer">
+              Each citizen eats {FOOD_PER_CITIZEN} food/turn at 1x.
+              Higher multipliers consume more food but grow population faster.
+              Starving cities lose {Math.round(POP_STARVATION_RATE * 100)}% pop/turn.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* ====== MINING SECTION ====== */}
       <div className="upgrades-section section-mining">
-        <h3 className="section-title">🪨 Mining</h3>
-
-        <div className="worker-row">
-          <div className="worker-info">
-            <span className="worker-label">Miners</span>
-            <span className="worker-yield">+{RESOURCES_PER_MINER} res/ea</span>
-          </div>
-          <div className="worker-controls">
+        <button className="section-header" onClick={() => toggleSection('mining')}>
+          <span className={`section-chevron${expandedSections.mining ? ' section-chevron-open' : ''}`}>&#9656;</span>
+          <span className="section-header-title">🪨 Mining</span>
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div className="section-header-workers" onClick={e => e.stopPropagation()}>
             <button
               className="worker-btn"
               onClick={() => { const v = localMiners - 1; setLocalMiners(v); handleAllocateWorkers(localFarmers, v, localMerchants); }}
@@ -300,25 +324,29 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
               disabled={unassigned <= 0 || controlsDisabled}
             >+</button>
           </div>
-        </div>
+          <span className="section-header-summary">
+            <span className="summary-stockpile">🪨 {Math.floor(me.resources)}</span>
+            <span className="summary-rate rate-positive">+{resourcesPerTurn}/t</span>
+          </span>
+        </button>
 
-        <div className="resource-row">
-          <span className="resource-label">🪨 Resources</span>
-          <span className="resource-amount">{Math.floor(me.resources)}</span>
-          <span className="resource-rate">+{resourcesPerTurn}/turn</span>
+        <div className={`section-body${expandedSections.mining ? '' : ' collapsed'}`}>
+          <div className="section-body-inner">
+            <div className="resource-row">
+              <span className="resource-label">Per miner</span>
+              <span className="resource-rate">+{RESOURCES_PER_MINER} resources/turn</span>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* ====== TRADE SECTION ====== */}
       <div className="upgrades-section section-trade">
-        <h3 className="section-title">💰 Trade</h3>
-
-        <div className="worker-row">
-          <div className="worker-info">
-            <span className="worker-label">Merchants</span>
-            <span className="worker-yield">+{GOLD_PER_MERCHANT} gold/ea</span>
-          </div>
-          <div className="worker-controls">
+        <button className="section-header" onClick={() => toggleSection('trade')}>
+          <span className={`section-chevron${expandedSections.trade ? ' section-chevron-open' : ''}`}>&#9656;</span>
+          <span className="section-header-title">💰 Trade</span>
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div className="section-header-workers" onClick={e => e.stopPropagation()}>
             <button
               className="worker-btn"
               onClick={() => { const v = localMerchants - 1; setLocalMerchants(v); handleAllocateWorkers(localFarmers, localMiners, v); }}
@@ -331,123 +359,168 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
               disabled={unassigned <= 0 || controlsDisabled}
             >+</button>
           </div>
-        </div>
+          <span className="section-header-summary">
+            <span className="summary-stockpile">💰 {Math.floor(me.gold)}</span>
+            <span className="summary-rate rate-positive">+{goldPerTurn}/t</span>
+          </span>
+        </button>
 
-        <div className="resource-row">
-          <span className="resource-label">💰 Gold</span>
-          <span className="resource-amount">{Math.floor(me.gold)}</span>
-          <span className="resource-rate">+{goldPerTurn}/turn</span>
+        <div className={`section-body${expandedSections.trade ? '' : ' collapsed'}`}>
+          <div className="section-body-inner">
+            <div className="resource-row">
+              <span className="resource-label">Per merchant</span>
+              <span className="resource-rate">+{GOLD_PER_MERCHANT} gold/turn</span>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* CULTURE & MONUMENTS */}
       <div className="upgrades-section section-culture">
-        <h3 className="section-title">Culture & Monuments</h3>
-        <div className="upgrade-buttons">
-          <button
-            className="upgrade-btn upgrade-science"
-            onClick={handleUpgradeCulture}
-            disabled={!canAffordCultureUpgrade || controlsDisabled}
-            title={`Costs ${CULTURE_UPGRADE_COST_FOOD} food + ${CULTURE_UPGRADE_COST_GOLD} gold`}
-          >
-            <span className="upgrade-btn-title">📜 Upgrade Culture</span>
-            <span className="upgrade-btn-cost">{CULTURE_UPGRADE_COST_FOOD} food + {CULTURE_UPGRADE_COST_GOLD} gold</span>
-            <span className="upgrade-btn-effect">Level {me.cultureLevel} → {me.cultureLevel + 1} (unlocks monument slot)</span>
-          </button>
+        <button className="section-header" onClick={() => toggleSection('culture')}>
+          <span className={`section-chevron${expandedSections.culture ? ' section-chevron-open' : ''}`}>&#9656;</span>
+          <span className="section-header-title">🏛️ Culture</span>
+          <span className="section-header-summary">
+            <span className="summary-detail">Lvl {me.cultureLevel} · {me.monuments} mon</span>
+            {me.monuments > 0 && (
+              <span className="summary-rate rate-positive">+{me.monuments * MONUMENT_CULTURE_PER_TURN}/t</span>
+            )}
+          </span>
+        </button>
 
-          <button
-            className="upgrade-btn upgrade-monument"
-            onClick={handleBuildMonument}
-            disabled={!canBuildMonument || controlsDisabled}
-            title={
-              me.monuments >= MONUMENT_COST_MULTIPLIERS.length ? 'Maximum monuments built' :
-              me.monuments >= me.cultureLevel ? 'Upgrade culture first' :
-              `Costs ${nextMonumentGoldCost} gold + ${nextMonumentResourcesCost} resources`
-            }
-          >
-            <span className="upgrade-btn-title">🏛️ Build Monument</span>
-            <span className="upgrade-btn-cost">
-              {me.monuments < MONUMENT_COST_MULTIPLIERS.length
-                ? `${nextMonumentGoldCost} gold + ${nextMonumentResourcesCost} resources`
-                : 'Max built'}
-            </span>
-            <span className="upgrade-btn-effect">{me.monuments}/{me.cultureLevel} slots used · {me.monuments}/{MONUMENT_COST_MULTIPLIERS.length} max</span>
-          </button>
-        </div>
-        {me.monuments > 0 && (
-          <div className="resource-row" style={{ marginTop: 4 }}>
-            <span className="resource-label">✨ Culture/turn</span>
-            <span className="resource-amount">{Math.floor(me.culture)}</span>
-            <span className="resource-rate">+{me.monuments * MONUMENT_CULTURE_PER_TURN}/turn</span>
+        <div className={`section-body${expandedSections.culture ? '' : ' collapsed'}`}>
+          <div className="section-body-inner">
+            <div className="upgrade-buttons">
+              <button
+                className="upgrade-btn upgrade-science"
+                onClick={handleUpgradeCulture}
+                disabled={!canAffordCultureUpgrade || controlsDisabled}
+                title={`Costs ${CULTURE_UPGRADE_COST_FOOD} food + ${CULTURE_UPGRADE_COST_GOLD} gold`}
+              >
+                <span className="upgrade-btn-title">📜 Upgrade Culture</span>
+                <span className="upgrade-btn-cost">{CULTURE_UPGRADE_COST_FOOD} food + {CULTURE_UPGRADE_COST_GOLD} gold</span>
+                <span className="upgrade-btn-effect">Level {me.cultureLevel} → {me.cultureLevel + 1} (unlocks monument slot)</span>
+              </button>
+
+              <button
+                className="upgrade-btn upgrade-monument"
+                onClick={handleBuildMonument}
+                disabled={!canBuildMonument || controlsDisabled}
+                title={
+                  me.monuments >= MONUMENT_COST_MULTIPLIERS.length ? 'Maximum monuments built' :
+                  me.monuments >= me.cultureLevel ? 'Upgrade culture first' :
+                  `Costs ${nextMonumentGoldCost} gold + ${nextMonumentResourcesCost} resources`
+                }
+              >
+                <span className="upgrade-btn-title">🏛️ Build Monument</span>
+                <span className="upgrade-btn-cost">
+                  {me.monuments < MONUMENT_COST_MULTIPLIERS.length
+                    ? `${nextMonumentGoldCost} gold + ${nextMonumentResourcesCost} resources`
+                    : 'Max built'}
+                </span>
+                <span className="upgrade-btn-effect">{me.monuments}/{me.cultureLevel} slots used · {me.monuments}/{MONUMENT_COST_MULTIPLIERS.length} max</span>
+              </button>
+            </div>
+            {me.monuments > 0 && (
+              <div className="resource-row" style={{ marginTop: 4 }}>
+                <span className="resource-label">✨ Culture/turn</span>
+                <span className="resource-amount">{Math.floor(me.culture)}</span>
+                <span className="resource-rate">+{me.monuments * MONUMENT_CULTURE_PER_TURN}/turn</span>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {/* MILITARY */}
       <div className="upgrades-section section-military">
-        <h3 className="section-title">Military ({civilians} civ avail)</h3>
-        <div className="upgrade-buttons">
-          {TROOP_TYPES.map((type) => {
-            const config = TRAINING_CONFIG[type];
-            const count = me.militaryAtHome[type];
-            const canAfford = me.food >= config.food && me.gold >= config.gold;
-            const canTrain = canAfford && civilians >= config.troops;
-            return (
-              <button
-                key={type}
-                className="upgrade-btn upgrade-military"
-                onClick={() => handleSpendMilitary(type)}
-                disabled={!canTrain || controlsDisabled}
-                title={!canAfford ? 'Not enough resources' : civilians < config.troops ? `Need ${config.troops - civilians} more civilians` : ''}
-              >
-                <span className="upgrade-btn-title">Train {type.charAt(0).toUpperCase() + type.slice(1)} (CP:{COMBAT_POWER[type]})</span>
-                <span className="upgrade-btn-cost">{config.food} food + {config.gold} gold</span>
-                <span className="upgrade-btn-effect">+{config.troops} units | At home: {count}</span>
-              </button>
-            );
-          })}
+        <button className="section-header" onClick={() => toggleSection('military')}>
+          <span className={`section-chevron${expandedSections.military ? ' section-chevron-open' : ''}`}>&#9656;</span>
+          <span className="section-header-title">⚔️ Military</span>
+          <span className="section-header-summary">
+            <span className="summary-detail">{totalMilitary} troops · {civilians} civ</span>
+            {troopBreakdown && <span className="summary-breakdown">{troopBreakdown}</span>}
+          </span>
+        </button>
+
+        <div className={`section-body${expandedSections.military ? '' : ' collapsed'}`}>
+          <div className="section-body-inner">
+            <div className="upgrade-buttons">
+              {TROOP_TYPES.map((type) => {
+                const config = TRAINING_CONFIG[type];
+                const count = me.militaryAtHome[type];
+                const canAfford = me.food >= config.food && me.gold >= config.gold;
+                const canTrain = canAfford && civilians >= config.troops;
+                return (
+                  <button
+                    key={type}
+                    className="upgrade-btn upgrade-military"
+                    onClick={() => handleSpendMilitary(type)}
+                    disabled={!canTrain || controlsDisabled}
+                    title={!canAfford ? 'Not enough resources' : civilians < config.troops ? `Need ${config.troops - civilians} more civilians` : ''}
+                  >
+                    <span className="upgrade-btn-title">Train {type.charAt(0).toUpperCase() + type.slice(1)} (CP:{COMBAT_POWER[type]})</span>
+                    <span className="upgrade-btn-cost">{config.food} food + {config.gold} gold</span>
+                    <span className="upgrade-btn-effect">+{config.troops} units | At home: {count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
 
       {/* ATTACK */}
       <div className="attack-section section-attack">
-        <h3 className="section-title">Attack</h3>
-        {targets.length === 0 ? (
-          <p className="waiting-text">No targets available</p>
-        ) : (
-          <div className="target-list">
-            {targets.map((target) => (
-              <div key={target.playerId} className="target-row">
-                <div className="target-info">
-                  <span className="target-color-dot" style={{ backgroundColor: target.color }} />
-                  <span className="target-name">{target.name}</span>
-                  <span className="target-hp-small">{Math.ceil(target.hp)} HP</span>
-                </div>
-                {TROOP_TYPES.map((type) => {
-                  const count = me.militaryAtHome[type];
-                  if (count === 0) return null;
-                  return (
-                    <div key={type} className="attack-type-row">
-                      <span className="attack-type-label">{type.charAt(0).toUpperCase() + type.slice(1)} ({count})</span>
-                      <div className="attack-amounts">
-                        {(VALID_ATTACK_AMOUNTS as readonly number[]).map((amount) => (
-                          <button
-                            key={amount}
-                            className="attack-amount-btn"
-                            onClick={() => handleSendAttack(target.playerId, amount, type)}
-                            disabled={count < amount || controlsDisabled}
-                          >
-                            Send {amount}
-                          </button>
-                        ))}
-                      </div>
+        <button className="section-header" onClick={() => toggleSection('attack')}>
+          <span className={`section-chevron${expandedSections.attack ? ' section-chevron-open' : ''}`}>&#9656;</span>
+          <span className="section-header-title">🎯 Attack</span>
+          <span className="section-header-summary">
+            <span className="summary-detail">{targets.length} target{targets.length !== 1 ? 's' : ''}</span>
+            <span className="summary-detail">{totalMilitary} at home</span>
+          </span>
+        </button>
+
+        <div className={`section-body${expandedSections.attack ? '' : ' collapsed'}`}>
+          <div className="section-body-inner">
+            {targets.length === 0 ? (
+              <p className="waiting-text">No targets available</p>
+            ) : (
+              <div className="target-list">
+                {targets.map((target) => (
+                  <div key={target.playerId} className="target-row">
+                    <div className="target-info">
+                      <span className="target-color-dot" style={{ backgroundColor: target.color }} />
+                      <span className="target-name">{target.name}</span>
+                      <span className="target-hp-small">{Math.ceil(target.hp)} HP</span>
                     </div>
-                  );
-                })}
+                    {TROOP_TYPES.map((type) => {
+                      const count = me.militaryAtHome[type];
+                      if (count === 0) return null;
+                      return (
+                        <div key={type} className="attack-type-row">
+                          <span className="attack-type-label">{type.charAt(0).toUpperCase() + type.slice(1)} ({count})</span>
+                          <div className="attack-amounts">
+                            {(VALID_ATTACK_AMOUNTS as readonly number[]).map((amount) => (
+                              <button
+                                key={amount}
+                                className="attack-amount-btn"
+                                onClick={() => handleSendAttack(target.playerId, amount, type)}
+                                disabled={count < amount || controlsDisabled}
+                              >
+                                Send {amount}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {/* IN-TRANSIT INDICATOR */}
