@@ -613,6 +613,112 @@
   color: var(--color-wrong) !important;
 }
 
+.rate-positive {
+  color: var(--color-correct);
+}
+
+/* Growth multiplier */
+.growth-multiplier-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+}
+
+.growth-multiplier-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.growth-multiplier-group {
+  display: flex;
+  gap: 4px;
+}
+
+.growth-multiplier-btn {
+  padding: 6px 14px;
+  border: 2px solid var(--color-surface-light);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.growth-multiplier-btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.growth-multiplier-btn.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: white;
+}
+
+.growth-multiplier-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Food breakdown */
+.food-breakdown {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.82rem;
+}
+
+.food-breakdown-line {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+.food-breakdown-net {
+  border-top: 1px solid var(--color-surface-light);
+  padding-top: 4px;
+  font-weight: 700;
+}
+
+/* Population growth info */
+.pop-growth-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--color-surface-light);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+}
+
+.pop-growth-label {
+  font-weight: 700;
+}
+
+.pop-growth-projection {
+  font-weight: 600;
+  color: var(--color-correct);
+}
+
+.pop-growth-projection.rate-negative {
+  color: var(--color-wrong) !important;
+}
+
+/* Section explainer */
+.section-explainer {
+  margin-top: 8px;
+  font-size: 0.75rem;
+  color: var(--color-text-dim, #888);
+  line-height: 1.4;
+  font-style: italic;
+}
+
 /* Attack section */
 .attack-section {
   background: var(--color-surface);

@@ -7,6 +7,7 @@ import {
   disconnectSocket,
   startGame,
   allocateWorkers,
+  setGrowthMultiplier,
   upgradeCulture,
   buildMonument,
   spendMilitary,
@@ -110,6 +111,16 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
       return;
     }
     const result = allocateWorkers(data.roomId, data.playerId, data.farmers, data.miners, data.merchants);
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
+    broadcastRoom(io, data.roomId);
+  });
+
+  socket.on('player:set_growth_multiplier', (data) => {
+    if (!data?.roomId || !data?.playerId || data?.multiplier == null) {
+      socket.emit('room:error', { message: 'Missing required fields' });
+      return;
+    }
+    const result = setGrowthMultiplier(data.roomId, data.playerId, data.multiplier);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     broadcastRoom(io, data.roomId);
   });

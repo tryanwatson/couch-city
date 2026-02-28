@@ -6,6 +6,9 @@ import {
   RESOURCES_PER_MINER,
   GOLD_PER_MERCHANT,
   FOOD_PER_CITIZEN,
+  POP_GROWTH_RATE,
+  POP_STARVATION_RATE,
+  VALID_GROWTH_MULTIPLIERS,
   CULTURE_UPGRADE_COST_FOOD,
   CULTURE_UPGRADE_COST_GOLD,
   MONUMENT_COST_GOLD,
@@ -32,6 +35,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
   const [localFarmers, setLocalFarmers] = useState(0);
   const [localMiners, setLocalMiners] = useState(0);
   const [localMerchants, setLocalMerchants] = useState(0);
+  const [localGrowthMultiplier, setLocalGrowthMultiplier] = useState(1);
 
   useEffect(() => {
     if (roomState.combatHitPlayerIds.includes(playerId)) {
@@ -46,11 +50,17 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
       setLocalFarmers(me.farmers);
       setLocalMiners(me.miners);
       setLocalMerchants(me.merchants);
+      setLocalGrowthMultiplier(me.growthMultiplier);
     }
-  }, [me?.farmers, me?.miners, me?.merchants]);
+  }, [me?.farmers, me?.miners, me?.merchants, me?.growthMultiplier]);
 
   const handleAllocateWorkers = (farmers: number, miners: number, merchants: number) => {
     socket.emit('player:allocate_workers', { roomId: roomState.roomId, playerId, farmers, miners, merchants });
+  };
+
+  const handleSetGrowthMultiplier = (multiplier: number) => {
+    setLocalGrowthMultiplier(multiplier);
+    socket.emit('player:set_growth_multiplier', { roomId: roomState.roomId, playerId, multiplier });
   };
 
   const handleUpgradeCulture = () => {
@@ -112,11 +122,24 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
   const civilians = Math.floor(me.population) - totalMilitary;
   const totalWorkers = localFarmers + localMiners + localMerchants;
   const unassigned = civilians - totalWorkers;
-  const foodPerTurn = localFarmers * FOOD_PER_FARMER;
+
+  // Farming / food calculations
+  const foodProduced = localFarmers * FOOD_PER_FARMER;
+  const foodConsumed = Math.floor(me.population) * FOOD_PER_CITIZEN * localGrowthMultiplier;
+  const netFood = foodProduced - foodConsumed;
+  const effectiveGrowthRate = POP_GROWTH_RATE * localGrowthMultiplier;
+  const pop = Math.floor(me.population);
+  const isFed = me.food + foodProduced >= foodConsumed;
+  const projectedPop = isFed
+    ? Math.floor(pop * (1 + effectiveGrowthRate))
+    : Math.max(1, Math.floor(pop * (1 - POP_STARVATION_RATE)));
+
+  // Mining
   const resourcesPerTurn = localMiners * RESOURCES_PER_MINER;
+
+  // Trade
   const goldPerTurn = localMerchants * GOLD_PER_MERCHANT;
-  const foodConsumption = Math.floor(me.population) * FOOD_PER_CITIZEN;
-  const netFood = foodPerTurn - foodConsumption;
+
   const canAffordCultureUpgrade = me.cultureLevel < MONUMENT_COST_MULTIPLIERS.length && me.food >= CULTURE_UPGRADE_COST_FOOD && me.gold >= CULTURE_UPGRADE_COST_GOLD;
   const nextMonumentMultiplier = MONUMENT_COST_MULTIPLIERS[me.monuments] ?? 0;
   const nextMonumentGoldCost = MONUMENT_COST_GOLD * nextMonumentMultiplier;
@@ -163,7 +186,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
         <div className="stats-row">
           <div className="stat-block">
             <span className="stat-label">👥 Pop</span>
-            <span className="stat-value">{Math.floor(me.population)}</span>
+            <span className="stat-value">{pop}</span>
             <span className="stat-rate">{unassigned} idle</span>
           </div>
           <div className="stat-block">
@@ -179,90 +202,141 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
         </div>
       </div>
 
-      {/* WORKER ALLOCATION */}
+      {/* ====== FARMING SECTION ====== */}
       <div className="upgrades-section">
-        <h3 className="section-title">Workers ({unassigned} unassigned)</h3>
-        <div className="worker-list">
-          <div className="worker-row">
-            <div className="worker-info">
-              <span className="worker-label">🌾 Farmers</span>
-              <span className="worker-yield">+{FOOD_PER_FARMER}/ea</span>
-            </div>
-            <div className="worker-controls">
-              <button
-                className="worker-btn"
-                onClick={() => { const v = localFarmers - 1; setLocalFarmers(v); handleAllocateWorkers(v, localMiners, localMerchants); }}
-                disabled={localFarmers <= 0 || controlsDisabled}
-              >-</button>
-              <span className="worker-count">{localFarmers}</span>
-              <button
-                className="worker-btn"
-                onClick={() => { const v = localFarmers + 1; setLocalFarmers(v); handleAllocateWorkers(v, localMiners, localMerchants); }}
-                disabled={unassigned <= 0 || controlsDisabled}
-              >+</button>
-            </div>
-          </div>
+        <h3 className="section-title">🌾 Farming</h3>
 
-          <div className="worker-row">
-            <div className="worker-info">
-              <span className="worker-label">🪨 Miners</span>
-              <span className="worker-yield">+{RESOURCES_PER_MINER}/ea</span>
-            </div>
-            <div className="worker-controls">
-              <button
-                className="worker-btn"
-                onClick={() => { const v = localMiners - 1; setLocalMiners(v); handleAllocateWorkers(localFarmers, v, localMerchants); }}
-                disabled={localMiners <= 0 || controlsDisabled}
-              >-</button>
-              <span className="worker-count">{localMiners}</span>
-              <button
-                className="worker-btn"
-                onClick={() => { const v = localMiners + 1; setLocalMiners(v); handleAllocateWorkers(localFarmers, v, localMerchants); }}
-                disabled={unassigned <= 0 || controlsDisabled}
-              >+</button>
-            </div>
+        <div className="worker-row">
+          <div className="worker-info">
+            <span className="worker-label">Farmers</span>
+            <span className="worker-yield">+{FOOD_PER_FARMER} food/ea</span>
           </div>
-
-          <div className="worker-row">
-            <div className="worker-info">
-              <span className="worker-label">💰 Merchants</span>
-              <span className="worker-yield">+{GOLD_PER_MERCHANT}/ea</span>
-            </div>
-            <div className="worker-controls">
-              <button
-                className="worker-btn"
-                onClick={() => { const v = localMerchants - 1; setLocalMerchants(v); handleAllocateWorkers(localFarmers, localMiners, v); }}
-                disabled={localMerchants <= 0 || controlsDisabled}
-              >-</button>
-              <span className="worker-count">{localMerchants}</span>
-              <button
-                className="worker-btn"
-                onClick={() => { const v = localMerchants + 1; setLocalMerchants(v); handleAllocateWorkers(localFarmers, localMiners, v); }}
-                disabled={unassigned <= 0 || controlsDisabled}
-              >+</button>
-            </div>
+          <div className="worker-controls">
+            <button
+              className="worker-btn"
+              onClick={() => { const v = localFarmers - 1; setLocalFarmers(v); handleAllocateWorkers(v, localMiners, localMerchants); }}
+              disabled={localFarmers <= 0 || controlsDisabled}
+            >-</button>
+            <span className="worker-count">{localFarmers}</span>
+            <button
+              className="worker-btn"
+              onClick={() => { const v = localFarmers + 1; setLocalFarmers(v); handleAllocateWorkers(v, localMiners, localMerchants); }}
+              disabled={unassigned <= 0 || controlsDisabled}
+            >+</button>
           </div>
         </div>
 
-        {/* Income summary */}
-        <div className="worker-summary">
-          <div className="resource-row">
-            <span className="resource-label">🌾 Food</span>
-            <span className="resource-amount">{Math.floor(me.food)}</span>
-            <span className={`resource-rate${netFood < 0 ? ' rate-negative' : ''}`}>
-              {netFood >= 0 ? '+' : ''}{netFood}/turn
-            </span>
+        {/* Growth multiplier */}
+        <div className="growth-multiplier-row">
+          <span className="growth-multiplier-label">Growth Rate</span>
+          <div className="growth-multiplier-group">
+            {(VALID_GROWTH_MULTIPLIERS as readonly number[]).map((m) => (
+              <button
+                key={m}
+                className={`growth-multiplier-btn${localGrowthMultiplier === m ? ' active' : ''}`}
+                onClick={() => handleSetGrowthMultiplier(m)}
+                disabled={controlsDisabled}
+              >
+                {m}x
+              </button>
+            ))}
           </div>
-          <div className="resource-row">
-            <span className="resource-label">🪨 Resources</span>
-            <span className="resource-amount">{Math.floor(me.resources)}</span>
-            <span className="resource-rate">+{resourcesPerTurn}/turn</span>
+        </div>
+
+        {/* Food breakdown */}
+        <div className="food-breakdown">
+          <div className="food-breakdown-line">
+            <span>🌾 Stockpile</span>
+            <span>{Math.floor(me.food)}</span>
           </div>
-          <div className="resource-row">
-            <span className="resource-label">💰 Gold</span>
-            <span className="resource-amount">{Math.floor(me.gold)}</span>
-            <span className="resource-rate">+{goldPerTurn}/turn</span>
+          <div className="food-breakdown-line">
+            <span>+ Produced</span>
+            <span className="rate-positive">+{foodProduced}</span>
           </div>
+          <div className="food-breakdown-line">
+            <span>- Consumed ({pop} pop × {FOOD_PER_CITIZEN * localGrowthMultiplier})</span>
+            <span className="rate-negative">-{foodConsumed}</span>
+          </div>
+          <div className={`food-breakdown-line food-breakdown-net${netFood < 0 ? ' rate-negative' : ''}`}>
+            <span>= Net</span>
+            <span>{netFood >= 0 ? '+' : ''}{netFood}/turn</span>
+          </div>
+        </div>
+
+        {/* Population growth projection */}
+        <div className="pop-growth-info">
+          <span className="pop-growth-label">👥 Population</span>
+          <span className={`pop-growth-projection${!isFed ? ' rate-negative' : ''}`}>
+            {pop} → {projectedPop} next turn ({isFed ? `+${Math.round(effectiveGrowthRate * 100)}%` : `-${Math.round(POP_STARVATION_RATE * 100)}%`})
+          </span>
+        </div>
+
+        <p className="section-explainer">
+          Each citizen eats {FOOD_PER_CITIZEN} food/turn at 1x.
+          Higher multipliers consume more food but grow population faster.
+          Starving cities lose {Math.round(POP_STARVATION_RATE * 100)}% pop/turn.
+        </p>
+      </div>
+
+      {/* ====== MINING SECTION ====== */}
+      <div className="upgrades-section">
+        <h3 className="section-title">🪨 Mining</h3>
+
+        <div className="worker-row">
+          <div className="worker-info">
+            <span className="worker-label">Miners</span>
+            <span className="worker-yield">+{RESOURCES_PER_MINER} res/ea</span>
+          </div>
+          <div className="worker-controls">
+            <button
+              className="worker-btn"
+              onClick={() => { const v = localMiners - 1; setLocalMiners(v); handleAllocateWorkers(localFarmers, v, localMerchants); }}
+              disabled={localMiners <= 0 || controlsDisabled}
+            >-</button>
+            <span className="worker-count">{localMiners}</span>
+            <button
+              className="worker-btn"
+              onClick={() => { const v = localMiners + 1; setLocalMiners(v); handleAllocateWorkers(localFarmers, v, localMerchants); }}
+              disabled={unassigned <= 0 || controlsDisabled}
+            >+</button>
+          </div>
+        </div>
+
+        <div className="resource-row">
+          <span className="resource-label">🪨 Resources</span>
+          <span className="resource-amount">{Math.floor(me.resources)}</span>
+          <span className="resource-rate">+{resourcesPerTurn}/turn</span>
+        </div>
+      </div>
+
+      {/* ====== TRADE SECTION ====== */}
+      <div className="upgrades-section">
+        <h3 className="section-title">💰 Trade</h3>
+
+        <div className="worker-row">
+          <div className="worker-info">
+            <span className="worker-label">Merchants</span>
+            <span className="worker-yield">+{GOLD_PER_MERCHANT} gold/ea</span>
+          </div>
+          <div className="worker-controls">
+            <button
+              className="worker-btn"
+              onClick={() => { const v = localMerchants - 1; setLocalMerchants(v); handleAllocateWorkers(localFarmers, localMiners, v); }}
+              disabled={localMerchants <= 0 || controlsDisabled}
+            >-</button>
+            <span className="worker-count">{localMerchants}</span>
+            <button
+              className="worker-btn"
+              onClick={() => { const v = localMerchants + 1; setLocalMerchants(v); handleAllocateWorkers(localFarmers, localMiners, v); }}
+              disabled={unassigned <= 0 || controlsDisabled}
+            >+</button>
+          </div>
+        </div>
+
+        <div className="resource-row">
+          <span className="resource-label">💰 Gold</span>
+          <span className="resource-amount">{Math.floor(me.gold)}</span>
+          <span className="resource-rate">+{goldPerTurn}/turn</span>
         </div>
       </div>
 

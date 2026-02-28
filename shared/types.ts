@@ -16,6 +16,7 @@ export interface CityPlayerInfo {
   farmers: number;    // worker allocation: food producers
   miners: number;     // worker allocation: resource producers
   merchants: number;  // worker allocation: gold producers
+  growthMultiplier: number; // 1/2/3 — scales food cost and growth rate
   militaryAtHome: Record<TroopType, number>;
   population: number;
   culture: number;       // passive score from monuments (display/historical)
@@ -77,6 +78,7 @@ export interface ServerCityPlayer {
   farmers: number;
   miners: number;
   merchants: number;
+  growthMultiplier: number;
   militaryAtHome: Record<TroopType, number>;
   population: number;
   culture: number;

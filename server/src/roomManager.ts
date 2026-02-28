@@ -10,6 +10,7 @@ import {
   FOOD_PER_CITIZEN,
   POP_GROWTH_RATE,
   POP_STARVATION_RATE,
+  VALID_GROWTH_MULTIPLIERS,
   INITIAL_POPULATION,
   CULTURE_UPGRADE_COST_FOOD,
   CULTURE_UPGRADE_COST_GOLD,
@@ -153,6 +154,7 @@ export function addPlayer(
     farmers: 0,
     miners: 0,
     merchants: 0,
+    growthMultiplier: 1,
     militaryAtHome: { ...ZERO_MILITARY },
     population: 0,
     culture: 0,
@@ -223,6 +225,7 @@ export function startGame(
     player.farmers = 0;
     player.miners = 0;
     player.merchants = 0;
+    player.growthMultiplier = 1;
     player.militaryAtHome = { ...INITIAL_MILITARY };
     player.population = INITIAL_POPULATION;
     player.culture = 0;
@@ -291,12 +294,13 @@ function runUpdatePhase(room: ServerRoom): void {
   // Food consumption & population growth/starvation
   for (const player of alivePlayers) {
     const pop = Math.floor(player.population);
-    const foodNeeded = pop * FOOD_PER_CITIZEN;
+    const foodNeeded = pop * FOOD_PER_CITIZEN * player.growthMultiplier;
+    const growthRate = POP_GROWTH_RATE * player.growthMultiplier;
 
     if (player.food >= foodNeeded) {
-      // Fed: consume food, then grow 20%
+      // Fed: consume food, then grow by multiplied rate
       player.food -= foodNeeded;
-      player.population = Math.floor(pop * (1 + POP_GROWTH_RATE));
+      player.population = Math.floor(pop * (1 + growthRate));
     } else {
       // Starving: consume all remaining food, population shrinks 20%
       player.food = 0;
@@ -568,6 +572,27 @@ export function allocateWorkers(
   return { room };
 }
 
+export function setGrowthMultiplier(
+  roomId: string,
+  playerId: string,
+  multiplier: number
+): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
+  const room = rooms.get(roomId);
+  if (!room) return { error: 'Room not found' };
+
+  const guard = guardAction(room, playerId);
+  if (typeof guard === 'string') return { error: guard };
+  const player = guard;
+
+  if (!(VALID_GROWTH_MULTIPLIERS as readonly number[]).includes(multiplier)) {
+    return { error: 'Invalid growth multiplier' };
+  }
+
+  player.growthMultiplier = multiplier;
+
+  return { room };
+}
+
 export function upgradeCulture(
   roomId: string,
   playerId: string
@@ -737,6 +762,7 @@ export function resetRoom(
     player.farmers = 0;
     player.miners = 0;
     player.merchants = 0;
+    player.growthMultiplier = 1;
     player.militaryAtHome = { ...ZERO_MILITARY };
     player.population = 0;
     player.culture = 0;
@@ -766,6 +792,7 @@ export function sanitizeState(room: ServerRoom): RoomStatePayload {
     farmers: p.farmers,
     miners: p.miners,
     merchants: p.merchants,
+    growthMultiplier: p.growthMultiplier,
     militaryAtHome: p.militaryAtHome,
     population: p.population,
     culture: p.culture,
