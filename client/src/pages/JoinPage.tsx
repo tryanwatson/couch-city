@@ -34,10 +34,10 @@ export default function JoinPage() {
       socket.emit(
         'player:join_room',
         { roomId: savedRoom, playerId, name: savedName },
-        (result: { ok: boolean; playerId?: string; error?: string }) => {
+        (result: { ok: boolean; playerId?: string; cityName?: string; error?: string }) => {
           if (result.ok) {
             setJoined(true);
-            setPlayerName(savedName);
+            setPlayerName(result.cityName || savedName);
           } else {
             localStorage.removeItem(ROOM_ID_KEY);
             localStorage.removeItem(NAME_KEY);
@@ -53,12 +53,13 @@ export default function JoinPage() {
     socket.emit(
       'player:join_room',
       { roomId, playerId, name },
-      (result: { ok: boolean; playerId?: string; error?: string }) => {
+      (result: { ok: boolean; playerId?: string; cityName?: string; error?: string }) => {
         if (result.ok) {
+          const displayName = result.cityName || name;
           setJoined(true);
-          setPlayerName(name);
+          setPlayerName(displayName);
           localStorage.setItem(ROOM_ID_KEY, roomId);
-          localStorage.setItem(NAME_KEY, name);
+          localStorage.setItem(NAME_KEY, displayName);
         } else {
           setJoinError(result.error || 'Failed to join');
         }

@@ -1,7 +1,7 @@
 // Economy — initial resource amounts
-export const INITIAL_FOOD = 50;
-export const INITIAL_RESOURCES = 50;
-export const INITIAL_GOLD = 0;
+export const INITIAL_FOOD = 100;
+export const INITIAL_RESOURCES = 100;
+export const INITIAL_GOLD = 100;
 
 // Worker yields (per turn per worker)
 export const FOOD_PER_FARMER = 3;
@@ -97,6 +97,76 @@ export const FIELD_COMBAT_ADVANCE_FRAC = 0.2; // 1000ms — winner advances to d
 
 // Turn-based timing
 export const RESOLVING_PHASE_DURATION_MS = 5000; // client-side animation duration
+
+// City name generation
+export const CITY_SUFFIXES = [
+  "ville",
+  "opolis",
+  "burg",
+  "town",
+  "shire",
+  "land",
+  "grad",
+  "stan",
+  "topia",
+  "ford",
+  "haven",
+  "dale",
+  "worth",
+  "chester",
+] as const;
+
+export const CITY_TEMPLATES = [
+  "New {name} City",
+  "Fort {name}",
+  "Port {name}",
+  "San {name}",
+  "Mount {name}",
+  "{name} Springs",
+  "{name} Heights",
+  "{name} Kingdom",
+  "Greater {name}",
+  "East {name}",
+  "Lake {name}",
+  "{name} Falls",
+  "{name} Bay",
+  "St. {name}",
+  "Cape {name}",
+  "Isle of {name}",
+  "North {name}",
+  "{name} Creek",
+  "Old {name}",
+  "{name} Republic",
+] as const;
+
+export function generateCityName(
+  rawName: string,
+  existingNames?: string[],
+): string {
+  const existing = new Set((existingNames ?? []).map((n) => n.toLowerCase()));
+  const allOptions: string[] = [];
+
+  for (const suffix of CITY_SUFFIXES) {
+    allOptions.push(rawName + suffix);
+  }
+  for (const template of CITY_TEMPLATES) {
+    allOptions.push(template.replace("{name}", rawName));
+  }
+
+  // Fisher-Yates shuffle
+  for (let i = allOptions.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [allOptions[i], allOptions[j]] = [allOptions[j], allOptions[i]];
+  }
+
+  for (const candidate of allOptions) {
+    if (!existing.has(candidate.toLowerCase())) {
+      return candidate;
+    }
+  }
+
+  return rawName + " City " + Math.floor(Math.random() * 100);
+}
 
 // City colors — assigned in join order
 export const PLAYER_COLORS = [

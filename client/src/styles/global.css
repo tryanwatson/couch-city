@@ -23,6 +23,28 @@
   --color-d-hover: #27ae60;
   --color-correct: #2ecc71;
   --color-wrong: #e74c3c;
+
+  /* Section colors */
+  --color-farming-bg: #162b1b;
+  --color-farming-row: #1e3824;
+  --color-farming-accent: #4a9960;
+
+  --color-mining-bg: #1c2129;
+  --color-mining-row: #252b34;
+  --color-mining-accent: #6b7a8d;
+
+  --color-trade-bg: #272012;
+  --color-trade-row: #332a1a;
+  --color-trade-accent: #c49a3c;
+
+  --color-culture-bg: #1f162b;
+  --color-culture-row: #291e38;
+  --color-culture-accent: #9668c4;
+
+  --color-military-bg: #2b161c;
+  --color-military-row: #381e26;
+  --color-military-accent: #c84555;
+
   --font-main: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --radius: 12px;
   --radius-sm: 8px;

@@ -17,6 +17,7 @@ import {
   sanitizeState,
   setBroadcastFn,
 } from './roomManager';
+import { generateCityName } from '../../shared/constants';
 
 function broadcastRoom(io: Server, roomId: string): void {
   const room = getRoom(roomId);
@@ -86,22 +87,35 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     }
 
     const playerId = data.playerId || ('p_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36));
-    const name = data.name.trim().substring(0, 20);
+    const rawName = data.name.trim().substring(0, 12);
 
-    if (!name) {
+    if (!rawName) {
       callback({ ok: false, error: 'Name cannot be empty' });
       return;
     }
 
-    const result = addPlayer(data.roomId, playerId, name, socket.id);
+    // Reconnecting players keep their existing city name; new players get one generated
+    const room = getRoom(data.roomId);
+    const existingPlayer = room?.players.get(playerId);
+    let cityName: string;
+    if (existingPlayer) {
+      cityName = existingPlayer.name;
+    } else {
+      const existingNames = room
+        ? Array.from(room.players.values()).map(p => p.name)
+        : [];
+      cityName = generateCityName(rawName, existingNames);
+    }
+
+    const result = addPlayer(data.roomId, playerId, cityName, socket.id);
     if (result.error) {
       callback({ ok: false, error: result.error });
       return;
     }
 
     socket.join(data.roomId);
-    console.log(`Player "${name}" (${playerId}) joined room ${data.roomId}`);
-    callback({ ok: true, playerId });
+    console.log(`Player "${cityName}" (${playerId}) joined room ${data.roomId}`);
+    callback({ ok: true, playerId, cityName });
     broadcastRoom(io, data.roomId);
   });
 

@@ -123,7 +123,6 @@ export function addPlayer(
     existing.socketId = socketId;
     existing.connected = true;
     existing.lastSeen = Date.now();
-    existing.name = name;
     return { room };
   }
 

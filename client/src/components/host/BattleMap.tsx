@@ -51,6 +51,27 @@ const SPRITE_SHEETS: Record<TroopType, SpriteSheetConfig> = {
   },
 };
 
+function hexToHue(hex: string): number {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (max === min) return 0;
+  const d = max - min;
+  let h: number;
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+  else if (max === g) h = ((b - r) / d + 2) * 60;
+  else h = ((r - g) / d + 4) * 60;
+  return h;
+}
+
+const SOURCE_BLUE_HUE = 207; // hue of #3498db
+
+function hueRotationForColor(targetHex: string): number {
+  return hexToHue(targetHex) - SOURCE_BLUE_HUE;
+}
+
 const TROOP_DISPLAY_SIZE = 64;
 const ATTACK_STANDOFF = 0.09;
 const ATTACK_LINGER_MS = 5000;
@@ -98,6 +119,7 @@ function TroopSprite({
   facingLeft,
   troopType,
   opacity = 1,
+  playerColor,
 }: {
   pos: { x: number; y: number };
   units: number;
@@ -107,6 +129,7 @@ function TroopSprite({
   facingLeft: boolean;
   troopType: TroopType;
   opacity?: number;
+  playerColor?: string;
 }) {
   const sheet = SPRITE_SHEETS[troopType];
   const cx = pos.x * 1000;
@@ -157,9 +180,16 @@ function TroopSprite({
     </g>
   ));
 
+  const hueRotation = playerColor ? hueRotationForColor(playerColor) : 0;
+  const filterUrl = Math.abs(hueRotation) > 1
+    ? `url(#recolor-${playerColor!.replace('#', '')})`
+    : undefined;
+
   return (
     <g opacity={opacity}>
-      {sprites}
+      <g filter={filterUrl}>
+        {sprites}
+      </g>
       <text
         x={cx}
         y={cy - clusterRadius - TROOP_DISPLAY_SIZE / 2 - 4}
@@ -295,7 +325,7 @@ function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex
       {/* Stats box */}
       {(() => {
         const hasCulture = player.culture > 0;
-        const BOX_W = 150;
+        const BOX_W = 180;
         const BOX_H = hasCulture ? 72 : 42;
         const BOX_X = cx - BOX_W / 2;
         const BOX_Y = cy + 66;
@@ -316,7 +346,7 @@ function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex
               x={cx}
               y={BOX_Y + 18}
               textAnchor="middle"
-              fontSize={16}
+              fontSize={14}
               fontWeight="700"
               fill={player.color}
             >
@@ -380,6 +410,22 @@ export default function BattleMap({ players, troopsInTransit, animate, subPhase 
     () => new Map(players.map((p) => [p.playerId, p])),
     [players],
   );
+
+  const playerColorFilters = useMemo(() => {
+    const seen = new Set<string>();
+    return players
+      .filter((p) => {
+        if (seen.has(p.color)) return false;
+        seen.add(p.color);
+        return true;
+      })
+      .map((p) => ({
+        color: p.color,
+        filterId: `recolor-${p.color.replace('#', '')}`,
+        hueRotation: hueRotationForColor(p.color),
+      }))
+      .filter((f) => Math.abs(f.hueRotation) > 1);
+  }, [players]);
 
   const [troopPositions, setTroopPositions] = useState<Map<string, { x: number; y: number; facingLeft: boolean; isAttacking: boolean; isIdle: boolean; opacity: number; displayUnits: number }>>(
     new Map(),
@@ -562,6 +608,14 @@ export default function BattleMap({ players, troopsInTransit, animate, subPhase 
       xmlns="http://www.w3.org/2000/svg"
       preserveAspectRatio="xMidYMid meet"
     >
+      <defs>
+        {playerColorFilters.map(({ filterId, hueRotation }) => (
+          <filter key={filterId} id={filterId} colorInterpolationFilters="sRGB">
+            <feColorMatrix type="hueRotate" values={String(hueRotation)} />
+          </filter>
+        ))}
+      </defs>
+
       <image href="/map-background.png" x="0" y="0" width="1000" height="1000" />
 
       {/* Attack trail lines */}
@@ -585,6 +639,7 @@ export default function BattleMap({ players, troopsInTransit, animate, subPhase 
             facingLeft={posData.facingLeft}
             troopType={troop.troopType}
             opacity={posData.opacity}
+            playerColor={playerMap.get(troop.attackerPlayerId)?.color}
           />
         ))}
 
@@ -601,6 +656,7 @@ export default function BattleMap({ players, troopsInTransit, animate, subPhase 
             isIdle={false}
             facingLeft={lingering.facingLeft}
             troopType={lingering.troop.troopType}
+            playerColor={playerMap.get(lingering.troop.attackerPlayerId)?.color}
           />
         ))}
 

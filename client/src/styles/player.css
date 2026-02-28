@@ -481,6 +481,122 @@
   font-weight: 600;
 }
 
+/* =========================================
+   Section Color Themes
+   ========================================= */
+
+/* --- Farming (Green) --- */
+.section-farming {
+  background: var(--color-farming-bg);
+  border-left: 3px solid var(--color-farming-accent);
+}
+.section-farming .section-title { color: var(--color-farming-accent); }
+.section-farming .worker-row,
+.section-farming .resource-row,
+.section-farming .pop-growth-info { background: var(--color-farming-row); }
+.section-farming .worker-btn {
+  border-color: var(--color-farming-accent);
+  background: rgba(74, 153, 96, 0.15);
+}
+.section-farming .worker-btn:hover:not(:disabled) {
+  background: rgba(74, 153, 96, 0.35);
+}
+.section-farming .growth-multiplier-btn:hover:not(:disabled) {
+  border-color: var(--color-farming-accent);
+  background: rgba(74, 153, 96, 0.1);
+}
+.section-farming .growth-multiplier-btn.active {
+  border-color: var(--color-farming-accent);
+  background: var(--color-farming-accent);
+}
+.section-farming .food-breakdown-net { border-color: var(--color-farming-row); }
+
+/* --- Mining (Grey) --- */
+.section-mining {
+  background: var(--color-mining-bg);
+  border-left: 3px solid var(--color-mining-accent);
+}
+.section-mining .section-title { color: var(--color-mining-accent); }
+.section-mining .worker-row,
+.section-mining .resource-row { background: var(--color-mining-row); }
+.section-mining .worker-btn {
+  border-color: var(--color-mining-accent);
+  background: rgba(107, 122, 141, 0.15);
+}
+.section-mining .worker-btn:hover:not(:disabled) {
+  background: rgba(107, 122, 141, 0.35);
+}
+
+/* --- Trade (Gold) --- */
+.section-trade {
+  background: var(--color-trade-bg);
+  border-left: 3px solid var(--color-trade-accent);
+}
+.section-trade .section-title { color: var(--color-trade-accent); }
+.section-trade .worker-row,
+.section-trade .resource-row { background: var(--color-trade-row); }
+.section-trade .worker-btn {
+  border-color: var(--color-trade-accent);
+  background: rgba(196, 154, 60, 0.15);
+}
+.section-trade .worker-btn:hover:not(:disabled) {
+  background: rgba(196, 154, 60, 0.35);
+}
+
+/* --- Culture (Purple) --- */
+.section-culture {
+  background: var(--color-culture-bg);
+  border-left: 3px solid var(--color-culture-accent);
+}
+.section-culture .section-title { color: var(--color-culture-accent); }
+.section-culture .worker-row,
+.section-culture .resource-row { background: var(--color-culture-row); }
+.section-culture .upgrade-science {
+  background: rgba(150, 104, 196, 0.2);
+  border-color: var(--color-culture-accent);
+}
+.section-culture .upgrade-science:hover:not(:disabled) {
+  background: rgba(150, 104, 196, 0.35);
+}
+
+.upgrade-monument {
+  background: rgba(150, 104, 196, 0.2);
+  border: 2px solid var(--color-culture-accent);
+  color: var(--color-text);
+}
+.upgrade-monument:hover:not(:disabled) {
+  background: rgba(150, 104, 196, 0.35);
+}
+
+/* --- Military (Red) --- */
+.section-military {
+  background: var(--color-military-bg);
+  border-left: 3px solid var(--color-military-accent);
+}
+.section-military .section-title { color: var(--color-military-accent); }
+.section-military .upgrade-military {
+  background: rgba(200, 69, 85, 0.2);
+  border-color: var(--color-military-accent);
+}
+.section-military .upgrade-military:hover:not(:disabled) {
+  background: rgba(200, 69, 85, 0.35);
+}
+
+/* --- Attack (Red) --- */
+.section-attack {
+  background: var(--color-military-bg);
+  border-left: 3px solid var(--color-military-accent);
+}
+.section-attack .section-title { color: var(--color-military-accent); }
+.section-attack .target-row { background: var(--color-military-row); }
+.section-attack .attack-amount-btn {
+  background: rgba(200, 69, 85, 0.15);
+  border-color: var(--color-military-accent);
+}
+.section-attack .attack-amount-btn:hover:not(:disabled) {
+  background: rgba(200, 69, 85, 0.35);
+}
+
 /* Resource investment rows */
 .resource-list {
   display: flex;

@@ -203,7 +203,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
       </div>
 
       {/* ====== FARMING SECTION ====== */}
-      <div className="upgrades-section">
+      <div className="upgrades-section section-farming">
         <h3 className="section-title">🌾 Farming</h3>
 
         <div className="worker-row">
@@ -279,7 +279,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
       </div>
 
       {/* ====== MINING SECTION ====== */}
-      <div className="upgrades-section">
+      <div className="upgrades-section section-mining">
         <h3 className="section-title">🪨 Mining</h3>
 
         <div className="worker-row">
@@ -310,7 +310,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
       </div>
 
       {/* ====== TRADE SECTION ====== */}
-      <div className="upgrades-section">
+      <div className="upgrades-section section-trade">
         <h3 className="section-title">💰 Trade</h3>
 
         <div className="worker-row">
@@ -341,7 +341,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
       </div>
 
       {/* CULTURE & MONUMENTS */}
-      <div className="upgrades-section">
+      <div className="upgrades-section section-culture">
         <h3 className="section-title">Culture & Monuments</h3>
         <div className="upgrade-buttons">
           <button
@@ -356,7 +356,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           </button>
 
           <button
-            className="upgrade-btn upgrade-military"
+            className="upgrade-btn upgrade-monument"
             onClick={handleBuildMonument}
             disabled={!canBuildMonument || controlsDisabled}
             title={
@@ -384,7 +384,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
       </div>
 
       {/* MILITARY */}
-      <div className="upgrades-section">
+      <div className="upgrades-section section-military">
         <h3 className="section-title">Military ({civilians} civ avail)</h3>
         <div className="upgrade-buttons">
           {TROOP_TYPES.map((type) => {
@@ -410,7 +410,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
       </div>
 
       {/* ATTACK */}
-      <div className="attack-section">
+      <div className="attack-section section-attack">
         <h3 className="section-title">Attack</h3>
         {targets.length === 0 ? (
           <p className="waiting-text">No targets available</p>

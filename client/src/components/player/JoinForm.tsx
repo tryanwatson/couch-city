@@ -52,8 +52,8 @@ export default function JoinForm({ onJoin, error }: JoinFormProps) {
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Enter your name"
-            maxLength={20}
+            placeholder="e.g. Ryan"
+            maxLength={12}
             autoComplete="off"
           />
         </div>
