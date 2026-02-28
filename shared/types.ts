@@ -55,6 +55,7 @@ export interface RoomStatePayload {
   turnNumber: number;
   players: CityPlayerInfo[];
   troopsInTransit: TroopGroup[];
+  occupyingTroops: TroopGroup[];
   combatHitPlayerIds: string[];
   winnerPlayerId: string | null;
 }
@@ -99,6 +100,7 @@ export interface ServerRoom {
   turnNumber: number;
   players: Map<string, ServerCityPlayer>;
   troopsInTransit: TroopGroup[];
+  occupyingTroops: TroopGroup[];
   combatHitPlayerIds: string[];
   winnerPlayerId: string | null;
 }

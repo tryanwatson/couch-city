@@ -93,6 +93,7 @@ export default function HostPage() {
             <BattleMap
               players={roomState.players}
               troopsInTransit={roomState.troopsInTransit}
+              occupyingTroops={roomState.occupyingTroops ?? []}
               animate={true}
               subPhase={roomState.subPhase}
               turnNumber={roomState.turnNumber}
@@ -116,6 +117,7 @@ export default function HostPage() {
               <BattleMap
                 players={roomState.players}
                 troopsInTransit={[]}
+                occupyingTroops={[]}
                 animate={false}
               />
               <div className="gameover-overlay">

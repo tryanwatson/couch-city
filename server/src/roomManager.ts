@@ -24,7 +24,7 @@ import {
   TROOP_TYPES,
   COMBAT_POWER,
   TRAINING_CONFIG,
-  DAMAGE_PER_CP,
+  SIEGE_DAMAGE_PER_CP,
   INITIAL_HP,
   MAX_HP,
   HP_REGEN_PER_TURN,
@@ -89,6 +89,7 @@ export function createRoom(hostSocketId: string): ServerRoom {
     turnNumber: 0,
     players: new Map(),
     troopsInTransit: [],
+    occupyingTroops: [],
     combatHitPlayerIds: [],
     winnerPlayerId: null,
   };
@@ -240,6 +241,7 @@ export function startGame(
   room.subPhase = 'planning';
   room.turnNumber = 1;
   room.troopsInTransit = [];
+  room.occupyingTroops = [];
   room.winnerPlayerId = null;
 
   return { room };
@@ -313,6 +315,10 @@ function runUpdatePhase(room: ServerRoom): void {
     player.hp = Math.min(player.maxHp, player.hp + HP_REGEN_PER_TURN);
   }
 
+  // Existing occupying troops fight garrison and deal siege damage
+  room.combatHitPlayerIds = [];
+  resolveSiege(room);
+
   // Advance all troops by 1 turn
   for (const tg of room.troopsInTransit) {
     tg.turnsRemaining = Math.max(0, tg.turnsRemaining - 1);
@@ -323,9 +329,10 @@ function runUpdatePhase(room: ServerRoom): void {
 
   // Resolve arrived troop groups (turnsRemaining === 0, skip field combat casualties)
   const arrived = room.troopsInTransit.filter(tg => tg.turnsRemaining <= 0 && tg.units > 0);
-  // Keep arrived troops in transit for resolving broadcast (removed in setTimeout below)
-  room.combatHitPlayerIds = arrived.map(tg => tg.targetPlayerId);
   for (const tg of arrived) {
+    if (!room.combatHitPlayerIds.includes(tg.targetPlayerId) && tg.attackerPlayerId !== tg.targetPlayerId) {
+      room.combatHitPlayerIds.push(tg.targetPlayerId);
+    }
     resolveCombat(room, tg);
   }
 
@@ -473,6 +480,15 @@ function detectFieldCollisions(room: ServerRoom): void {
 // ============================================================
 
 function resolveCombat(room: ServerRoom, tg: TroopGroup): void {
+  // Troops returning home — add to garrison
+  if (tg.attackerPlayerId === tg.targetPlayerId) {
+    const player = room.players.get(tg.attackerPlayerId);
+    if (player && player.alive) {
+      player.militaryAtHome[tg.troopType] += tg.units;
+    }
+    return;
+  }
+
   const defender = room.players.get(tg.targetPlayerId);
   if (!defender || !defender.alive) return;
 
@@ -509,19 +525,130 @@ function resolveCombat(room: ServerRoom, tg: TroopGroup): void {
   const attackerLosses = Math.ceil(defenderTotalCP / cpPerAttacker);
   const survivingUnits = tg.units - attackerLosses;
 
-  const damage = survivingUnits * cpPerAttacker * DAMAGE_PER_CP;
-  defender.hp -= damage;
-
-  if (defender.hp <= 0) {
-    defender.hp = 0;
-    defender.alive = false;
-    for (const type of TROOP_TYPES) {
-      defender.militaryAtHome[type] = 0;
-    }
-    room.troopsInTransit = room.troopsInTransit.filter(
-      t => t.attackerPlayerId !== defender.playerId
+  if (survivingUnits > 0) {
+    // Survivors become occupying troops (no instant damage)
+    const existing = room.occupyingTroops.find(
+      occ => occ.attackerPlayerId === tg.attackerPlayerId
+        && occ.targetPlayerId === tg.targetPlayerId
+        && occ.troopType === tg.troopType
     );
+    if (existing) {
+      existing.units += survivingUnits;
+    } else {
+      room.occupyingTroops.push({
+        id: tg.id,
+        attackerPlayerId: tg.attackerPlayerId,
+        targetPlayerId: tg.targetPlayerId,
+        troopType: tg.troopType,
+        units: survivingUnits,
+        turnsRemaining: 0,
+        totalTurns: 0,
+      });
+    }
   }
+}
+
+function resolveSiege(room: ServerRoom): void {
+  // Group occupying troops by target city
+  const occupiersByTarget = new Map<string, TroopGroup[]>();
+  for (const occ of room.occupyingTroops) {
+    const list = occupiersByTarget.get(occ.targetPlayerId) ?? [];
+    list.push(occ);
+    occupiersByTarget.set(occ.targetPlayerId, list);
+  }
+
+  for (const [targetId, occupiers] of occupiersByTarget) {
+    const defender = room.players.get(targetId);
+    if (!defender || !defender.alive) continue;
+
+    // Each occupying group fights the garrison independently
+    for (const occ of occupiers) {
+      const cpPerOcc = COMBAT_POWER[occ.troopType];
+      const occCP = occ.units * cpPerOcc;
+
+      let garrisonCP = 0;
+      for (const type of TROOP_TYPES) {
+        garrisonCP += defender.militaryAtHome[type] * COMBAT_POWER[type];
+      }
+
+      if (garrisonCP > 0) {
+        if (garrisonCP >= occCP) {
+          // Garrison wins or ties — occupier wiped out
+          if (garrisonCP === occCP) {
+            for (const type of TROOP_TYPES) {
+              defender.militaryAtHome[type] = 0;
+            }
+          } else {
+            const lossRatio = occCP / garrisonCP;
+            for (const type of TROOP_TYPES) {
+              defender.militaryAtHome[type] -= Math.floor(
+                defender.militaryAtHome[type] * lossRatio
+              );
+            }
+          }
+          occ.units = 0;
+          continue;
+        }
+
+        // Occupier wins — garrison wiped out, occupier takes losses
+        for (const type of TROOP_TYPES) {
+          defender.militaryAtHome[type] = 0;
+        }
+        const losses = Math.ceil(garrisonCP / cpPerOcc);
+        occ.units -= losses;
+      }
+
+      // Surviving occupiers deal siege damage
+      if (occ.units > 0) {
+        const siegeDmg = occ.units * cpPerOcc * SIEGE_DAMAGE_PER_CP;
+        defender.hp -= siegeDmg;
+        if (!room.combatHitPlayerIds.includes(targetId)) {
+          room.combatHitPlayerIds.push(targetId);
+        }
+      }
+    }
+
+    // Check if city dies from siege
+    if (defender.hp <= 0) {
+      defender.hp = 0;
+      defender.alive = false;
+      for (const type of TROOP_TYPES) {
+        defender.militaryAtHome[type] = 0;
+      }
+      // Remove transit troops owned by dead player
+      room.troopsInTransit = room.troopsInTransit.filter(
+        t => t.attackerPlayerId !== defender.playerId
+      );
+      // Remove occupying troops owned by dead player at other cities
+      room.occupyingTroops = room.occupyingTroops.filter(
+        occ => occ.attackerPlayerId !== defender.playerId
+      );
+      // Surviving occupiers at this city travel home
+      const occupiersHere = room.occupyingTroops.filter(
+        occ => occ.targetPlayerId === targetId && occ.units > 0
+      );
+      for (const occ of occupiersHere) {
+        room.troopsInTransit.push({
+          id: occ.id + '-return',
+          attackerPlayerId: occ.attackerPlayerId,
+          targetPlayerId: occ.attackerPlayerId,
+          troopType: occ.troopType,
+          units: occ.units,
+          turnsRemaining: TROOP_TRAVEL_TURNS,
+          totalTurns: TROOP_TRAVEL_TURNS,
+          startX: defender.x,
+          startY: defender.y,
+        });
+      }
+      // Remove all occupying troops targeting dead city
+      room.occupyingTroops = room.occupyingTroops.filter(
+        occ => occ.targetPlayerId !== targetId
+      );
+    }
+  }
+
+  // Clean up dead occupier groups
+  room.occupyingTroops = room.occupyingTroops.filter(occ => occ.units > 0);
 }
 
 // ============================================================
@@ -749,6 +876,7 @@ export function resetRoom(
   room.subPhase = null;
   room.turnNumber = 0;
   room.troopsInTransit = [];
+  room.occupyingTroops = [];
   room.winnerPlayerId = null;
 
   for (const [, player] of room.players) {
@@ -811,6 +939,7 @@ export function sanitizeState(room: ServerRoom): RoomStatePayload {
     turnNumber: room.turnNumber,
     players,
     troopsInTransit: room.troopsInTransit,
+    occupyingTroops: room.occupyingTroops,
     combatHitPlayerIds: room.combatHitPlayerIds,
     winnerPlayerId: room.winnerPlayerId,
   };

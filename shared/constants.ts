@@ -77,7 +77,7 @@ export const HP_REGEN_PER_TURN = 2;
 
 // Combat
 export const TROOP_TRAVEL_TURNS = 4; // turns for troops to reach target (5 positions: home,1,2,3,enemy)
-export const DAMAGE_PER_CP = 5; // HP damage per surviving combat power
+export const SIEGE_DAMAGE_PER_CP = 1; // HP damage per CP per turn from occupying troops
 export const VALID_ATTACK_AMOUNTS = [5, 10, 25] as const;
 
 // Visual radius of a troop group in normalized (0–1) map coordinates

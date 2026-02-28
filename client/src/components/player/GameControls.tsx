@@ -54,7 +54,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
   useEffect(() => {
     if (roomState.combatHitPlayerIds.includes(playerId)) {
       setHit(true);
-      const id = setTimeout(() => setHit(false), 800);
+      const id = setTimeout(() => setHit(false), 1200);
       return () => clearTimeout(id);
     }
   }, [roomState.combatHitPlayerIds, playerId]);
@@ -191,12 +191,6 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           />
           <span className="hp-label">{Math.ceil(me.hp)} / {me.maxHp} HP</span>
         </div>
-      </div>
-
-      {/* CULTURE PROGRESS */}
-      <div className="culture-bar-wrapper">
-        <div className="culture-bar-fill" style={{ width: `${culturePct}%` }} />
-        <span className="culture-label">🏛️ Culture {Math.floor(me.culture)} / {CULTURE_WIN_THRESHOLD}</span>
       </div>
 
       {/* STATS HEADER */}
@@ -388,6 +382,12 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           </span>
         </button>
 
+        {/* Culture progress bar — always visible */}
+        <div className="culture-bar-wrapper">
+          <div className="culture-bar-fill" style={{ width: `${culturePct}%` }} />
+          <span className="culture-label">🏛️ {Math.floor(me.culture)} / {CULTURE_WIN_THRESHOLD}</span>
+        </div>
+
         <div className={`section-body${expandedSections.culture ? '' : ' collapsed'}`}>
           <div className="section-body-inner">
             <div className="upgrade-buttons">
@@ -536,6 +536,42 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           })}
         </div>
       )}
+
+      {/* SIEGE STATUS */}
+      {(() => {
+        const mySieges = (roomState.occupyingTroops ?? []).filter(occ => occ.attackerPlayerId === playerId);
+        const siegesOnMe = (roomState.occupyingTroops ?? []).filter(occ => occ.targetPlayerId === playerId);
+        return (
+          <>
+            {mySieges.length > 0 && (
+              <div className="transit-indicator">
+                <div className="transit-row" style={{ fontWeight: 700 }}>Your Siege Forces</div>
+                {mySieges.map(occ => {
+                  const targetName = roomState.players.find(p => p.playerId === occ.targetPlayerId)?.name ?? '?';
+                  return (
+                    <div key={occ.id} className="transit-row">
+                      {occ.units} {occ.troopType} besieging {targetName} ({occ.units * COMBAT_POWER[occ.troopType]} dmg/turn)
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {siegesOnMe.length > 0 && (
+              <div className="transit-indicator" style={{ borderColor: '#e74c3c' }}>
+                <div className="transit-row" style={{ fontWeight: 700, color: '#e74c3c' }}>Under Siege!</div>
+                {siegesOnMe.map(occ => {
+                  const attackerName = roomState.players.find(p => p.playerId === occ.attackerPlayerId)?.name ?? '?';
+                  return (
+                    <div key={occ.id} className="transit-row" style={{ color: '#e74c3c' }}>
+                      {occ.units} {occ.troopType} from {attackerName} ({occ.units * COMBAT_POWER[occ.troopType]} dmg/turn)
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* END TURN BUTTON */}
       <div className="end-turn-section">

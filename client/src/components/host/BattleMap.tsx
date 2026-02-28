@@ -79,6 +79,7 @@ const ATTACK_LINGER_MS = 5000;
 interface BattleMapProps {
   players: CityPlayerInfo[];
   troopsInTransit: TroopGroup[];
+  occupyingTroops: TroopGroup[];
   animate: boolean;
   subPhase?: PlayingSubPhase | null;
   turnNumber?: number;
@@ -209,7 +210,7 @@ function TroopSprite({
 
 const CASTLE_IMAGES = ['/red_castle_1.png', '/blue_castle_1.png', '/green_castle_1.png'];
 
-function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex: number }) {
+function CityNode({ player, playerIndex, isUnderSiege }: { player: CityPlayerInfo; playerIndex: number; isUnderSiege: boolean }) {
   const cx = player.x * 1000;
   const cy = player.y * 1000;
   const hpPct = player.maxHp > 0 ? player.hp / player.maxHp : 0;
@@ -219,6 +220,21 @@ function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex
 
   return (
     <g opacity={isDead ? 0.35 : 1}>
+      {/* Siege indicator ring */}
+      {isUnderSiege && !isDead && (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={80}
+          fill="none"
+          stroke="#e74c3c"
+          strokeWidth={3}
+          strokeDasharray="12 8"
+          opacity={0.7}
+        >
+          <animate attributeName="stroke-dashoffset" from="0" to="20" dur="1s" repeatCount="indefinite" />
+        </circle>
+      )}
       {/* HP bar track */}
       <rect
         x={cx - BAR_W / 2}
@@ -405,7 +421,7 @@ function getTroopProgress(troop: TroopGroup): number {
   return (troop.totalTurns - troop.turnsRemaining) / troop.totalTurns;
 }
 
-export default function BattleMap({ players, troopsInTransit, animate, subPhase }: BattleMapProps) {
+export default function BattleMap({ players, troopsInTransit, occupyingTroops, animate, subPhase }: BattleMapProps) {
   const playerMap = useMemo(
     () => new Map(players.map((p) => [p.playerId, p])),
     [players],
@@ -660,10 +676,47 @@ export default function BattleMap({ players, troopsInTransit, animate, subPhase 
           />
         ))}
 
+      {/* Occupying siege troops — idle at standoff distance from target city */}
+      {occupyingTroops
+        .map((occ) => {
+          const attacker = playerMap.get(occ.attackerPlayerId);
+          const target = playerMap.get(occ.targetPlayerId);
+          if (!attacker || !target) return null;
+          const dx = target.x - attacker.x;
+          const dy = target.y - attacker.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const nx = dist > 0 ? dx / dist : 0;
+          const ny = dist > 0 ? dy / dist : 0;
+          return {
+            occ,
+            pos: { x: target.x - nx * ATTACK_STANDOFF, y: target.y - ny * ATTACK_STANDOFF },
+            facingLeft: dx < 0,
+            playerColor: attacker.color,
+          };
+        })
+        .filter((e): e is NonNullable<typeof e> => e != null)
+        .sort((a, b) => a.pos.y - b.pos.y)
+        .map((entry) => (
+          <TroopSprite
+            key={`siege-${entry.occ.id}`}
+            pos={entry.pos}
+            units={entry.occ.units}
+            frameIndex={frameIndex}
+            isAttacking={subPhase === 'resolving'}
+            isIdle={subPhase !== 'resolving'}
+            facingLeft={entry.facingLeft}
+            troopType={entry.occ.troopType}
+            playerColor={entry.playerColor}
+          />
+        ))}
+
       {/* Cities — rendered last so they paint over troop lines */}
-      {players.map((player, index) => (
-        <CityNode key={player.playerId} player={player} playerIndex={index} />
-      ))}
+      {players.map((player, index) => {
+        const isUnderSiege = occupyingTroops.some(occ => occ.targetPlayerId === player.playerId);
+        return (
+          <CityNode key={player.playerId} player={player} playerIndex={index} isUnderSiege={isUnderSiege} />
+        );
+      })}
     </svg>
   );
 }
