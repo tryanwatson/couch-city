@@ -17,16 +17,14 @@ export const VALID_GROWTH_MULTIPLIERS = [1, 2, 3] as const; // 1x/2x/3x food cos
 // Population
 export const INITIAL_POPULATION = 10;
 
-// Culture upgrade — unlocks monument building slots
+// Culture upgrade — unlocks upgrade building slots
 export const CULTURE_UPGRADE_COST_FOOD = 30;
 export const CULTURE_UPGRADE_COST_GOLD = 50;
 
-// Monuments
-export const MONUMENT_COST_GOLD = 100; // base cost (multiply by MONUMENT_COST_MULTIPLIERS[monuments])
-export const MONUMENT_COST_RESOURCES = 150;
-export const MONUMENT_CULTURE_PER_TURN = 5; // passive culture score per monument per turn
-// Cost multiplier per monument index (0=first, 1=second, ...); length caps max monuments at 5
-export const MONUMENT_COST_MULTIPLIERS = [1, 5, 25, 100, 200] as const;
+// Upgrades — build progress system
+export const UPGRADE_PROGRESS_REQUIRED = [10, 30, 80, 200, 500] as const; // progress needed per level
+export const PROGRESS_PER_BUILDER = 1; // progress per builder per turn
+export const MONUMENT_CULTURE_PER_TURN = 5; // passive culture score per completed upgrade per turn
 export const CULTURE_WIN_THRESHOLD = 1000; // first player to reach this culture score wins
 
 // Military — troop types

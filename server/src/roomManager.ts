@@ -14,10 +14,9 @@ import {
   INITIAL_POPULATION,
   CULTURE_UPGRADE_COST_FOOD,
   CULTURE_UPGRADE_COST_GOLD,
-  MONUMENT_COST_GOLD,
-  MONUMENT_COST_RESOURCES,
   MONUMENT_CULTURE_PER_TURN,
-  MONUMENT_COST_MULTIPLIERS,
+  UPGRADE_PROGRESS_REQUIRED,
+  PROGRESS_PER_BUILDER,
   CULTURE_WIN_THRESHOLD,
   INITIAL_MILITARY,
   ZERO_MILITARY,
@@ -48,20 +47,27 @@ function totalMilitaryAtHome(mil: Record<TroopType, number>): number {
 
 function clampWorkers(player: ServerCityPlayer): void {
   const civilians = Math.max(0, Math.floor(player.population) - totalMilitaryAtHome(player.militaryAtHome));
-  const total = player.farmers + player.miners + player.merchants;
+  const total = player.farmers + player.miners + player.merchants + player.builders;
   if (total <= civilians) return;
 
   if (civilians <= 0) {
     player.farmers = 0;
     player.miners = 0;
     player.merchants = 0;
+    player.builders = 0;
   } else {
     const ratio = civilians / total;
     player.farmers = Math.floor(player.farmers * ratio);
     player.miners = Math.floor(player.miners * ratio);
     player.merchants = Math.floor(player.merchants * ratio);
+    player.builders = Math.floor(player.builders * ratio);
   }
   player.goldIncome = player.merchants * GOLD_PER_MERCHANT;
+
+  // If no active build slot, force builders to 0
+  if (player.upgradesCompleted.culture >= player.cultureLevel) {
+    player.builders = 0;
+  }
 }
 
 function cpBasedTrade(unitsA: number, cpPerA: number, unitsB: number, cpPerB: number): { survivorsA: number; survivorsB: number } {
@@ -165,7 +171,9 @@ export function addPlayer(
     population: 0,
     culture: 0,
     cultureLevel: 0,
-    monuments: 0,
+    builders: 0,
+    upgradesCompleted: { culture: 0 },
+    upgradeProgress: { culture: 0 },
     hp: 0,
     maxHp: MAX_HP,
     x: 0,
@@ -236,7 +244,9 @@ export function startGame(
     player.population = INITIAL_POPULATION;
     player.culture = 0;
     player.cultureLevel = 0;
-    player.monuments = 0;
+    player.builders = 0;
+    player.upgradesCompleted = { culture: 0 };
+    player.upgradeProgress = { culture: 0 };
     player.hp = INITIAL_HP;
     player.maxHp = MAX_HP;
     player.alive = true;
@@ -296,7 +306,18 @@ function runUpdatePhase(room: ServerRoom): void {
     player.resources += player.miners * RESOURCES_PER_MINER;
     player.goldIncome = player.merchants * GOLD_PER_MERCHANT;
     player.gold += player.goldIncome;
-    player.culture += player.monuments * MONUMENT_CULTURE_PER_TURN;
+    player.culture += player.upgradesCompleted.culture * MONUMENT_CULTURE_PER_TURN;
+
+    // Build progress
+    if (player.upgradesCompleted.culture < player.cultureLevel && player.builders > 0) {
+      player.upgradeProgress.culture += player.builders * PROGRESS_PER_BUILDER;
+      const required = UPGRADE_PROGRESS_REQUIRED[player.upgradesCompleted.culture];
+      if (player.upgradeProgress.culture >= required) {
+        player.upgradesCompleted.culture += 1;
+        player.upgradeProgress.culture = 0;
+        player.builders = 0;
+      }
+    }
   }
 
   // Food consumption & population growth/starvation
@@ -863,7 +884,8 @@ export function allocateWorkers(
   playerId: string,
   farmers: number,
   miners: number,
-  merchants: number
+  merchants: number,
+  builders: number
 ): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
   const room = rooms.get(roomId);
   if (!room) return { error: 'Room not found' };
@@ -874,18 +896,24 @@ export function allocateWorkers(
 
   if (!Number.isInteger(farmers) || farmers < 0 ||
       !Number.isInteger(miners) || miners < 0 ||
-      !Number.isInteger(merchants) || merchants < 0) {
+      !Number.isInteger(merchants) || merchants < 0 ||
+      !Number.isInteger(builders) || builders < 0) {
     return { error: 'Worker counts must be non-negative integers' };
   }
 
+  if (builders > 0 && player.upgradesCompleted.culture >= player.cultureLevel) {
+    return { error: 'No active build project' };
+  }
+
   const civilians = Math.floor(player.population) - totalMilitaryAtHome(player.militaryAtHome);
-  if (farmers + miners + merchants > civilians) {
+  if (farmers + miners + merchants + builders > civilians) {
     return { error: 'Not enough civilians for this allocation' };
   }
 
   player.farmers = farmers;
   player.miners = miners;
   player.merchants = merchants;
+  player.builders = builders;
   player.goldIncome = merchants * GOLD_PER_MERCHANT;
 
   return { room };
@@ -923,45 +951,13 @@ export function upgradeCulture(
   if (typeof guard === 'string') return { error: guard };
   const player = guard;
 
-  if (player.cultureLevel >= MONUMENT_COST_MULTIPLIERS.length) return { error: 'Maximum culture level reached' };
+  if (player.cultureLevel >= UPGRADE_PROGRESS_REQUIRED.length) return { error: 'Maximum culture level reached' };
   if (player.food < CULTURE_UPGRADE_COST_FOOD) return { error: 'Not enough food' };
   if (player.gold < CULTURE_UPGRADE_COST_GOLD) return { error: 'Not enough gold' };
 
   player.food -= CULTURE_UPGRADE_COST_FOOD;
   player.gold -= CULTURE_UPGRADE_COST_GOLD;
   player.cultureLevel += 1;
-
-  return { room };
-}
-
-export function buildMonument(
-  roomId: string,
-  playerId: string
-): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
-  const room = rooms.get(roomId);
-  if (!room) return { error: 'Room not found' };
-
-  const guard = guardAction(room, playerId);
-  if (typeof guard === 'string') return { error: guard };
-  const player = guard;
-
-  if (player.monuments >= player.cultureLevel) {
-    return { error: 'Upgrade culture first to unlock a monument slot' };
-  }
-  if (player.monuments >= MONUMENT_COST_MULTIPLIERS.length) {
-    return { error: 'Maximum monuments already built' };
-  }
-
-  const multiplier = MONUMENT_COST_MULTIPLIERS[player.monuments];
-  const goldCost = MONUMENT_COST_GOLD * multiplier;
-  const resourcesCost = MONUMENT_COST_RESOURCES * multiplier;
-
-  if (player.gold < goldCost) return { error: 'Not enough gold' };
-  if (player.resources < resourcesCost) return { error: 'Not enough resources' };
-
-  player.gold -= goldCost;
-  player.resources -= resourcesCost;
-  player.monuments += 1;
 
   return { room };
 }
@@ -1321,7 +1317,9 @@ export function resetRoom(
     player.population = 0;
     player.culture = 0;
     player.cultureLevel = 0;
-    player.monuments = 0;
+    player.builders = 0;
+    player.upgradesCompleted = { culture: 0 };
+    player.upgradeProgress = { culture: 0 };
     player.hp = 0;
     player.maxHp = MAX_HP;
     player.x = 0;
@@ -1351,7 +1349,9 @@ export function sanitizeState(room: ServerRoom): RoomStatePayload {
     population: p.population,
     culture: p.culture,
     cultureLevel: p.cultureLevel,
-    monuments: p.monuments,
+    builders: p.builders,
+    upgradesCompleted: p.upgradesCompleted,
+    upgradeProgress: p.upgradeProgress,
     hp: p.hp,
     maxHp: p.maxHp,
     x: p.x,

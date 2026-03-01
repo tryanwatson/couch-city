@@ -563,13 +563,48 @@
   background: rgba(150, 104, 196, 0.35);
 }
 
-.upgrade-monument {
-  background: rgba(150, 104, 196, 0.2);
-  border: 2px solid var(--color-culture-accent);
-  color: var(--color-text);
+/* Build progress (upgrade building) */
+.build-progress-container {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
-.upgrade-monument:hover:not(:disabled) {
-  background: rgba(150, 104, 196, 0.35);
+.build-progress-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: var(--color-text-dim);
+}
+.build-progress-bar-wrapper {
+  position: relative;
+  background: var(--color-culture-row, #1a1a2e);
+  height: 20px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+}
+.build-progress-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #9b59b6, #c88de8);
+  transition: width 0.5s ease;
+  border-radius: var(--radius-sm);
+}
+.builder-assignment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.builder-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.build-eta {
+  font-size: 0.75rem;
+  color: var(--color-text-dim);
+  text-align: center;
 }
 
 /* --- Military (Red) --- */

@@ -9,7 +9,6 @@ import {
   allocateWorkers,
   setGrowthMultiplier,
   upgradeCulture,
-  buildMonument,
   spendMilitary,
   sendAttack,
   endTurn,
@@ -125,11 +124,11 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
   });
 
   socket.on('player:allocate_workers', (data) => {
-    if (!data?.roomId || !data?.playerId || data?.farmers == null || data?.miners == null || data?.merchants == null) {
+    if (!data?.roomId || !data?.playerId || data?.farmers == null || data?.miners == null || data?.merchants == null || data?.builders == null) {
       socket.emit('room:error', { message: 'Missing required fields' });
       return;
     }
-    const result = allocateWorkers(data.roomId, data.playerId, data.farmers, data.miners, data.merchants);
+    const result = allocateWorkers(data.roomId, data.playerId, data.farmers, data.miners, data.merchants, data.builders);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     broadcastRoom(io, data.roomId);
   });
@@ -150,16 +149,6 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
       return;
     }
     const result = upgradeCulture(data.roomId, data.playerId);
-    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
-    broadcastRoom(io, data.roomId);
-  });
-
-  socket.on('player:build_monument', (data) => {
-    if (!data?.roomId || !data?.playerId) {
-      socket.emit('room:error', { message: 'Missing required fields' });
-      return;
-    }
-    const result = buildMonument(data.roomId, data.playerId);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     broadcastRoom(io, data.roomId);
   });

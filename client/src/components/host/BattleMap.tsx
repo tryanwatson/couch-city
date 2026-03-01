@@ -434,7 +434,7 @@ function CityNode({ player, playerIndex, isUnderSiege }: { player: CityPlayerInf
                   fontSize={11}
                   fill="#c88de8"
                 >
-                  {`🏛️ ${player.monuments} · ${Math.floor(player.culture)}/${CULTURE_WIN_THRESHOLD}`}
+                  {`🏛️ ${player.upgradesCompleted.culture} · ${Math.floor(player.culture)}/${CULTURE_WIN_THRESHOLD}`}
                 </text>
               </>
             )}
