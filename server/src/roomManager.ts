@@ -605,7 +605,23 @@ function resolveMineCombat(room: ServerRoom, arrivingMineGroups: TroopGroup[]): 
   if (tied) {
     // Exact tie — all sides wiped (consistent with cpBasedTrade)
     for (const [, entry] of playerGroups) {
-      for (const occ of entry.occupying) occ.units = 0;
+      // Add synthetic transit entries for dying occupiers so they animate (fight → fade)
+      for (const occ of entry.occupying) {
+        room.troopsInTransit.push({
+          id: occ.id + '-minefight',
+          attackerPlayerId: occ.attackerPlayerId,
+          targetPlayerId: GOLD_MINE_ID,
+          troopType: occ.troopType,
+          units: 0,
+          turnsRemaining: 0,
+          totalTurns: 0,
+          fieldCombatX: GOLD_MINE_X,
+          fieldCombatY: GOLD_MINE_Y,
+          fieldCombatUnits: occ.units,
+          inFieldCombat: true,
+        });
+        occ.units = 0;
+      }
       for (const tg of entry.arriving) tg.units = 0;
     }
     room.occupyingTroops = room.occupyingTroops.filter(occ => occ.units > 0);
@@ -617,7 +633,23 @@ function resolveMineCombat(room: ServerRoom, arrivingMineGroups: TroopGroup[]): 
   for (const [pid, entry] of playerGroups) {
     if (pid === winnerId) continue;
     enemyTotalCP += entry.totalCP;
-    for (const occ of entry.occupying) occ.units = 0;
+    // Add synthetic transit entries for dying occupiers so they animate (fight → fade)
+    for (const occ of entry.occupying) {
+      room.troopsInTransit.push({
+        id: occ.id + '-minefight',
+        attackerPlayerId: occ.attackerPlayerId,
+        targetPlayerId: GOLD_MINE_ID,
+        troopType: occ.troopType,
+        units: 0,
+        turnsRemaining: 0,
+        totalTurns: 0,
+        fieldCombatX: GOLD_MINE_X,
+        fieldCombatY: GOLD_MINE_Y,
+        fieldCombatUnits: occ.units,
+        inFieldCombat: true,
+      });
+      occ.units = 0;
+    }
     for (const tg of entry.arriving) tg.units = 0;
   }
 

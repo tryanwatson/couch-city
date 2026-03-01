@@ -92,29 +92,6 @@ function resolveTargetPos(targetPlayerId: string, playerMap: Map<string, CityPla
   return target ? { x: target.x, y: target.y } : null;
 }
 
-function AttackLine({
-  troop,
-  playerMap,
-}: {
-  troop: TroopGroup;
-  playerMap: Map<string, CityPlayerInfo>;
-}) {
-  const attacker = playerMap.get(troop.attackerPlayerId);
-  const targetPos = resolveTargetPos(troop.targetPlayerId, playerMap);
-  if (!attacker || !targetPos) return null;
-  return (
-    <line
-      x1={attacker.x * 1000}
-      y1={attacker.y * 1000}
-      x2={targetPos.x * 1000}
-      y2={targetPos.y * 1000}
-      stroke={attacker.color}
-      strokeWidth={1.5}
-      strokeOpacity={0.3}
-      strokeDasharray="8 6"
-    />
-  );
-}
 
 const GOLDEN_ANGLE = 2.399963;
 
@@ -747,10 +724,17 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
 
       <image href="/map-background.png" x="0" y="0" width="1000" height="1000" />
 
-      {/* Attack trail lines */}
-      {troopsInTransit.map((troop) => (
-        <AttackLine key={troop.id} troop={troop} playerMap={playerMap} />
-      ))}
+      {/* Gold Mine — rendered before troops so troops paint on top */}
+      {(() => {
+        const minePlayerIds = new Set(
+          occupyingTroops
+            .filter(occ => occ.targetPlayerId === GOLD_MINE_ID && occ.units > 0)
+            .map(occ => occ.attackerPlayerId)
+        );
+        const isMineContested = minePlayerIds.size > 1;
+        const ownerColor = goldMineOwnerId ? (playerMap.get(goldMineOwnerId)?.color ?? null) : null;
+        return <GoldMineNode ownerColor={ownerColor} isContested={isMineContested} />;
+      })()}
 
       {/* Walking troops — sorted by Y for depth (lower on screen = closer to camera = rendered on top) */}
       {troopsInTransit
@@ -864,18 +848,6 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
             />
           );
         })}
-
-      {/* Gold Mine */}
-      {(() => {
-        const minePlayerIds = new Set(
-          occupyingTroops
-            .filter(occ => occ.targetPlayerId === GOLD_MINE_ID && occ.units > 0)
-            .map(occ => occ.attackerPlayerId)
-        );
-        const isMineContested = minePlayerIds.size > 1;
-        const ownerColor = goldMineOwnerId ? (playerMap.get(goldMineOwnerId)?.color ?? null) : null;
-        return <GoldMineNode ownerColor={ownerColor} isContested={isMineContested} />;
-      })()}
 
       {/* Cities — rendered last so they paint over troop lines */}
       {players.map((player, index) => {
