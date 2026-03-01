@@ -608,12 +608,15 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
           const isWinner = troop.units > 0;
           const advanceX = troop.startX ?? midX;
           const advanceY = troop.startY ?? midY;
+          // Face toward combat midpoint based on where troop is coming from
+          const combatFacingLeft = fromX !== midX ? midX < fromX : facingLeft;
 
           const walkEnd = FIELD_COMBAT_WALK_FRAC;
           const fightEnd = FIELD_COMBAT_WALK_FRAC + FIELD_COMBAT_FIGHT_FRAC;
 
           let posX: number, posY: number;
           let attacking = false;
+          let idle = false;
           let opacity = 1;
           let displayUnits = troop.fieldCombatUnits ?? troop.units;
 
@@ -631,8 +634,16 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
             // Phase 3: Winner advances to destination step; loser fades out
             const t = Math.min(1, (animProgress - fightEnd) / FIELD_COMBAT_ADVANCE_FRAC);
             if (isWinner) {
-              posX = midX + (advanceX - midX) * t;
-              posY = midY + (advanceY - midY) * t;
+              const advanceDist = Math.abs(advanceX - midX) + Math.abs(advanceY - midY);
+              if (advanceDist < 0.001) {
+                // No distance to advance (e.g. mine combat) — settle idle
+                posX = midX;
+                posY = midY;
+                idle = true;
+              } else {
+                posX = midX + (advanceX - midX) * t;
+                posY = midY + (advanceY - midY) * t;
+              }
               displayUnits = troop.units;
             } else {
               posX = midX;
@@ -641,7 +652,7 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
             }
           }
 
-          positions.set(troop.id, { x: posX, y: posY, facingLeft, isAttacking: attacking, isIdle: false, opacity, displayUnits });
+          positions.set(troop.id, { x: posX, y: posY, facingLeft: combatFacingLeft, isAttacking: attacking, isIdle: idle, opacity, displayUnits });
           continue;
         }
 

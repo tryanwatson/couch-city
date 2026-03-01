@@ -357,8 +357,17 @@ function runUpdatePhase(room: ServerRoom): void {
 
   // Resolve arrived troop groups (turnsRemaining === 0, skip field combat casualties)
   const arrived = room.troopsInTransit.filter(tg => tg.turnsRemaining <= 0 && tg.units > 0);
+
+  // Batch mine arrivals for simultaneous resolution (prevents first-in-array advantage)
+  const mineArrivals = arrived.filter(tg => tg.targetPlayerId === GOLD_MINE_ID);
+  if (mineArrivals.length > 0) {
+    resolveMineCombat(room, mineArrivals);
+  }
+
+  // Resolve city arrivals sequentially (each targets a different garrison)
   for (const tg of arrived) {
-    if (tg.targetPlayerId !== GOLD_MINE_ID && !room.combatHitPlayerIds.includes(tg.targetPlayerId) && tg.attackerPlayerId !== tg.targetPlayerId) {
+    if (tg.targetPlayerId === GOLD_MINE_ID) continue;
+    if (!room.combatHitPlayerIds.includes(tg.targetPlayerId) && tg.attackerPlayerId !== tg.targetPlayerId) {
       room.combatHitPlayerIds.push(tg.targetPlayerId);
     }
     resolveCombat(room, tg);
@@ -511,64 +520,121 @@ function detectFieldCollisions(room: ServerRoom): void {
 // Combat resolution
 // ============================================================
 
-function resolveMineArrival(room: ServerRoom, tg: TroopGroup): void {
-  // Fight any existing occupiers from OTHER players
-  const enemyOccupiers = room.occupyingTroops.filter(
-    occ => occ.targetPlayerId === GOLD_MINE_ID && occ.attackerPlayerId !== tg.attackerPlayerId && occ.units > 0
+function mergeIntoOccupiers(room: ServerRoom, tg: TroopGroup): void {
+  const existing = room.occupyingTroops.find(
+    occ => occ.attackerPlayerId === tg.attackerPlayerId
+      && occ.targetPlayerId === GOLD_MINE_ID
+      && occ.troopType === tg.troopType
   );
+  if (existing) {
+    existing.units += tg.units;
+  } else {
+    room.occupyingTroops.push({
+      id: tg.id,
+      attackerPlayerId: tg.attackerPlayerId,
+      targetPlayerId: GOLD_MINE_ID,
+      troopType: tg.troopType,
+      units: tg.units,
+      turnsRemaining: 0,
+      totalTurns: 0,
+    });
+  }
+}
 
-  // Mark field combat for animation if there are enemies to fight
-  const hasCombat = enemyOccupiers.length > 0;
-  if (hasCombat) {
-    tg.fieldCombatUnits = tg.units;   // pre-combat count for display
-    tg.fieldCombatX = GOLD_MINE_X;    // combat location
+function resolveMineCombat(room: ServerRoom, arrivingMineGroups: TroopGroup[]): void {
+  // Pool all troops at the mine per player (existing occupiers + new arrivals)
+  const playerGroups = new Map<string, {
+    arriving: TroopGroup[];
+    occupying: TroopGroup[];
+    totalCP: number;
+  }>();
+
+  for (const occ of room.occupyingTroops) {
+    if (occ.targetPlayerId !== GOLD_MINE_ID || occ.units <= 0) continue;
+    let entry = playerGroups.get(occ.attackerPlayerId);
+    if (!entry) {
+      entry = { arriving: [], occupying: [], totalCP: 0 };
+      playerGroups.set(occ.attackerPlayerId, entry);
+    }
+    entry.occupying.push(occ);
+    entry.totalCP += occ.units * COMBAT_POWER[occ.troopType];
+  }
+
+  for (const tg of arrivingMineGroups) {
+    let entry = playerGroups.get(tg.attackerPlayerId);
+    if (!entry) {
+      entry = { arriving: [], occupying: [], totalCP: 0 };
+      playerGroups.set(tg.attackerPlayerId, entry);
+    }
+    entry.arriving.push(tg);
+    entry.totalCP += tg.units * COMBAT_POWER[tg.troopType];
+  }
+
+  const playerIds = Array.from(playerGroups.keys());
+
+  // No combat if only one player involved — just merge arrivals
+  if (playerIds.length <= 1) {
+    for (const tg of arrivingMineGroups) {
+      mergeIntoOccupiers(room, tg);
+    }
+    return;
+  }
+
+  // Mark all arriving groups for combat animation
+  for (const tg of arrivingMineGroups) {
+    tg.fieldCombatUnits = tg.units;
+    tg.fieldCombatX = GOLD_MINE_X;
     tg.fieldCombatY = GOLD_MINE_Y;
     tg.inFieldCombat = true;
   }
 
-  let remainingUnits = tg.units;
-
-  for (const enemy of enemyOccupiers) {
-    if (remainingUnits <= 0) break;
-    const result = cpBasedTrade(
-      remainingUnits, COMBAT_POWER[tg.troopType],
-      enemy.units, COMBAT_POWER[enemy.troopType]
-    );
-    remainingUnits = result.survivorsA;
-    enemy.units = result.survivorsB;
+  // Find the strongest player by total CP
+  let maxCP = 0;
+  let winnerId: string | null = null;
+  let tied = false;
+  for (const [pid, entry] of playerGroups) {
+    if (entry.totalCP > maxCP) {
+      maxCP = entry.totalCP;
+      winnerId = pid;
+      tied = false;
+    } else if (entry.totalCP === maxCP) {
+      tied = true;
+    }
   }
 
-  // Update arriving troop's units to surviving count (for animation display)
-  tg.units = remainingUnits;
+  if (tied) {
+    // Exact tie — all sides wiped (consistent with cpBasedTrade)
+    for (const [, entry] of playerGroups) {
+      for (const occ of entry.occupying) occ.units = 0;
+      for (const tg of entry.arriving) tg.units = 0;
+    }
+    room.occupyingTroops = room.occupyingTroops.filter(occ => occ.units > 0);
+    return;
+  }
 
-  // Set advance destination to mine center (winner stays at mine after fight)
-  if (hasCombat) {
-    tg.startX = GOLD_MINE_X;
-    tg.startY = GOLD_MINE_Y;
+  // Winner determined — wipe all losers
+  let enemyTotalCP = 0;
+  for (const [pid, entry] of playerGroups) {
+    if (pid === winnerId) continue;
+    enemyTotalCP += entry.totalCP;
+    for (const occ of entry.occupying) occ.units = 0;
+    for (const tg of entry.arriving) tg.units = 0;
+  }
+
+  // Winner takes proportional losses across all their groups
+  const winnerEntry = playerGroups.get(winnerId!)!;
+  const lossRatio = enemyTotalCP / winnerEntry.totalCP;
+  for (const group of [...winnerEntry.occupying, ...winnerEntry.arriving]) {
+    group.units -= Math.floor(group.units * lossRatio);
   }
 
   // Clean up dead occupiers
   room.occupyingTroops = room.occupyingTroops.filter(occ => occ.units > 0);
 
-  if (remainingUnits > 0) {
-    // Merge with existing friendly occupiers or add new
-    const existing = room.occupyingTroops.find(
-      occ => occ.attackerPlayerId === tg.attackerPlayerId
-        && occ.targetPlayerId === GOLD_MINE_ID
-        && occ.troopType === tg.troopType
-    );
-    if (existing) {
-      existing.units += remainingUnits;
-    } else {
-      room.occupyingTroops.push({
-        id: tg.id,
-        attackerPlayerId: tg.attackerPlayerId,
-        targetPlayerId: GOLD_MINE_ID,
-        troopType: tg.troopType,
-        units: remainingUnits,
-        turnsRemaining: 0,
-        totalTurns: 0,
-      });
+  // Merge surviving arrivals into occupying troops
+  for (const tg of arrivingMineGroups) {
+    if (tg.units > 0) {
+      mergeIntoOccupiers(room, tg);
     }
   }
 }
@@ -580,12 +646,6 @@ function resolveCombat(room: ServerRoom, tg: TroopGroup): void {
     if (player && player.alive) {
       player.militaryAtHome[tg.troopType] += tg.units;
     }
-    return;
-  }
-
-  // Troops arriving at the gold mine
-  if (tg.targetPlayerId === GOLD_MINE_ID) {
-    resolveMineArrival(room, tg);
     return;
   }
 
