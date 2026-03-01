@@ -215,6 +215,48 @@ function TroopSprite({
       >
         {units * COMBAT_POWER[troopType]}
       </text>
+      {statusIcon && (() => {
+        const iconY = cy - clusterRadius - TROOP_DISPLAY_SIZE / 2 - 24;
+        if (statusIcon === '⚔') {
+          return (
+            <>
+              <circle
+                cx={cx}
+                cy={iconY - 5}
+                r={14}
+                fill={statusColor ?? 'white'}
+                stroke="black"
+                strokeWidth={2}
+              />
+              <text
+                x={cx}
+                y={iconY}
+                textAnchor="middle"
+                fontSize={16}
+                fontWeight="700"
+                fill="white"
+              >
+                {statusIcon}
+              </text>
+            </>
+          );
+        }
+        return (
+          <text
+            x={cx}
+            y={iconY}
+            textAnchor="middle"
+            fontSize={16}
+            fontWeight="700"
+            fill={statusColor ?? 'white'}
+            stroke="black"
+            strokeWidth={3}
+            paintOrder="stroke"
+          >
+            {statusIcon}
+          </text>
+        );
+      })()}
     </g>
   );
 }
@@ -649,7 +691,7 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
             y: displayY,
             facingLeft,
             isAttacking: inArrivalCombat,
-            isIdle: troop.paused || !isResolving || (isMineTarget && troop.turnsRemaining === 0 && !isMineArrivalContested),
+            isIdle: troop.paused || !isResolving || (isMineTarget && troop.turnsRemaining === 0 && !isMineArrivalContested && animProgress >= 1),
             opacity: 1,
             displayUnits: troop.units,
           });
@@ -704,20 +746,32 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
         .map((troop) => ({ troop, posData: troopPositions.get(troop.id) }))
         .filter((entry): entry is { troop: TroopGroup; posData: NonNullable<typeof entry.posData> } => entry.posData != null)
         .sort((a, b) => a.posData.y - b.posData.y)
-        .map(({ troop, posData }) => (
-          <TroopSprite
-            key={troop.id}
-            pos={posData}
-            units={posData.displayUnits}
-            frameIndex={frameIndex}
-            isAttacking={posData.isAttacking}
-            isIdle={posData.isIdle}
-            facingLeft={posData.facingLeft}
-            troopType={troop.troopType}
-            opacity={posData.opacity}
-            playerColor={playerMap.get(troop.attackerPlayerId)?.color}
-          />
-        ))}
+        .map(({ troop, posData }) => {
+          const sIcon = troop.paused ? 'zzz'
+            : troop.targetPlayerId === troop.attackerPlayerId ? '🏠'
+            : troop.targetPlayerId === GOLD_MINE_ID ? '$'
+            : '⚔';
+          const sColor = troop.paused ? '#aaa'
+            : troop.targetPlayerId === troop.attackerPlayerId ? 'white'
+            : troop.targetPlayerId === GOLD_MINE_ID ? '#f1c40f'
+            : (playerMap.get(troop.targetPlayerId)?.color ?? 'white');
+          return (
+            <TroopSprite
+              key={troop.id}
+              pos={posData}
+              units={posData.displayUnits}
+              frameIndex={frameIndex}
+              isAttacking={posData.isAttacking}
+              isIdle={posData.isIdle}
+              facingLeft={posData.facingLeft}
+              troopType={troop.troopType}
+              opacity={posData.opacity}
+              playerColor={playerMap.get(troop.attackerPlayerId)?.color}
+              statusIcon={sIcon}
+              statusColor={sColor}
+            />
+          );
+        })}
 
       {/* Attacking troops (linger at castle) — sorted by Y for depth */}
       {Array.from(attackingTroops.values())
@@ -733,11 +787,15 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
             facingLeft={lingering.facingLeft}
             troopType={lingering.troop.troopType}
             playerColor={playerMap.get(lingering.troop.attackerPlayerId)?.color}
+            statusIcon="⚔"
+            statusColor={playerMap.get(lingering.troop.targetPlayerId)?.color ?? 'white'}
           />
         ))}
 
       {/* Occupying siege troops — idle at standoff distance from target city, or on mine center */}
+      {/* Filter out occupiers whose ID is still in troopsInTransit (they're animating arrival) */}
       {occupyingTroops
+        .filter(occ => !troopsInTransit.some(tg => tg.id === occ.id))
         .map((occ) => {
           const attacker = playerMap.get(occ.attackerPlayerId);
           const targetPos = resolveTargetPos(occ.targetPlayerId, playerMap);
@@ -775,6 +833,10 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
           const isAttacking = isMineOccupier
             ? (subPhase === 'resolving' && isMineContested)
             : (subPhase === 'resolving');
+          const sIcon = isMineOccupier ? '$' : '⚔';
+          const sColor = isMineOccupier
+            ? '#f1c40f'
+            : (playerMap.get(entry.occ.targetPlayerId)?.color ?? 'white');
           return (
             <TroopSprite
               key={`siege-${entry.occ.id}`}
@@ -786,6 +848,8 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
               facingLeft={entry.facingLeft}
               troopType={entry.occ.troopType}
               playerColor={entry.playerColor}
+              statusIcon={sIcon}
+              statusColor={sColor}
             />
           );
         })}

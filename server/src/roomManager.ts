@@ -401,6 +401,7 @@ function runUpdatePhase(room: ServerRoom): void {
     }
     // Remove arrived troops and field combat casualties now that animation has played
     room.troopsInTransit = room.troopsInTransit.filter(tg => tg.turnsRemaining > 0 && tg.units > 0);
+    room.combatHitPlayerIds = [];
     room.subPhase = 'planning';
     room.turnNumber += 1;
     for (const [, player] of room.players) {
@@ -516,6 +517,15 @@ function resolveMineArrival(room: ServerRoom, tg: TroopGroup): void {
     occ => occ.targetPlayerId === GOLD_MINE_ID && occ.attackerPlayerId !== tg.attackerPlayerId && occ.units > 0
   );
 
+  // Mark field combat for animation if there are enemies to fight
+  const hasCombat = enemyOccupiers.length > 0;
+  if (hasCombat) {
+    tg.fieldCombatUnits = tg.units;   // pre-combat count for display
+    tg.fieldCombatX = GOLD_MINE_X;    // combat location
+    tg.fieldCombatY = GOLD_MINE_Y;
+    tg.inFieldCombat = true;
+  }
+
   let remainingUnits = tg.units;
 
   for (const enemy of enemyOccupiers) {
@@ -526,6 +536,15 @@ function resolveMineArrival(room: ServerRoom, tg: TroopGroup): void {
     );
     remainingUnits = result.survivorsA;
     enemy.units = result.survivorsB;
+  }
+
+  // Update arriving troop's units to surviving count (for animation display)
+  tg.units = remainingUnits;
+
+  // Set advance destination to mine center (winner stays at mine after fight)
+  if (hasCombat) {
+    tg.startX = GOLD_MINE_X;
+    tg.startY = GOLD_MINE_Y;
   }
 
   // Clean up dead occupiers
