@@ -16,6 +16,11 @@ import {
   resetRoom,
   sanitizeState,
   setBroadcastFn,
+  recallTroops,
+  pauseTroops,
+  resumeTroops,
+  redirectTroops,
+  recallOccupyingTroops,
 } from './roomManager';
 import { generateCityName } from '../../shared/constants';
 
@@ -177,6 +182,56 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     const result = sendAttack(data.roomId, data.playerId, data.targetPlayerId, data.units, data.troopType);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     console.log(`Player ${data.playerId} sent ${data.units} ${data.troopType} to ${data.targetPlayerId} in room ${data.roomId}`);
+    broadcastRoom(io, data.roomId);
+  });
+
+  socket.on('player:recall_troops', (data) => {
+    if (!data?.roomId || !data?.playerId || !data?.troopGroupId) {
+      socket.emit('room:error', { message: 'Missing required fields' });
+      return;
+    }
+    const result = recallTroops(data.roomId, data.playerId, data.troopGroupId);
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
+    broadcastRoom(io, data.roomId);
+  });
+
+  socket.on('player:pause_troops', (data) => {
+    if (!data?.roomId || !data?.playerId || !data?.troopGroupId) {
+      socket.emit('room:error', { message: 'Missing required fields' });
+      return;
+    }
+    const result = pauseTroops(data.roomId, data.playerId, data.troopGroupId);
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
+    broadcastRoom(io, data.roomId);
+  });
+
+  socket.on('player:resume_troops', (data) => {
+    if (!data?.roomId || !data?.playerId || !data?.troopGroupId) {
+      socket.emit('room:error', { message: 'Missing required fields' });
+      return;
+    }
+    const result = resumeTroops(data.roomId, data.playerId, data.troopGroupId);
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
+    broadcastRoom(io, data.roomId);
+  });
+
+  socket.on('player:redirect_troops', (data) => {
+    if (!data?.roomId || !data?.playerId || !data?.troopGroupId || !data?.newTargetPlayerId) {
+      socket.emit('room:error', { message: 'Missing required fields' });
+      return;
+    }
+    const result = redirectTroops(data.roomId, data.playerId, data.troopGroupId, data.newTargetPlayerId);
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
+    broadcastRoom(io, data.roomId);
+  });
+
+  socket.on('player:recall_occupying_troops', (data) => {
+    if (!data?.roomId || !data?.playerId || !data?.troopGroupId) {
+      socket.emit('room:error', { message: 'Missing required fields' });
+      return;
+    }
+    const result = recallOccupyingTroops(data.roomId, data.playerId, data.troopGroupId);
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     broadcastRoom(io, data.roomId);
   });
 

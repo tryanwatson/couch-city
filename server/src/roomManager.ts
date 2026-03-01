@@ -32,6 +32,11 @@ import {
   VALID_ATTACK_AMOUNTS,
   RESOLVING_PHASE_DURATION_MS,
   troopGroupRadius,
+  GOLD_MINE_ID,
+  GOLD_MINE_X,
+  GOLD_MINE_Y,
+  GOLD_MINE_INCOME,
+  GOLD_MINE_TRAVEL_TURNS,
 } from '../../shared/constants';
 import { generateRoomCode } from './utils';
 
@@ -92,6 +97,7 @@ export function createRoom(hostSocketId: string): ServerRoom {
     occupyingTroops: [],
     combatHitPlayerIds: [],
     winnerPlayerId: null,
+    goldMineOwnerId: null,
   };
 
   rooms.set(roomId, room);
@@ -243,6 +249,7 @@ export function startGame(
   room.troopsInTransit = [];
   room.occupyingTroops = [];
   room.winnerPlayerId = null;
+  room.goldMineOwnerId = null;
 
   return { room };
 }
@@ -315,13 +322,34 @@ function runUpdatePhase(room: ServerRoom): void {
     player.hp = Math.min(player.maxHp, player.hp + HP_REGEN_PER_TURN);
   }
 
+  // Gold mine income — before combat so income is awarded even if troops die this turn
+  const mineOccupierPlayerIds = new Set(
+    room.occupyingTroops
+      .filter(occ => occ.targetPlayerId === GOLD_MINE_ID && occ.units > 0)
+      .map(occ => occ.attackerPlayerId)
+  );
+  if (mineOccupierPlayerIds.size === 1) {
+    const ownerId = Array.from(mineOccupierPlayerIds)[0];
+    const owner = room.players.get(ownerId);
+    if (owner && owner.alive) {
+      owner.gold += GOLD_MINE_INCOME;
+      room.goldMineOwnerId = ownerId;
+    } else {
+      room.goldMineOwnerId = null;
+    }
+  } else {
+    room.goldMineOwnerId = null; // contested or empty
+  }
+
   // Existing occupying troops fight garrison and deal siege damage
   room.combatHitPlayerIds = [];
   resolveSiege(room);
 
-  // Advance all troops by 1 turn
+  // Advance all troops by 1 turn (skip paused troops)
   for (const tg of room.troopsInTransit) {
-    tg.turnsRemaining = Math.max(0, tg.turnsRemaining - 1);
+    if (!tg.paused) {
+      tg.turnsRemaining = Math.max(0, tg.turnsRemaining - 1);
+    }
   }
 
   // Detect and resolve field collisions (turn-based)
@@ -330,7 +358,7 @@ function runUpdatePhase(room: ServerRoom): void {
   // Resolve arrived troop groups (turnsRemaining === 0, skip field combat casualties)
   const arrived = room.troopsInTransit.filter(tg => tg.turnsRemaining <= 0 && tg.units > 0);
   for (const tg of arrived) {
-    if (!room.combatHitPlayerIds.includes(tg.targetPlayerId) && tg.attackerPlayerId !== tg.targetPlayerId) {
+    if (tg.targetPlayerId !== GOLD_MINE_ID && !room.combatHitPlayerIds.includes(tg.targetPlayerId) && tg.attackerPlayerId !== tg.targetPlayerId) {
       room.combatHitPlayerIds.push(tg.targetPlayerId);
     }
     resolveCombat(room, tg);
@@ -391,10 +419,13 @@ function detectFieldCollisions(room: ServerRoom): void {
   for (let i = 0; i < transit.length; i++) {
     const tg1 = transit[i];
     if (tg1.units <= 0) continue;
+    // Skip mine-bound troops (separate lane, no player target to look up)
+    if (tg1.targetPlayerId === GOLD_MINE_ID || tg1.attackerPlayerId === GOLD_MINE_ID) continue;
 
     for (let j = i + 1; j < transit.length; j++) {
       const tg2 = transit[j];
       if (tg2.units <= 0) continue;
+      if (tg2.targetPlayerId === GOLD_MINE_ID || tg2.attackerPlayerId === GOLD_MINE_ID) continue;
 
       // Only opposing groups on the same lane (A→B vs B→A)
       if (
@@ -479,6 +510,50 @@ function detectFieldCollisions(room: ServerRoom): void {
 // Combat resolution
 // ============================================================
 
+function resolveMineArrival(room: ServerRoom, tg: TroopGroup): void {
+  // Fight any existing occupiers from OTHER players
+  const enemyOccupiers = room.occupyingTroops.filter(
+    occ => occ.targetPlayerId === GOLD_MINE_ID && occ.attackerPlayerId !== tg.attackerPlayerId && occ.units > 0
+  );
+
+  let remainingUnits = tg.units;
+
+  for (const enemy of enemyOccupiers) {
+    if (remainingUnits <= 0) break;
+    const result = cpBasedTrade(
+      remainingUnits, COMBAT_POWER[tg.troopType],
+      enemy.units, COMBAT_POWER[enemy.troopType]
+    );
+    remainingUnits = result.survivorsA;
+    enemy.units = result.survivorsB;
+  }
+
+  // Clean up dead occupiers
+  room.occupyingTroops = room.occupyingTroops.filter(occ => occ.units > 0);
+
+  if (remainingUnits > 0) {
+    // Merge with existing friendly occupiers or add new
+    const existing = room.occupyingTroops.find(
+      occ => occ.attackerPlayerId === tg.attackerPlayerId
+        && occ.targetPlayerId === GOLD_MINE_ID
+        && occ.troopType === tg.troopType
+    );
+    if (existing) {
+      existing.units += remainingUnits;
+    } else {
+      room.occupyingTroops.push({
+        id: tg.id,
+        attackerPlayerId: tg.attackerPlayerId,
+        targetPlayerId: GOLD_MINE_ID,
+        troopType: tg.troopType,
+        units: remainingUnits,
+        turnsRemaining: 0,
+        totalTurns: 0,
+      });
+    }
+  }
+}
+
 function resolveCombat(room: ServerRoom, tg: TroopGroup): void {
   // Troops returning home — add to garrison
   if (tg.attackerPlayerId === tg.targetPlayerId) {
@@ -486,6 +561,12 @@ function resolveCombat(room: ServerRoom, tg: TroopGroup): void {
     if (player && player.alive) {
       player.militaryAtHome[tg.troopType] += tg.units;
     }
+    return;
+  }
+
+  // Troops arriving at the gold mine
+  if (tg.targetPlayerId === GOLD_MINE_ID) {
+    resolveMineArrival(room, tg);
     return;
   }
 
@@ -558,6 +639,7 @@ function resolveSiege(room: ServerRoom): void {
   }
 
   for (const [targetId, occupiers] of occupiersByTarget) {
+    if (targetId === GOLD_MINE_ID) continue; // Mine occupiers don't siege — handled separately
     const defender = room.players.get(targetId);
     if (!defender || !defender.alive) continue;
 
@@ -821,9 +903,12 @@ export function sendAttack(
 
   if (attackerPlayerId === targetPlayerId) return { error: 'Cannot attack yourself' };
 
-  const target = room.players.get(targetPlayerId);
-  if (!target) return { error: 'Target not found' };
-  if (!target.alive) return { error: 'Target city is already eliminated' };
+  // Gold mine is always a valid target; player targets must exist and be alive
+  if (targetPlayerId !== GOLD_MINE_ID) {
+    const target = room.players.get(targetPlayerId);
+    if (!target) return { error: 'Target not found' };
+    if (!target.alive) return { error: 'Target city is already eliminated' };
+  }
 
   if (!(VALID_ATTACK_AMOUNTS as readonly number[]).includes(units)) {
     return { error: 'Invalid unit count' };
@@ -835,14 +920,16 @@ export function sendAttack(
   attacker.population -= units;
   clampWorkers(attacker);
 
+  const travelTurns = targetPlayerId === GOLD_MINE_ID ? GOLD_MINE_TRAVEL_TURNS : TROOP_TRAVEL_TURNS;
+
   // Merge into existing group sent this same planning phase (same target, same type, freshly created)
   const existing = room.troopsInTransit.find(
     tg =>
       tg.attackerPlayerId === attackerPlayerId &&
       tg.targetPlayerId === targetPlayerId &&
       tg.troopType === troopType &&
-      tg.turnsRemaining === TROOP_TRAVEL_TURNS &&
-      tg.totalTurns === TROOP_TRAVEL_TURNS,
+      tg.turnsRemaining === travelTurns &&
+      tg.totalTurns === travelTurns,
   );
 
   if (existing) {
@@ -854,10 +941,238 @@ export function sendAttack(
       targetPlayerId,
       troopType,
       units,
-      turnsRemaining: TROOP_TRAVEL_TURNS,
-      totalTurns: TROOP_TRAVEL_TURNS,
+      turnsRemaining: travelTurns,
+      totalTurns: travelTurns,
     });
   }
+
+  return { room };
+}
+
+// ============================================================
+// Troop management (recall, pause, resume, redirect)
+// ============================================================
+
+/** Compute the current interpolated position of a troop group */
+function getTroopCurrentPosition(
+  tg: TroopGroup,
+  players: Map<string, ServerCityPlayer>
+): { x: number; y: number } {
+  const attacker = players.get(tg.attackerPlayerId);
+  const originX = tg.startX ?? (attacker?.x ?? 0);
+  const originY = tg.startY ?? (attacker?.y ?? 0);
+
+  let targetX: number, targetY: number;
+  if (tg.targetPlayerId === GOLD_MINE_ID) {
+    targetX = GOLD_MINE_X;
+    targetY = GOLD_MINE_Y;
+  } else if (tg.targetPlayerId === tg.attackerPlayerId) {
+    targetX = attacker?.x ?? 0;
+    targetY = attacker?.y ?? 0;
+  } else {
+    const target = players.get(tg.targetPlayerId);
+    targetX = target?.x ?? 0;
+    targetY = target?.y ?? 0;
+  }
+
+  const progress = tg.totalTurns > 0
+    ? (tg.totalTurns - tg.turnsRemaining) / tg.totalTurns
+    : 1;
+  return {
+    x: originX + (targetX - originX) * progress,
+    y: originY + (targetY - originY) * progress,
+  };
+}
+
+export function recallTroops(
+  roomId: string,
+  playerId: string,
+  troopGroupId: string
+): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
+  const room = rooms.get(roomId);
+  if (!room) return { error: 'Room not found' };
+
+  const guard = guardAction(room, playerId);
+  if (typeof guard === 'string') return { error: guard };
+
+  const tg = room.troopsInTransit.find(
+    t => t.id === troopGroupId && t.attackerPlayerId === playerId
+  );
+  if (!tg) return { error: 'Troop group not found' };
+  if (tg.targetPlayerId === tg.attackerPlayerId) return { error: 'Troops are already returning home' };
+  if (tg.turnsRemaining <= 0) return { error: 'Troops have already arrived' };
+
+  const currentPos = getTroopCurrentPosition(tg, room.players);
+  const turnsTraveled = tg.totalTurns - tg.turnsRemaining;
+  const returnTurns = Math.max(1, turnsTraveled);
+
+  tg.startX = currentPos.x;
+  tg.startY = currentPos.y;
+  tg.targetPlayerId = tg.attackerPlayerId;
+  tg.turnsRemaining = returnTurns;
+  tg.totalTurns = returnTurns;
+  tg.paused = false;
+
+  return { room };
+}
+
+export function pauseTroops(
+  roomId: string,
+  playerId: string,
+  troopGroupId: string
+): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
+  const room = rooms.get(roomId);
+  if (!room) return { error: 'Room not found' };
+
+  const guard = guardAction(room, playerId);
+  if (typeof guard === 'string') return { error: guard };
+
+  const tg = room.troopsInTransit.find(
+    t => t.id === troopGroupId && t.attackerPlayerId === playerId
+  );
+  if (!tg) return { error: 'Troop group not found' };
+  if (tg.paused) return { error: 'Troops are already paused' };
+  if (tg.turnsRemaining <= 0) return { error: 'Troops have already arrived' };
+
+  tg.paused = true;
+  return { room };
+}
+
+export function resumeTroops(
+  roomId: string,
+  playerId: string,
+  troopGroupId: string
+): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
+  const room = rooms.get(roomId);
+  if (!room) return { error: 'Room not found' };
+
+  const guard = guardAction(room, playerId);
+  if (typeof guard === 'string') return { error: guard };
+
+  const tg = room.troopsInTransit.find(
+    t => t.id === troopGroupId && t.attackerPlayerId === playerId
+  );
+  if (!tg) return { error: 'Troop group not found' };
+  if (!tg.paused) return { error: 'Troops are not paused' };
+
+  tg.paused = false;
+  return { room };
+}
+
+export function redirectTroops(
+  roomId: string,
+  playerId: string,
+  troopGroupId: string,
+  newTargetPlayerId: string
+): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
+  const room = rooms.get(roomId);
+  if (!room) return { error: 'Room not found' };
+
+  const guard = guardAction(room, playerId);
+  if (typeof guard === 'string') return { error: guard };
+
+  const tg = room.troopsInTransit.find(
+    t => t.id === troopGroupId && t.attackerPlayerId === playerId
+  );
+  if (!tg) return { error: 'Troop group not found' };
+  if (tg.turnsRemaining <= 0) return { error: 'Troops have already arrived' };
+  if (newTargetPlayerId === playerId) return { error: 'Use recall to send troops home' };
+  if (newTargetPlayerId === tg.targetPlayerId) return { error: 'Already heading to that target' };
+
+  // Validate new target
+  if (newTargetPlayerId !== GOLD_MINE_ID) {
+    const newTarget = room.players.get(newTargetPlayerId);
+    if (!newTarget) return { error: 'Target not found' };
+    if (!newTarget.alive) return { error: 'Target is eliminated' };
+  }
+
+  const currentPos = getTroopCurrentPosition(tg, room.players);
+
+  // Resolve new target position
+  let newTargetX: number, newTargetY: number;
+  if (newTargetPlayerId === GOLD_MINE_ID) {
+    newTargetX = GOLD_MINE_X;
+    newTargetY = GOLD_MINE_Y;
+  } else {
+    const newTarget = room.players.get(newTargetPlayerId)!;
+    newTargetX = newTarget.x;
+    newTargetY = newTarget.y;
+  }
+
+  // Calculate new travel time proportionally
+  const newDist = Math.hypot(newTargetX - currentPos.x, newTargetY - currentPos.y);
+
+  // Resolve old target position for ratio calculation
+  let oldTargetX: number, oldTargetY: number;
+  if (tg.targetPlayerId === GOLD_MINE_ID) {
+    oldTargetX = GOLD_MINE_X;
+    oldTargetY = GOLD_MINE_Y;
+  } else {
+    const oldTarget = room.players.get(tg.targetPlayerId);
+    oldTargetX = oldTarget?.x ?? currentPos.x;
+    oldTargetY = oldTarget?.y ?? currentPos.y;
+  }
+  const oldRemainingDist = Math.hypot(oldTargetX - currentPos.x, oldTargetY - currentPos.y);
+
+  let newTurns: number;
+  if (oldRemainingDist > 0.001) {
+    newTurns = Math.max(1, Math.round(tg.turnsRemaining * (newDist / oldRemainingDist)));
+  } else {
+    newTurns = Math.max(1, Math.round(TROOP_TRAVEL_TURNS * (newDist / 0.7)));
+  }
+
+  tg.startX = currentPos.x;
+  tg.startY = currentPos.y;
+  tg.targetPlayerId = newTargetPlayerId;
+  tg.turnsRemaining = newTurns;
+  tg.totalTurns = newTurns;
+  tg.paused = false;
+
+  return { room };
+}
+
+export function recallOccupyingTroops(
+  roomId: string,
+  playerId: string,
+  troopGroupId: string
+): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
+  const room = rooms.get(roomId);
+  if (!room) return { error: 'Room not found' };
+
+  const guard = guardAction(room, playerId);
+  if (typeof guard === 'string') return { error: guard };
+
+  const occIndex = room.occupyingTroops.findIndex(
+    occ => occ.id === troopGroupId && occ.attackerPlayerId === playerId
+  );
+  if (occIndex === -1) return { error: 'Occupying troop group not found' };
+
+  const occ = room.occupyingTroops[occIndex];
+
+  // Determine start position (where the troops currently are)
+  let startX: number, startY: number;
+  if (occ.targetPlayerId === GOLD_MINE_ID) {
+    startX = GOLD_MINE_X;
+    startY = GOLD_MINE_Y;
+  } else {
+    const targetCity = room.players.get(occ.targetPlayerId);
+    startX = targetCity?.x ?? 0.5;
+    startY = targetCity?.y ?? 0.5;
+  }
+
+  // Move from occupying to transit (heading home)
+  room.occupyingTroops.splice(occIndex, 1);
+  room.troopsInTransit.push({
+    id: occ.id + '-recalled',
+    attackerPlayerId: playerId,
+    targetPlayerId: playerId, // heading home
+    troopType: occ.troopType,
+    units: occ.units,
+    turnsRemaining: TROOP_TRAVEL_TURNS,
+    totalTurns: TROOP_TRAVEL_TURNS,
+    startX,
+    startY,
+  });
 
   return { room };
 }
@@ -878,6 +1193,7 @@ export function resetRoom(
   room.troopsInTransit = [];
   room.occupyingTroops = [];
   room.winnerPlayerId = null;
+  room.goldMineOwnerId = null;
 
   for (const [, player] of room.players) {
     player.color = '';
@@ -942,5 +1258,6 @@ export function sanitizeState(room: ServerRoom): RoomStatePayload {
     occupyingTroops: room.occupyingTroops,
     combatHitPlayerIds: room.combatHitPlayerIds,
     winnerPlayerId: room.winnerPlayerId,
+    goldMineOwnerId: room.goldMineOwnerId,
   };
 }

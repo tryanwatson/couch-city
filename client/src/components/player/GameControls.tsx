@@ -20,6 +20,8 @@ import {
   TRAINING_CONFIG,
   COMBAT_POWER,
   VALID_ATTACK_AMOUNTS,
+  GOLD_MINE_ID,
+  GOLD_MINE_INCOME,
 } from '../../../../shared/constants';
 
 interface GameControlsProps {
@@ -28,7 +30,7 @@ interface GameControlsProps {
   socket: Socket;
 }
 
-type SectionId = 'farming' | 'mining' | 'trade' | 'culture' | 'military' | 'attack';
+type SectionId = 'farming' | 'mining' | 'trade' | 'culture' | 'military' | 'attack' | 'troops';
 
 export default function GameControls({ roomState, playerId, socket }: GameControlsProps) {
   const me = roomState.players.find((p) => p.playerId === playerId) ?? null;
@@ -45,6 +47,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
     culture: false,
     military: false,
     attack: false,
+    troops: false,
   });
 
   const toggleSection = (id: SectionId) => {
@@ -91,6 +94,26 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
 
   const handleSendAttack = (targetPlayerId: string, units: number, troopType: TroopType) => {
     socket.emit('player:send_attack', { roomId: roomState.roomId, playerId, targetPlayerId, units, troopType });
+  };
+
+  const handleRecallTroops = (troopGroupId: string) => {
+    socket.emit('player:recall_troops', { roomId: roomState.roomId, playerId, troopGroupId });
+  };
+
+  const handlePauseTroops = (troopGroupId: string) => {
+    socket.emit('player:pause_troops', { roomId: roomState.roomId, playerId, troopGroupId });
+  };
+
+  const handleResumeTroops = (troopGroupId: string) => {
+    socket.emit('player:resume_troops', { roomId: roomState.roomId, playerId, troopGroupId });
+  };
+
+  const handleRedirectTroops = (troopGroupId: string, newTargetPlayerId: string) => {
+    socket.emit('player:redirect_troops', { roomId: roomState.roomId, playerId, troopGroupId, newTargetPlayerId });
+  };
+
+  const handleRecallOccupyingTroops = (troopGroupId: string) => {
+    socket.emit('player:recall_occupying_troops', { roomId: roomState.roomId, playerId, troopGroupId });
   };
 
   const handleEndTurn = () => {
@@ -211,7 +234,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           <div className="stat-block">
             <span className="stat-label">💰 Gold</span>
             <span className="stat-value">{Math.floor(me.gold)}</span>
-            <span className="stat-rate">+{goldPerTurn}/turn</span>
+            <span className="stat-rate">+{goldPerTurn}{roomState.goldMineOwnerId === playerId ? `+${GOLD_MINE_INCOME}` : ''}/turn</span>
           </div>
         </div>
       </div>
@@ -483,57 +506,155 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
 
         <div className={`section-body${expandedSections.attack ? '' : ' collapsed'}`}>
           <div className="section-body-inner">
-            {targets.length === 0 ? (
-              <p className="waiting-text">No targets available</p>
-            ) : (
-              <div className="target-list">
-                {targets.map((target) => (
-                  <div key={target.playerId} className="target-row">
-                    <div className="target-info">
-                      <span className="target-color-dot" style={{ backgroundColor: target.color }} />
-                      <span className="target-name">{target.name}</span>
-                      <span className="target-hp-small">{Math.ceil(target.hp)} HP</span>
+            <div className="target-list">
+              {/* Gold Mine target */}
+              <div className="target-row" style={{ borderLeft: '3px solid #f1c40f' }}>
+                <div className="target-info">
+                  <span className="target-color-dot" style={{ backgroundColor: '#f1c40f' }} />
+                  <span className="target-name">Gold Mine</span>
+                  <span className="target-hp-small">+{GOLD_MINE_INCOME}g/turn</span>
+                </div>
+                {TROOP_TYPES.map((type) => {
+                  const count = me.militaryAtHome[type];
+                  if (count === 0) return null;
+                  return (
+                    <div key={type} className="attack-type-row">
+                      <span className="attack-type-label">{type.charAt(0).toUpperCase() + type.slice(1)} ({count})</span>
+                      <div className="attack-amounts">
+                        {(VALID_ATTACK_AMOUNTS as readonly number[]).map((amount) => (
+                          <button
+                            key={amount}
+                            className="attack-amount-btn"
+                            onClick={() => handleSendAttack(GOLD_MINE_ID, amount, type)}
+                            disabled={count < amount || controlsDisabled}
+                          >
+                            Send {amount}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    {TROOP_TYPES.map((type) => {
-                      const count = me.militaryAtHome[type];
-                      if (count === 0) return null;
-                      return (
-                        <div key={type} className="attack-type-row">
-                          <span className="attack-type-label">{type.charAt(0).toUpperCase() + type.slice(1)} ({count})</span>
-                          <div className="attack-amounts">
-                            {(VALID_ATTACK_AMOUNTS as readonly number[]).map((amount) => (
-                              <button
-                                key={amount}
-                                className="attack-amount-btn"
-                                onClick={() => handleSendAttack(target.playerId, amount, type)}
-                                disabled={count < amount || controlsDisabled}
-                              >
-                                Send {amount}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-            )}
+
+              {/* Player targets */}
+              {targets.map((target) => (
+                <div key={target.playerId} className="target-row">
+                  <div className="target-info">
+                    <span className="target-color-dot" style={{ backgroundColor: target.color }} />
+                    <span className="target-name">{target.name}</span>
+                    <span className="target-hp-small">{Math.ceil(target.hp)} HP</span>
+                  </div>
+                  {TROOP_TYPES.map((type) => {
+                    const count = me.militaryAtHome[type];
+                    if (count === 0) return null;
+                    return (
+                      <div key={type} className="attack-type-row">
+                        <span className="attack-type-label">{type.charAt(0).toUpperCase() + type.slice(1)} ({count})</span>
+                        <div className="attack-amounts">
+                          {(VALID_ATTACK_AMOUNTS as readonly number[]).map((amount) => (
+                            <button
+                              key={amount}
+                              className="attack-amount-btn"
+                              onClick={() => handleSendAttack(target.playerId, amount, type)}
+                              disabled={count < amount || controlsDisabled}
+                            >
+                              Send {amount}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* IN-TRANSIT INDICATOR */}
+      {/* TROOPS IN TRANSIT — interactive management */}
       {myTransit.length > 0 && (
-        <div className="transit-indicator">
-          {myTransit.map((tg) => {
-            const targetName = roomState.players.find((p) => p.playerId === tg.targetPlayerId)?.name ?? '?';
-            return (
-              <div key={tg.id} className="transit-row">
-                {tg.units} {tg.troopType} &#8594; {targetName} ({tg.turnsRemaining} {tg.turnsRemaining === 1 ? 'turn' : 'turns'})
-              </div>
-            );
-          })}
+        <div className="upgrades-section section-troops">
+          <button className="section-header" onClick={() => toggleSection('troops')}>
+            <span className={`section-chevron${expandedSections.troops ? ' section-chevron-open' : ''}`}>&#9656;</span>
+            <span className="section-header-title">🚶 Troops In Transit</span>
+            <span className="section-header-summary">
+              <span className="summary-detail">{myTransit.length} group{myTransit.length !== 1 ? 's' : ''}</span>
+            </span>
+          </button>
+
+          <div className={`section-body${expandedSections.troops ? '' : ' collapsed'}`}>
+            <div className="section-body-inner">
+              {myTransit.map((tg) => {
+                const isReturning = tg.attackerPlayerId === tg.targetPlayerId;
+                const isPaused = tg.paused;
+                const targetName = tg.targetPlayerId === GOLD_MINE_ID
+                  ? 'Gold Mine'
+                  : isReturning
+                    ? 'Home'
+                    : (roomState.players.find((p) => p.playerId === tg.targetPlayerId)?.name ?? '?');
+
+                // Redirect targets: alive players (excluding self and current target) + gold mine
+                const redirectTargets = [
+                  ...roomState.players.filter(p => p.alive && p.playerId !== playerId && p.playerId !== tg.targetPlayerId),
+                ];
+                const canRedirectToMine = tg.targetPlayerId !== GOLD_MINE_ID;
+
+                return (
+                  <div key={tg.id} className={`troop-manage-row${isPaused ? ' troop-paused' : ''}`}>
+                    <div className="troop-manage-info">
+                      <span className="troop-manage-units">
+                        {tg.units} {tg.troopType}
+                      </span>
+                      <span className="troop-manage-target">
+                        {isReturning ? '← Home' : `→ ${targetName}`}
+                        {isPaused && ' (PAUSED)'}
+                      </span>
+                      <span className="troop-manage-eta">
+                        {isPaused ? 'Paused' : `${tg.turnsRemaining}t`}
+                      </span>
+                    </div>
+
+                    {!isReturning && (
+                      <div className="troop-manage-actions">
+                        <button
+                          className="troop-action-btn"
+                          onClick={() => isPaused ? handleResumeTroops(tg.id) : handlePauseTroops(tg.id)}
+                          disabled={controlsDisabled}
+                        >
+                          {isPaused ? 'Resume' : 'Pause'}
+                        </button>
+                        <button
+                          className="troop-action-btn"
+                          onClick={() => handleRecallTroops(tg.id)}
+                          disabled={controlsDisabled}
+                        >
+                          Recall
+                        </button>
+                        {(redirectTargets.length > 0 || canRedirectToMine) && (
+                          <select
+                            className="troop-redirect-select"
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value) handleRedirectTroops(tg.id, e.target.value);
+                            }}
+                            disabled={controlsDisabled}
+                          >
+                            <option value="">Redirect...</option>
+                            {canRedirectToMine && <option value={GOLD_MINE_ID}>Gold Mine</option>}
+                            {redirectTargets.map(t => (
+                              <option key={t.playerId} value={t.playerId}>{t.name}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 
@@ -545,12 +666,26 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           <>
             {mySieges.length > 0 && (
               <div className="transit-indicator">
-                <div className="transit-row" style={{ fontWeight: 700 }}>Your Siege Forces</div>
+                <div className="transit-row" style={{ fontWeight: 700 }}>Your Occupying Forces</div>
                 {mySieges.map(occ => {
-                  const targetName = roomState.players.find(p => p.playerId === occ.targetPlayerId)?.name ?? '?';
+                  const isMine = occ.targetPlayerId === GOLD_MINE_ID;
+                  const targetName = isMine
+                    ? 'Gold Mine'
+                    : (roomState.players.find(p => p.playerId === occ.targetPlayerId)?.name ?? '?');
                   return (
-                    <div key={occ.id} className="transit-row">
-                      {occ.units} {occ.troopType} besieging {targetName} ({occ.units * COMBAT_POWER[occ.troopType]} dmg/turn)
+                    <div key={occ.id} className="transit-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>
+                        {occ.units} {occ.troopType} {isMine ? 'at' : 'besieging'} {targetName}
+                        {!isMine && ` (${occ.units * COMBAT_POWER[occ.troopType]} dmg/turn)`}
+                      </span>
+                      <button
+                        className="troop-action-btn"
+                        onClick={() => handleRecallOccupyingTroops(occ.id)}
+                        disabled={controlsDisabled}
+                        style={{ marginLeft: 8, fontSize: 11 }}
+                      >
+                        Recall
+                      </button>
                     </div>
                   );
                 })}

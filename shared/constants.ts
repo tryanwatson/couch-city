@@ -95,6 +95,13 @@ export const FIELD_COMBAT_WALK_FRAC = 0.3; // 1500ms — walk to collision point
 export const FIELD_COMBAT_FIGHT_FRAC = 0.5; // 2500ms — fight at collision point
 export const FIELD_COMBAT_ADVANCE_FRAC = 0.2; // 1000ms — winner advances to destination / loser fades
 
+// Gold Mine (center-of-map objective)
+export const GOLD_MINE_ID = '__GOLD_MINE__';
+export const GOLD_MINE_X = 0.5;
+export const GOLD_MINE_Y = 0.5;
+export const GOLD_MINE_INCOME = 100; // gold per turn when occupied uncontested
+export const GOLD_MINE_TRAVEL_TURNS = 2; // turns for troops to reach the mine (shorter than city attacks)
+
 // Turn-based timing
 export const RESOLVING_PHASE_DURATION_MS = 5000; // client-side animation duration
 

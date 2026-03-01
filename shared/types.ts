@@ -45,6 +45,8 @@ export interface TroopGroup {
   fieldCombatY?: number;
   inFieldCombat?: boolean; // resolved same turn during update phase
   fieldCombatUnits?: number; // original unit count before field combat (for animation)
+  // Troop management
+  paused?: boolean; // when true, turnsRemaining does NOT decrement
 }
 
 // Broadcast payload — everything clients need to render
@@ -58,6 +60,7 @@ export interface RoomStatePayload {
   occupyingTroops: TroopGroup[];
   combatHitPlayerIds: string[];
   winnerPlayerId: string | null;
+  goldMineOwnerId: string | null; // playerId of uncontested mine owner, or null
 }
 
 // ============================================================
@@ -103,4 +106,5 @@ export interface ServerRoom {
   occupyingTroops: TroopGroup[];
   combatHitPlayerIds: string[];
   winnerPlayerId: string | null;
+  goldMineOwnerId: string | null;
 }

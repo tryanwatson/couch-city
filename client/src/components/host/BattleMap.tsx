@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import type { CityPlayerInfo, TroopGroup, TroopType, PlayingSubPhase } from '../../../../shared/types';
-import { CULTURE_WIN_THRESHOLD, COMBAT_POWER, TROOP_TYPES, RESOLVING_PHASE_DURATION_MS, FIELD_COMBAT_WALK_FRAC, FIELD_COMBAT_FIGHT_FRAC, FIELD_COMBAT_ADVANCE_FRAC } from '../../../../shared/constants';
+import { CULTURE_WIN_THRESHOLD, COMBAT_POWER, TROOP_TYPES, RESOLVING_PHASE_DURATION_MS, FIELD_COMBAT_WALK_FRAC, FIELD_COMBAT_FIGHT_FRAC, FIELD_COMBAT_ADVANCE_FRAC, GOLD_MINE_ID, GOLD_MINE_X, GOLD_MINE_Y, GOLD_MINE_INCOME } from '../../../../shared/constants';
 
 interface SpriteSheetConfig {
   image: string;
@@ -83,6 +83,13 @@ interface BattleMapProps {
   animate: boolean;
   subPhase?: PlayingSubPhase | null;
   turnNumber?: number;
+  goldMineOwnerId?: string | null;
+}
+
+function resolveTargetPos(targetPlayerId: string, playerMap: Map<string, CityPlayerInfo>): { x: number; y: number } | null {
+  if (targetPlayerId === GOLD_MINE_ID) return { x: GOLD_MINE_X, y: GOLD_MINE_Y };
+  const target = playerMap.get(targetPlayerId);
+  return target ? { x: target.x, y: target.y } : null;
 }
 
 function AttackLine({
@@ -93,14 +100,14 @@ function AttackLine({
   playerMap: Map<string, CityPlayerInfo>;
 }) {
   const attacker = playerMap.get(troop.attackerPlayerId);
-  const target = playerMap.get(troop.targetPlayerId);
-  if (!attacker || !target) return null;
+  const targetPos = resolveTargetPos(troop.targetPlayerId, playerMap);
+  if (!attacker || !targetPos) return null;
   return (
     <line
       x1={attacker.x * 1000}
       y1={attacker.y * 1000}
-      x2={target.x * 1000}
-      y2={target.y * 1000}
+      x2={targetPos.x * 1000}
+      y2={targetPos.y * 1000}
       stroke={attacker.color}
       strokeWidth={1.5}
       strokeOpacity={0.3}
@@ -121,6 +128,8 @@ function TroopSprite({
   troopType,
   opacity = 1,
   playerColor,
+  statusIcon,
+  statusColor,
 }: {
   pos: { x: number; y: number };
   units: number;
@@ -131,6 +140,8 @@ function TroopSprite({
   troopType: TroopType;
   opacity?: number;
   playerColor?: string;
+  statusIcon?: string;
+  statusColor?: string;
 }) {
   const sheet = SPRITE_SHEETS[troopType];
   const cx = pos.x * 1000;
@@ -415,13 +426,48 @@ function CityNode({ player, playerIndex, isUnderSiege }: { player: CityPlayerInf
   );
 }
 
+function GoldMineNode({ ownerColor, isContested }: { ownerColor: string | null; isContested: boolean }) {
+  const cx = GOLD_MINE_X * 1000;
+  const cy = GOLD_MINE_Y * 1000;
+
+  return (
+    <g>
+      {/* Glow ring when owned */}
+      {ownerColor && (
+        <circle cx={cx} cy={cy} r={55} fill="none" stroke={ownerColor} strokeWidth={3} opacity={0.6} />
+      )}
+      {/* Contested ring */}
+      {isContested && (
+        <circle cx={cx} cy={cy} r={55} fill="none" stroke="#e74c3c" strokeWidth={3} strokeDasharray="8 6" opacity={0.7}>
+          <animate attributeName="stroke-dashoffset" from="0" to="20" dur="1s" repeatCount="indefinite" />
+        </circle>
+      )}
+      {/* Mine body */}
+      <circle cx={cx} cy={cy} r={35} fill="#2a1a0e" stroke="#f1c40f" strokeWidth={3} />
+      {/* Icon */}
+      <text x={cx} y={cy + 8} textAnchor="middle" fontSize={30}>&#9935;</text>
+      {/* Label */}
+      <text x={cx} y={cy + 58} textAnchor="middle" fontSize={13} fontWeight="700" fill="#f1c40f">
+        Gold Mine
+      </text>
+      <text
+        x={cx} y={cy + 73}
+        textAnchor="middle" fontSize={11}
+        fill={isContested ? '#e74c3c' : ownerColor ? ownerColor : '#888'}
+      >
+        {isContested ? 'Contested!' : ownerColor ? `+${GOLD_MINE_INCOME}g/turn` : 'Unoccupied'}
+      </text>
+    </g>
+  );
+}
+
 /** Calculate troop position based on turn-based progress */
 function getTroopProgress(troop: TroopGroup): number {
   if (troop.totalTurns <= 0) return 1;
   return (troop.totalTurns - troop.turnsRemaining) / troop.totalTurns;
 }
 
-export default function BattleMap({ players, troopsInTransit, occupyingTroops, animate, subPhase }: BattleMapProps) {
+export default function BattleMap({ players, troopsInTransit, occupyingTroops, animate, subPhase, goldMineOwnerId }: BattleMapProps) {
   const playerMap = useMemo(
     () => new Map(players.map((p) => [p.playerId, p])),
     [players],
@@ -485,6 +531,13 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
       const now = Date.now();
       const positions = new Map<string, { x: number; y: number; facingLeft: boolean; isAttacking: boolean; isIdle: boolean; opacity: number; displayUnits: number }>();
 
+      // Pre-compute mine contest state for animation decisions
+      const mineOccupierPlayerIds = new Set(
+        occupyingTroops
+          .filter(occ => occ.targetPlayerId === GOLD_MINE_ID && occ.units > 0)
+          .map(occ => occ.attackerPlayerId)
+      );
+
       // During resolving, animate troops from old to new positions
       const isResolving = subPhase === 'resolving' && resolvingStartRef.current != null;
       const animProgress = isResolving
@@ -493,13 +546,13 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
 
       for (const troop of troopsInTransit) {
         const attacker = playerMap.get(troop.attackerPlayerId);
-        const target = playerMap.get(troop.targetPlayerId);
-        if (!attacker || !target) continue;
+        const targetPos = resolveTargetPos(troop.targetPlayerId, playerMap);
+        if (!attacker || !targetPos) continue;
 
         const originX = troop.startX ?? attacker.x;
         const originY = troop.startY ?? attacker.y;
-        const dx = target.x - originX;
-        const dy = target.y - originY;
+        const dx = targetPos.x - originX;
+        const dy = targetPos.y - originY;
         const dist = Math.sqrt(dx * dx + dy * dy);
         const facingLeft = dx < 0;
 
@@ -552,8 +605,9 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
 
         // Calculate current turn-based position
         const progress = getTroopProgress(troop);
+        const isMineTarget = troop.targetPlayerId === GOLD_MINE_ID;
         const standoffFrac = dist > 0 ? ATTACK_STANDOFF / dist : 0;
-        const clampedProgress = Math.min(progress, 1 - standoffFrac);
+        const clampedProgress = isMineTarget ? progress : Math.min(progress, 1 - standoffFrac);
 
         let displayX = originX + dx * clampedProgress;
         let displayY = originY + dy * clampedProgress;
@@ -568,28 +622,34 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
         }
 
         // Check if troop has arrived (progress >= 1 - standoffFrac)
-        if (progress >= 1 - standoffFrac && !isResolving) {
+        // Mine arrivals skip lingering — they become occupying troops on the server
+        if (!isMineTarget && progress >= 1 - standoffFrac && !isResolving) {
           if (!lingeringRef.current.has(troop.id)) {
             const nx = dist > 0 ? dx / dist : 0;
             const ny = dist > 0 ? dy / dist : 0;
             lingeringRef.current.set(troop.id, {
               troop,
               pos: {
-                x: target.x - nx * ATTACK_STANDOFF,
-                y: target.y - ny * ATTACK_STANDOFF,
+                x: targetPos.x - nx * ATTACK_STANDOFF,
+                y: targetPos.y - ny * ATTACK_STANDOFF,
               },
               facingLeft,
               startMs: now,
             });
           }
         } else {
-          const inArrivalCombat = isResolving && troop.turnsRemaining === 0;
+          // Mine arrivals only attack-animate when enemies are present
+          const isMineArrivalContested = isMineTarget
+            && mineOccupierPlayerIds.size > 0
+            && Array.from(mineOccupierPlayerIds).some(id => id !== troop.attackerPlayerId);
+          const inArrivalCombat = isResolving && troop.turnsRemaining === 0
+            && (!isMineTarget || isMineArrivalContested);
           positions.set(troop.id, {
             x: displayX,
             y: displayY,
             facingLeft,
             isAttacking: inArrivalCombat,
-            isIdle: !isResolving,
+            isIdle: troop.paused || !isResolving || (isMineTarget && troop.turnsRemaining === 0 && !isMineArrivalContested),
             opacity: 1,
             displayUnits: troop.units,
           });
@@ -615,7 +675,7 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
-  }, [animate, troopsInTransit, playerMap, subPhase]);
+  }, [animate, troopsInTransit, occupyingTroops, playerMap, subPhase]);
 
   return (
     <svg
@@ -676,39 +736,71 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
           />
         ))}
 
-      {/* Occupying siege troops — idle at standoff distance from target city */}
+      {/* Occupying siege troops — idle at standoff distance from target city, or on mine center */}
       {occupyingTroops
         .map((occ) => {
           const attacker = playerMap.get(occ.attackerPlayerId);
-          const target = playerMap.get(occ.targetPlayerId);
-          if (!attacker || !target) return null;
-          const dx = target.x - attacker.x;
-          const dy = target.y - attacker.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          const nx = dist > 0 ? dx / dist : 0;
-          const ny = dist > 0 ? dy / dist : 0;
+          const targetPos = resolveTargetPos(occ.targetPlayerId, playerMap);
+          if (!attacker || !targetPos) return null;
+          const dx = targetPos.x - attacker.x;
+          const dy = targetPos.y - attacker.y;
+          // Mine troops sit directly on the mine; city troops use standoff
+          let pos: { x: number; y: number };
+          if (occ.targetPlayerId === GOLD_MINE_ID) {
+            pos = { x: GOLD_MINE_X, y: GOLD_MINE_Y };
+          } else {
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const nx = dist > 0 ? dx / dist : 0;
+            const ny = dist > 0 ? dy / dist : 0;
+            pos = { x: targetPos.x - nx * ATTACK_STANDOFF, y: targetPos.y - ny * ATTACK_STANDOFF };
+          }
           return {
             occ,
-            pos: { x: target.x - nx * ATTACK_STANDOFF, y: target.y - ny * ATTACK_STANDOFF },
+            pos,
             facingLeft: dx < 0,
             playerColor: attacker.color,
           };
         })
         .filter((e): e is NonNullable<typeof e> => e != null)
         .sort((a, b) => a.pos.y - b.pos.y)
-        .map((entry) => (
-          <TroopSprite
-            key={`siege-${entry.occ.id}`}
-            pos={entry.pos}
-            units={entry.occ.units}
-            frameIndex={frameIndex}
-            isAttacking={subPhase === 'resolving'}
-            isIdle={subPhase !== 'resolving'}
-            facingLeft={entry.facingLeft}
-            troopType={entry.occ.troopType}
-            playerColor={entry.playerColor}
-          />
-        ))}
+        .map((entry) => {
+          // Mine occupiers: only attack-animate when contested (multiple players at mine)
+          const isMineOccupier = entry.occ.targetPlayerId === GOLD_MINE_ID;
+          const minePlayerIds = new Set(
+            occupyingTroops
+              .filter(occ => occ.targetPlayerId === GOLD_MINE_ID && occ.units > 0)
+              .map(occ => occ.attackerPlayerId)
+          );
+          const isMineContested = minePlayerIds.size > 1;
+          const isAttacking = isMineOccupier
+            ? (subPhase === 'resolving' && isMineContested)
+            : (subPhase === 'resolving');
+          return (
+            <TroopSprite
+              key={`siege-${entry.occ.id}`}
+              pos={entry.pos}
+              units={entry.occ.units}
+              frameIndex={frameIndex}
+              isAttacking={isAttacking}
+              isIdle={!isAttacking}
+              facingLeft={entry.facingLeft}
+              troopType={entry.occ.troopType}
+              playerColor={entry.playerColor}
+            />
+          );
+        })}
+
+      {/* Gold Mine */}
+      {(() => {
+        const minePlayerIds = new Set(
+          occupyingTroops
+            .filter(occ => occ.targetPlayerId === GOLD_MINE_ID && occ.units > 0)
+            .map(occ => occ.attackerPlayerId)
+        );
+        const isMineContested = minePlayerIds.size > 1;
+        const ownerColor = goldMineOwnerId ? (playerMap.get(goldMineOwnerId)?.color ?? null) : null;
+        return <GoldMineNode ownerColor={ownerColor} isContested={isMineContested} />;
+      })()}
 
       {/* Cities — rendered last so they paint over troop lines */}
       {players.map((player, index) => {
