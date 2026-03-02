@@ -625,6 +625,9 @@
 .build-progress-bar-fill.trade-progress-fill {
   background: linear-gradient(90deg, #d4a017, #f1c40f);
 }
+.build-progress-bar-fill.defense-progress-fill {
+  background: linear-gradient(90deg, #2980b9, #5dade2);
+}
 .builder-assignment {
   display: flex;
   align-items: center;
@@ -654,19 +657,42 @@
   background: rgba(200, 69, 85, 0.35);
 }
 
-/* --- Attack (Red) --- */
-.section-attack {
-  background: var(--color-military-bg);
-  border-left: 3px solid var(--color-military-accent);
+/* --- Defense (Steel Blue) --- */
+.section-defense {
+  background: var(--color-defense-bg);
+  border-left: 3px solid var(--color-defense-accent);
 }
-.section-attack .section-header-title { color: var(--color-military-accent); }
-.section-attack .target-row { background: var(--color-military-row); }
-.section-attack .attack-amount-btn {
+.section-defense .section-header-title { color: var(--color-defense-accent); }
+.section-defense .resource-row { background: var(--color-defense-row); }
+.section-defense .worker-btn {
+  border-color: var(--color-defense-accent);
+  background: rgba(74, 144, 168, 0.15);
+}
+.section-defense .worker-btn:hover:not(:disabled) {
+  background: rgba(74, 144, 168, 0.35);
+}
+.section-defense .upgrade-defense {
+  background: rgba(74, 144, 168, 0.2);
+  border-color: var(--color-defense-accent);
+}
+.section-defense .upgrade-defense:hover:not(:disabled) {
+  background: rgba(74, 144, 168, 0.35);
+}
+
+/* Attack elements (now inside military section) */
+.section-military .target-row { background: var(--color-military-row); }
+.section-military .attack-amount-btn {
   background: rgba(200, 69, 85, 0.15);
   border-color: var(--color-military-accent);
 }
-.section-attack .attack-amount-btn:hover:not(:disabled) {
+.section-military .attack-amount-btn:hover:not(:disabled) {
   background: rgba(200, 69, 85, 0.35);
+}
+
+.section-divider {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 8px 0;
 }
 
 /* =========================================

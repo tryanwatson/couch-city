@@ -28,7 +28,8 @@ import {
   SIEGE_DAMAGE_PER_CP,
   INITIAL_HP,
   MAX_HP,
-  HP_REGEN_PER_TURN,
+  HP_REGEN_PERCENT,
+  DEFENSE_HP_PER_LEVEL,
   TROOP_TRAVEL_TURNS,
   VALID_ATTACK_AMOUNTS,
   RESOLVING_PHASE_DURATION_MS,
@@ -331,6 +332,17 @@ function runUpdatePhase(room: ServerRoom): void {
         }
       }
     }
+
+    // Recalculate max HP from defense upgrades (grants bonus HP on completion)
+    let bonusHp = 0;
+    for (let i = 0; i < player.upgradesCompleted.defense; i++) {
+      bonusHp += DEFENSE_HP_PER_LEVEL[i] ?? 0;
+    }
+    const newMaxHp = MAX_HP + bonusHp;
+    if (newMaxHp > player.maxHp) {
+      player.hp += (newMaxHp - player.maxHp);
+      player.maxHp = newMaxHp;
+    }
   }
 
   // Food consumption & population growth/starvation
@@ -351,9 +363,10 @@ function runUpdatePhase(room: ServerRoom): void {
     }
   }
 
-  // HP regeneration
+  // HP regeneration (percentage-based, scales with defense upgrades)
   for (const player of alivePlayers) {
-    player.hp = Math.min(player.maxHp, player.hp + HP_REGEN_PER_TURN);
+    const regen = Math.ceil(player.maxHp * HP_REGEN_PERCENT);
+    player.hp = Math.min(player.maxHp, player.hp + regen);
   }
 
   // Existing occupying troops fight garrison and deal siege damage

@@ -28,14 +28,15 @@ export const UPGRADE_PROGRESS: Record<UpgradeCategory, readonly number[]> = {
   farming: [4, 8],
   mining: [4, 8],
   trade: [4, 8],
+  defense: [5, 10, 16],
 };
 
 export const ALL_UPGRADE_CATEGORIES: readonly UpgradeCategory[] = [
-  'culture', 'military', 'farming', 'mining', 'trade',
+  'culture', 'military', 'farming', 'mining', 'trade', 'defense',
 ] as const;
 
 export function zeroUpgradeRecord(): Record<UpgradeCategory, number> {
-  return { culture: 0, military: 0, farming: 0, mining: 0, trade: 0 };
+  return { culture: 0, military: 0, farming: 0, mining: 0, trade: 0, defense: 0 };
 }
 
 export function yieldMultiplier(upgradesCompleted: number): number {
@@ -89,7 +90,10 @@ export const ZERO_MILITARY: Record<TroopType, number> = {
 // HP
 export const INITIAL_HP = 100;
 export const MAX_HP = 100;
-export const HP_REGEN_PER_TURN = 3;
+export const HP_REGEN_PERCENT = 0.03; // 3% of maxHp per turn (ceil'd) — scales with defense upgrades
+
+// Defense upgrades — max HP bonus per completed level
+export const DEFENSE_HP_PER_LEVEL: readonly number[] = [50, 75, 100];
 
 // Combat
 export const TROOP_TRAVEL_TURNS = 3; // turns for troops to reach target (4 positions: home,1,2,enemy)

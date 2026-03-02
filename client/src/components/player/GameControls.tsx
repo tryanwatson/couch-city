@@ -21,6 +21,8 @@ import {
   VALID_ATTACK_AMOUNTS,
   PROMISED_LAND_ID,
   PROMISED_LAND_HOLD_TURNS,
+  HP_REGEN_PERCENT,
+  DEFENSE_HP_PER_LEVEL,
 } from '../../../../shared/constants';
 
 interface GameControlsProps {
@@ -29,7 +31,7 @@ interface GameControlsProps {
   socket: Socket;
 }
 
-type SectionId = 'farming' | 'mining' | 'trade' | 'culture' | 'military' | 'attack' | 'troops';
+type SectionId = 'farming' | 'mining' | 'trade' | 'culture' | 'defense' | 'military' | 'troops';
 
 export default function GameControls({ roomState, playerId, socket }: GameControlsProps) {
   const me = roomState.players.find((p) => p.playerId === playerId) ?? null;
@@ -38,15 +40,15 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
   const [localFarmers, setLocalFarmers] = useState(0);
   const [localMiners, setLocalMiners] = useState(0);
   const [localMerchants, setLocalMerchants] = useState(0);
-  const [localBuilders, setLocalBuilders] = useState<Record<UpgradeCategory, number>>({ culture: 0, military: 0, farming: 0, mining: 0, trade: 0 });
+  const [localBuilders, setLocalBuilders] = useState<Record<UpgradeCategory, number>>({ culture: 0, military: 0, farming: 0, mining: 0, trade: 0, defense: 0 });
   const [localGrowthMultiplier, setLocalGrowthMultiplier] = useState(1);
   const [expandedSections, setExpandedSections] = useState<Record<SectionId, boolean>>({
     farming: true,
     mining: false,
     trade: false,
     culture: false,
+    defense: false,
     military: false,
-    attack: false,
     troops: false,
   });
 
@@ -212,6 +214,13 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
   const hasTradeBuildSlot = completedTrade < me.upgradeLevel.trade;
   const atMaxTradeUpgrades = completedTrade >= UPGRADE_PROGRESS.trade.length;
   const canAffordTradeUpgrade = !atMaxTradeUpgrades && me.upgradeLevel.trade < UPGRADE_PROGRESS.trade.length && canAffordUpgrade;
+
+  // Defense upgrade state
+  const completedDefense = me.upgradesCompleted.defense;
+  const hasDefenseBuildSlot = completedDefense < me.upgradeLevel.defense;
+  const atMaxDefenseUpgrades = completedDefense >= UPGRADE_PROGRESS.defense.length;
+  const canAffordDefenseUpgrade = !atMaxDefenseUpgrades && me.upgradeLevel.defense < UPGRADE_PROGRESS.defense.length && canAffordUpgrade;
+
   const targets = roomState.players.filter((p) => p.alive && p.playerId !== playerId);
   const myTransit = roomState.troopsInTransit.filter((tg) => tg.attackerPlayerId === playerId);
 
@@ -674,6 +683,88 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
         </div>
       </div>
 
+      {/* DEFENSE */}
+      <div className="upgrades-section section-defense">
+        <button className="section-header" onClick={() => toggleSection('defense')}>
+          <span className={`section-chevron${expandedSections.defense ? ' section-chevron-open' : ''}`}>&#9656;</span>
+          <span className="section-header-title">🛡️ Defense</span>
+          <span className="section-header-summary">
+            <span className="summary-detail">{me.maxHp} max HP</span>
+            <span className="summary-rate rate-positive">+{Math.ceil(me.maxHp * HP_REGEN_PERCENT)}/t regen</span>
+          </span>
+        </button>
+
+        <div className={`section-body${expandedSections.defense ? '' : ' collapsed'}`}>
+          <div className="section-body-inner">
+            <div className="resource-row">
+              <span className="resource-label">City HP</span>
+              <span className="resource-rate">{Math.ceil(me.hp)} / {me.maxHp}</span>
+            </div>
+            <div className="resource-row">
+              <span className="resource-label">HP Regen</span>
+              <span className="resource-rate">+{Math.ceil(me.maxHp * HP_REGEN_PERCENT)}/turn (3% of max)</span>
+            </div>
+
+            {hasDefenseBuildSlot ? (
+              <div className="build-progress-container">
+                <div className="build-progress-header">
+                  <span>Building Fortification {completedDefense + 1}</span>
+                  <span>{me.upgradeProgress.defense}/{UPGRADE_PROGRESS.defense[completedDefense]}</span>
+                </div>
+                <div className="build-progress-bar-wrapper">
+                  <div
+                    className="build-progress-bar-fill defense-progress-fill"
+                    style={{ width: `${Math.min(100, (me.upgradeProgress.defense / UPGRADE_PROGRESS.defense[completedDefense]) * 100)}%` }}
+                  />
+                </div>
+                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                <div className="builder-assignment">
+                  <span className="builder-label">Builders</span>
+                  <div className="section-header-workers" onClick={e => e.stopPropagation()}>
+                    <button
+                      className="worker-btn"
+                      onClick={() => { const updated = { ...localBuilders, defense: localBuilders.defense - 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
+                      disabled={localBuilders.defense <= 0 || controlsDisabled}
+                    >-</button>
+                    <span className="worker-count">{localBuilders.defense}</span>
+                    <button
+                      className="worker-btn"
+                      onClick={() => { const updated = { ...localBuilders, defense: localBuilders.defense + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
+                      disabled={unassigned <= 0 || controlsDisabled}
+                    >+</button>
+                  </div>
+                </div>
+                {localBuilders.defense > 0 && (
+                  <div className="build-eta">
+                    ~{Math.ceil((UPGRADE_PROGRESS.defense[completedDefense] - me.upgradeProgress.defense) / (localBuilders.defense * PROGRESS_PER_BUILDER))} turns remaining
+                  </div>
+                )}
+                <p className="section-explainer">
+                  Reward: +{DEFENSE_HP_PER_LEVEL[completedDefense]} max HP (→ {me.maxHp + DEFENSE_HP_PER_LEVEL[completedDefense]} total)
+                </p>
+              </div>
+            ) : atMaxDefenseUpgrades ? (
+              <div className="resource-row">
+                <span className="resource-label">All fortifications completed! ({me.maxHp} max HP)</span>
+              </div>
+            ) : (
+              <div className="upgrade-buttons">
+                <button
+                  className="upgrade-btn upgrade-defense"
+                  onClick={() => handleUnlockUpgrade('defense')}
+                  disabled={!canAffordDefenseUpgrade || controlsDisabled}
+                  title={`Costs ${UPGRADE_UNLOCK_COST.materials} materials + ${UPGRADE_UNLOCK_COST.gold} gold`}
+                >
+                  <span className="upgrade-btn-title">📜 Unlock Fortification</span>
+                  <span className="upgrade-btn-cost">{UPGRADE_UNLOCK_COST.materials} materials + {UPGRADE_UNLOCK_COST.gold} gold</span>
+                  <span className="upgrade-btn-effect">+{DEFENSE_HP_PER_LEVEL[completedDefense] ?? '?'} max HP</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* MILITARY */}
       <div className="upgrades-section section-military">
         <button className="section-header" onClick={() => toggleSection('military')}>
@@ -713,80 +804,9 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
               })}
             </div>
 
-            {/* Military upgrade unlock/build */}
-            {hasMilitaryBuildSlot ? (
-              <div className="build-progress-container">
-                <div className="build-progress-header">
-                  <span>Building Upgrade {completedMilitary + 1}</span>
-                  <span>{me.upgradeProgress.military}/{UPGRADE_PROGRESS.military[completedMilitary]}</span>
-                </div>
-                <div className="build-progress-bar-wrapper">
-                  <div
-                    className="build-progress-bar-fill military-progress-fill"
-                    style={{ width: `${Math.min(100, (me.upgradeProgress.military / UPGRADE_PROGRESS.military[completedMilitary]) * 100)}%` }}
-                  />
-                </div>
-                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-                <div className="builder-assignment">
-                  <span className="builder-label">Builders</span>
-                  <div className="section-header-workers" onClick={e => e.stopPropagation()}>
-                    <button
-                      className="worker-btn"
-                      onClick={() => { const updated = { ...localBuilders, military: localBuilders.military - 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={localBuilders.military <= 0 || controlsDisabled}
-                    >-</button>
-                    <span className="worker-count">{localBuilders.military}</span>
-                    <button
-                      className="worker-btn"
-                      onClick={() => { const updated = { ...localBuilders, military: localBuilders.military + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={unassigned <= 0 || controlsDisabled}
-                    >+</button>
-                  </div>
-                </div>
-                {localBuilders.military > 0 && (
-                  <div className="build-eta">
-                    ~{Math.ceil((UPGRADE_PROGRESS.military[completedMilitary] - me.upgradeProgress.military) / (localBuilders.military * PROGRESS_PER_BUILDER))} turns remaining
-                  </div>
-                )}
-                <p className="section-explainer">
-                  Unlocks: {TROOP_TYPES[completedMilitary + 1] ? TROOP_TYPES[completedMilitary + 1].charAt(0).toUpperCase() + TROOP_TYPES[completedMilitary + 1].slice(1) : '?'}
-                </p>
-              </div>
-            ) : atMaxMilitaryUpgrades ? (
-              <div className="resource-row">
-                <span className="resource-label">All troop types unlocked!</span>
-              </div>
-            ) : (
-              <div className="upgrade-buttons">
-                <button
-                  className="upgrade-btn upgrade-military"
-                  onClick={() => handleUnlockUpgrade('military')}
-                  disabled={!canAffordMilitaryUpgrade || controlsDisabled}
-                  title={`Costs ${UPGRADE_UNLOCK_COST.materials} materials + ${UPGRADE_UNLOCK_COST.gold} gold`}
-                >
-                  <span className="upgrade-btn-title">📜 Unlock Upgrade</span>
-                  <span className="upgrade-btn-cost">{UPGRADE_UNLOCK_COST.materials} materials + {UPGRADE_UNLOCK_COST.gold} gold</span>
-                  <span className="upgrade-btn-effect">Unlocks: {TROOP_TYPES[completedMilitary + 1] ? TROOP_TYPES[completedMilitary + 1].charAt(0).toUpperCase() + TROOP_TYPES[completedMilitary + 1].slice(1) : 'next troop'}</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+            <hr className="section-divider" />
 
-      {/* ATTACK */}
-      <div className="attack-section section-attack">
-        <button className="section-header" onClick={() => toggleSection('attack')}>
-          <span className={`section-chevron${expandedSections.attack ? ' section-chevron-open' : ''}`}>&#9656;</span>
-          <span className="section-header-title">🎯 Attack</span>
-          <span className="section-header-summary">
-            <span className="summary-detail">{targets.length} target{targets.length !== 1 ? 's' : ''}</span>
-            <span className="summary-detail">{totalMilitary} at home</span>
-          </span>
-        </button>
-
-        <div className={`section-body${expandedSections.attack ? '' : ' collapsed'}`}>
-          <div className="section-body-inner">
+            {/* Attack targets */}
             <div className="target-list">
               {/* The Promised Land target */}
               <div className="target-row" style={{ borderLeft: '3px solid #f4d03f' }}>
@@ -850,6 +870,66 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                 </div>
               ))}
             </div>
+
+            <hr className="section-divider" />
+
+            {/* Military upgrade unlock/build */}
+            {hasMilitaryBuildSlot ? (
+              <div className="build-progress-container">
+                <div className="build-progress-header">
+                  <span>Building Upgrade {completedMilitary + 1}</span>
+                  <span>{me.upgradeProgress.military}/{UPGRADE_PROGRESS.military[completedMilitary]}</span>
+                </div>
+                <div className="build-progress-bar-wrapper">
+                  <div
+                    className="build-progress-bar-fill military-progress-fill"
+                    style={{ width: `${Math.min(100, (me.upgradeProgress.military / UPGRADE_PROGRESS.military[completedMilitary]) * 100)}%` }}
+                  />
+                </div>
+                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                <div className="builder-assignment">
+                  <span className="builder-label">Builders</span>
+                  <div className="section-header-workers" onClick={e => e.stopPropagation()}>
+                    <button
+                      className="worker-btn"
+                      onClick={() => { const updated = { ...localBuilders, military: localBuilders.military - 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
+                      disabled={localBuilders.military <= 0 || controlsDisabled}
+                    >-</button>
+                    <span className="worker-count">{localBuilders.military}</span>
+                    <button
+                      className="worker-btn"
+                      onClick={() => { const updated = { ...localBuilders, military: localBuilders.military + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
+                      disabled={unassigned <= 0 || controlsDisabled}
+                    >+</button>
+                  </div>
+                </div>
+                {localBuilders.military > 0 && (
+                  <div className="build-eta">
+                    ~{Math.ceil((UPGRADE_PROGRESS.military[completedMilitary] - me.upgradeProgress.military) / (localBuilders.military * PROGRESS_PER_BUILDER))} turns remaining
+                  </div>
+                )}
+                <p className="section-explainer">
+                  Unlocks: {TROOP_TYPES[completedMilitary + 1] ? TROOP_TYPES[completedMilitary + 1].charAt(0).toUpperCase() + TROOP_TYPES[completedMilitary + 1].slice(1) : '?'}
+                </p>
+              </div>
+            ) : atMaxMilitaryUpgrades ? (
+              <div className="resource-row">
+                <span className="resource-label">All troop types unlocked!</span>
+              </div>
+            ) : (
+              <div className="upgrade-buttons">
+                <button
+                  className="upgrade-btn upgrade-military"
+                  onClick={() => handleUnlockUpgrade('military')}
+                  disabled={!canAffordMilitaryUpgrade || controlsDisabled}
+                  title={`Costs ${UPGRADE_UNLOCK_COST.materials} materials + ${UPGRADE_UNLOCK_COST.gold} gold`}
+                >
+                  <span className="upgrade-btn-title">📜 Unlock Upgrade</span>
+                  <span className="upgrade-btn-cost">{UPGRADE_UNLOCK_COST.materials} materials + {UPGRADE_UNLOCK_COST.gold} gold</span>
+                  <span className="upgrade-btn-effect">Unlocks: {TROOP_TYPES[completedMilitary + 1] ? TROOP_TYPES[completedMilitary + 1].charAt(0).toUpperCase() + TROOP_TYPES[completedMilitary + 1].slice(1) : 'next troop'}</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

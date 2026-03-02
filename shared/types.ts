@@ -1,7 +1,7 @@
 export type Phase = 'lobby' | 'playing' | 'gameover';
 export type PlayingSubPhase = 'planning' | 'resolving';
 export type TroopType = 'warrior' | 'cavalry' | 'rifleman' | 'truck';
-export type UpgradeCategory = 'culture' | 'military' | 'farming' | 'mining' | 'trade';
+export type UpgradeCategory = 'culture' | 'military' | 'farming' | 'mining' | 'trade' | 'defense';
 
 // Client-safe player stats — zeros during lobby, populated on startGame
 export interface CityPlayerInfo {
