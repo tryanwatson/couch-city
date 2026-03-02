@@ -19,8 +19,8 @@ import {
   TRAINING_CONFIG,
   COMBAT_POWER,
   VALID_ATTACK_AMOUNTS,
-  GOLD_MINE_ID,
-  GOLD_MINE_INCOME,
+  PROMISED_LAND_ID,
+  PROMISED_LAND_HOLD_TURNS,
 } from '../../../../shared/constants';
 
 interface GameControlsProps {
@@ -153,7 +153,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
   const controlsDisabled = hasEndedTurn || isResolving;
 
   const totalMilitary = Object.values(me.militaryAtHome).reduce((s, n) => s + n, 0);
-  const civilians = Math.floor(me.population) - totalMilitary;
+  const civilians = Math.floor(me.population);
   const totalBuildersCount = Object.values(localBuilders).reduce((s, n) => s + n, 0);
   const totalWorkers = localFarmers + localMiners + localMerchants + totalBuildersCount;
   const unassigned = civilians - totalWorkers;
@@ -256,12 +256,12 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           <div className="stat-block">
             <span className="stat-label">⚔️ Troops</span>
             <span className="stat-value">{totalMilitary}</span>
-            <span className="stat-rate">{civilians} civ</span>
+            <span className="stat-rate">at home</span>
           </div>
           <div className="stat-block">
             <span className="stat-label">💰 Gold</span>
             <span className="stat-value">{Math.floor(me.gold)}</span>
-            <span className="stat-rate">+{goldPerTurn}{roomState.goldMineOwnerId === playerId ? `+${GOLD_MINE_INCOME}` : ''}/turn</span>
+            <span className="stat-rate">+{goldPerTurn}/turn</span>
           </div>
         </div>
       </div>
@@ -696,16 +696,16 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                 const config = TRAINING_CONFIG[type];
                 const count = me.militaryAtHome[type];
                 const canAfford = me.materials >= config.materials && me.gold >= config.gold;
-                const canTrain = canAfford && civilians >= config.troops;
+                const canTrain = canAfford;
                 return (
                   <button
                     key={type}
                     className="upgrade-btn upgrade-military"
                     onClick={() => handleSpendMilitary(type)}
                     disabled={!canTrain || controlsDisabled}
-                    title={!canAfford ? 'Not enough materials or gold' : civilians < config.troops ? `Need ${config.troops - civilians} more civilians` : ''}
+                    title={!canAfford ? 'Not enough materials or gold' : ''}
                   >
-                    <span className="upgrade-btn-title">Train {type.charAt(0).toUpperCase() + type.slice(1)} (CP:{COMBAT_POWER[type]})</span>
+                    <span className="upgrade-btn-title">Buy {type.charAt(0).toUpperCase() + type.slice(1)} (CP:{COMBAT_POWER[type]})</span>
                     <span className="upgrade-btn-cost">{config.materials} materials + {config.gold} gold</span>
                     <span className="upgrade-btn-effect">+{config.troops} units | At home: {count}</span>
                   </button>
@@ -788,12 +788,12 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
         <div className={`section-body${expandedSections.attack ? '' : ' collapsed'}`}>
           <div className="section-body-inner">
             <div className="target-list">
-              {/* Gold Mine target */}
-              <div className="target-row" style={{ borderLeft: '3px solid #f1c40f' }}>
+              {/* The Promised Land target */}
+              <div className="target-row" style={{ borderLeft: '3px solid #f4d03f' }}>
                 <div className="target-info">
-                  <span className="target-color-dot" style={{ backgroundColor: '#f1c40f' }} />
-                  <span className="target-name">Gold Mine</span>
-                  <span className="target-hp-small">+{GOLD_MINE_INCOME}g/turn</span>
+                  <span className="target-color-dot" style={{ backgroundColor: '#f4d03f' }} />
+                  <span className="target-name">The Promised Land</span>
+                  <span className="target-hp-small">Hold {PROMISED_LAND_HOLD_TURNS} turns to win</span>
                 </div>
                 {TROOP_TYPES.map((type) => {
                   const count = me.militaryAtHome[type];
@@ -806,7 +806,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                           <button
                             key={amount}
                             className="attack-amount-btn"
-                            onClick={() => handleSendAttack(GOLD_MINE_ID, amount, type)}
+                            onClick={() => handleSendAttack(PROMISED_LAND_ID, amount, type)}
                             disabled={count < amount || controlsDisabled}
                           >
                             Send {amount}
@@ -870,17 +870,17 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
               {myTransit.map((tg) => {
                 const isReturning = tg.attackerPlayerId === tg.targetPlayerId;
                 const isPaused = tg.paused;
-                const targetName = tg.targetPlayerId === GOLD_MINE_ID
-                  ? 'Gold Mine'
+                const targetName = tg.targetPlayerId === PROMISED_LAND_ID
+                  ? 'The Promised Land'
                   : isReturning
                     ? 'Home'
                     : (roomState.players.find((p) => p.playerId === tg.targetPlayerId)?.name ?? '?');
 
-                // Redirect targets: alive players (excluding self and current target) + gold mine
+                // Redirect targets: alive players (excluding self and current target) + Promised Land
                 const redirectTargets = [
                   ...roomState.players.filter(p => p.alive && p.playerId !== playerId && p.playerId !== tg.targetPlayerId),
                 ];
-                const canRedirectToMine = tg.targetPlayerId !== GOLD_MINE_ID;
+                const canRedirectToLand = tg.targetPlayerId !== PROMISED_LAND_ID;
 
                 return (
                   <div key={tg.id} className={`troop-manage-row${isPaused ? ' troop-paused' : ''}`}>
@@ -913,7 +913,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                         >
                           Recall
                         </button>
-                        {(redirectTargets.length > 0 || canRedirectToMine) && (
+                        {(redirectTargets.length > 0 || canRedirectToLand) && (
                           <select
                             className="troop-redirect-select"
                             value=""
@@ -923,7 +923,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                             disabled={controlsDisabled}
                           >
                             <option value="">Redirect...</option>
-                            {canRedirectToMine && <option value={GOLD_MINE_ID}>Gold Mine</option>}
+                            {canRedirectToLand && <option value={PROMISED_LAND_ID}>The Promised Land</option>}
                             {redirectTargets.map(t => (
                               <option key={t.playerId} value={t.playerId}>{t.name}</option>
                             ))}
@@ -949,15 +949,15 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
               <div className="transit-indicator">
                 <div className="transit-row" style={{ fontWeight: 700 }}>Your Occupying Forces</div>
                 {mySieges.map(occ => {
-                  const isMine = occ.targetPlayerId === GOLD_MINE_ID;
-                  const targetName = isMine
-                    ? 'Gold Mine'
+                  const isLand = occ.targetPlayerId === PROMISED_LAND_ID;
+                  const targetName = isLand
+                    ? 'The Promised Land'
                     : (roomState.players.find(p => p.playerId === occ.targetPlayerId)?.name ?? '?');
                   return (
                     <div key={occ.id} className="transit-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span>
-                        {occ.units} {occ.troopType} {isMine ? 'at' : 'besieging'} {targetName}
-                        {!isMine && ` (${occ.units * COMBAT_POWER[occ.troopType]} dmg/turn)`}
+                        {occ.units} {occ.troopType} {isLand ? 'at' : 'besieging'} {targetName}
+                        {!isLand && ` (${occ.units * COMBAT_POWER[occ.troopType]} dmg/turn)`}
                       </span>
                       <button
                         className="troop-action-btn"

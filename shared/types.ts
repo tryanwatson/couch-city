@@ -63,7 +63,8 @@ export interface RoomStatePayload {
   occupyingTroops: TroopGroup[];
   combatHitPlayerIds: string[];
   winnerPlayerId: string | null;
-  goldMineOwnerId: string | null; // playerId of uncontested mine owner, or null
+  promisedLandOwnerId: string | null; // playerId of uncontested holder, or null
+  promisedLandHoldTurns: number; // consecutive turns held by current owner
 }
 
 // ============================================================
@@ -111,5 +112,6 @@ export interface ServerRoom {
   occupyingTroops: TroopGroup[];
   combatHitPlayerIds: string[];
   winnerPlayerId: string | null;
-  goldMineOwnerId: string | null;
+  promisedLandOwnerId: string | null;
+  promisedLandHoldTurns: number;
 }

@@ -1,12 +1,12 @@
 // Economy — initial amounts
-export const INITIAL_FOOD = 100;
-export const INITIAL_MATERIALS = 100;
-export const INITIAL_GOLD = 100;
+export const INITIAL_FOOD = 40;
+export const INITIAL_MATERIALS = 40;
+export const INITIAL_GOLD = 40;
 
 // Worker yields (per turn per worker)
 export const FOOD_PER_FARMER = 3;
-export const MATERIALS_PER_MINER = 1;
-export const GOLD_PER_MERCHANT = 1;
+export const MATERIALS_PER_MINER = 2;
+export const GOLD_PER_MERCHANT = 2;
 
 // Food consumption & population dynamics
 export const FOOD_PER_CITIZEN = 1; // each citizen eats 1 food/turn from stockpile
@@ -20,14 +20,14 @@ export const INITIAL_POPULATION = 10;
 // Upgrades — unlock costs & build progress system
 import type { UpgradeCategory } from "./types";
 
-export const UPGRADE_UNLOCK_COST = { materials: 30, gold: 50 } as const;
+export const UPGRADE_UNLOCK_COST = { materials: 10, gold: 15 } as const;
 
 export const UPGRADE_PROGRESS: Record<UpgradeCategory, readonly number[]> = {
-  culture: [10, 30, 80, 200, 500],
-  military: [20, 60, 150],
-  farming: [30, 100],
-  mining: [30, 100],
-  trade: [30, 100],
+  culture: [3, 5, 8, 12, 16],
+  military: [4, 7, 12],
+  farming: [4, 8],
+  mining: [4, 8],
+  trade: [4, 8],
 };
 
 export const ALL_UPGRADE_CATEGORIES: readonly UpgradeCategory[] = [
@@ -42,8 +42,8 @@ export function yieldMultiplier(upgradesCompleted: number): number {
   return 1 + upgradesCompleted;
 }
 export const PROGRESS_PER_BUILDER = 1; // progress per builder per turn
-export const MONUMENT_CULTURE_PER_TURN = 5; // passive culture score per completed upgrade per turn
-export const CULTURE_WIN_THRESHOLD = 1000; // first player to reach this culture score wins
+export const MONUMENT_CULTURE_PER_TURN = 10; // passive culture score per completed upgrade per turn
+export const CULTURE_WIN_THRESHOLD = 300; // first player to reach this culture score wins
 
 // Military — troop types
 import type { TroopType } from "./types";
@@ -66,10 +66,10 @@ export const TRAINING_CONFIG: Record<
   TroopType,
   { materials: number; gold: number; troops: number }
 > = {
-  warrior:  { materials: 20,  gold: 20,  troops: 10 },
-  cavalry:  { materials: 50,  gold: 50,  troops: 5 },
-  rifleman: { materials: 100, gold: 150, troops: 3 },
-  truck:    { materials: 200, gold: 400, troops: 1 },
+  warrior:  { materials: 10,  gold: 10,  troops: 10 },
+  cavalry:  { materials: 25,  gold: 25,  troops: 5 },
+  rifleman: { materials: 50,  gold: 75,  troops: 3 },
+  truck:    { materials: 100, gold: 200, troops: 1 },
 };
 
 export const INITIAL_MILITARY: Record<TroopType, number> = {
@@ -89,12 +89,12 @@ export const ZERO_MILITARY: Record<TroopType, number> = {
 // HP
 export const INITIAL_HP = 100;
 export const MAX_HP = 100;
-export const HP_REGEN_PER_TURN = 2;
+export const HP_REGEN_PER_TURN = 3;
 
 // Combat
-export const TROOP_TRAVEL_TURNS = 4; // turns for troops to reach target (5 positions: home,1,2,3,enemy)
+export const TROOP_TRAVEL_TURNS = 3; // turns for troops to reach target (4 positions: home,1,2,enemy)
 export const SIEGE_DAMAGE_PER_CP = 1; // HP damage per CP per turn from occupying troops
-export const VALID_ATTACK_AMOUNTS = [5, 10, 25] as const;
+export const VALID_ATTACK_AMOUNTS = [1, 3, 5, 10, 25] as const;
 
 // Visual radius of a troop group in normalized (0–1) map coordinates
 // Matches the client's golden-angle spiral cluster + half sprite size
@@ -111,12 +111,12 @@ export const FIELD_COMBAT_WALK_FRAC = 0.3; // 1500ms — walk to collision point
 export const FIELD_COMBAT_FIGHT_FRAC = 0.5; // 2500ms — fight at collision point
 export const FIELD_COMBAT_ADVANCE_FRAC = 0.2; // 1000ms — winner advances to destination / loser fades
 
-// Gold Mine (center-of-map objective)
-export const GOLD_MINE_ID = '__GOLD_MINE__';
-export const GOLD_MINE_X = 0.5;
-export const GOLD_MINE_Y = 0.5;
-export const GOLD_MINE_INCOME = 100; // gold per turn when occupied uncontested
-export const GOLD_MINE_TRAVEL_TURNS = 2; // turns for troops to reach the mine (shorter than city attacks)
+// The Promised Land (center-of-map objective — hold to win)
+export const PROMISED_LAND_ID = '__PROMISED_LAND__';
+export const PROMISED_LAND_X = 0.5;
+export const PROMISED_LAND_Y = 0.5;
+export const PROMISED_LAND_TRAVEL_TURNS = 1; // turns for troops to reach it (shorter than city attacks)
+export const PROMISED_LAND_HOLD_TURNS = 3; // consecutive uncontested turns to win
 
 // Turn-based timing
 export const RESOLVING_PHASE_DURATION_MS = 5000; // client-side animation duration

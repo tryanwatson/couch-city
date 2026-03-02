@@ -97,7 +97,8 @@ export default function HostPage() {
               animate={true}
               subPhase={roomState.subPhase}
               turnNumber={roomState.turnNumber}
-              goldMineOwnerId={roomState.goldMineOwnerId}
+              promisedLandOwnerId={roomState.promisedLandOwnerId}
+              promisedLandHoldTurns={roomState.promisedLandHoldTurns ?? 0}
             />
             {roomState.subPhase === 'resolving' && (
               <div className="resolving-overlay">

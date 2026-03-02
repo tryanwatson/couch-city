@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import type { CityPlayerInfo, TroopGroup, TroopType, PlayingSubPhase } from '../../../../shared/types';
-import { CULTURE_WIN_THRESHOLD, COMBAT_POWER, TROOP_TYPES, RESOLVING_PHASE_DURATION_MS, FIELD_COMBAT_WALK_FRAC, FIELD_COMBAT_FIGHT_FRAC, FIELD_COMBAT_ADVANCE_FRAC, GOLD_MINE_ID, GOLD_MINE_X, GOLD_MINE_Y, GOLD_MINE_INCOME } from '../../../../shared/constants';
+import { CULTURE_WIN_THRESHOLD, COMBAT_POWER, TROOP_TYPES, RESOLVING_PHASE_DURATION_MS, FIELD_COMBAT_WALK_FRAC, FIELD_COMBAT_FIGHT_FRAC, FIELD_COMBAT_ADVANCE_FRAC, PROMISED_LAND_ID, PROMISED_LAND_X, PROMISED_LAND_Y, PROMISED_LAND_HOLD_TURNS } from '../../../../shared/constants';
 
 interface SpriteSheetConfig {
   image: string;
@@ -83,11 +83,12 @@ interface BattleMapProps {
   animate: boolean;
   subPhase?: PlayingSubPhase | null;
   turnNumber?: number;
-  goldMineOwnerId?: string | null;
+  promisedLandOwnerId?: string | null;
+  promisedLandHoldTurns?: number;
 }
 
 function resolveTargetPos(targetPlayerId: string, playerMap: Map<string, CityPlayerInfo>): { x: number; y: number } | null {
-  if (targetPlayerId === GOLD_MINE_ID) return { x: GOLD_MINE_X, y: GOLD_MINE_Y };
+  if (targetPlayerId === PROMISED_LAND_ID) return { x: PROMISED_LAND_X, y: PROMISED_LAND_Y };
   const target = playerMap.get(targetPlayerId);
   return target ? { x: target.x, y: target.y } : null;
 }
@@ -445,37 +446,66 @@ function CityNode({ player, playerIndex, isUnderSiege }: { player: CityPlayerInf
   );
 }
 
-function GoldMineNode({ ownerColor, isContested }: { ownerColor: string | null; isContested: boolean }) {
-  const cx = GOLD_MINE_X * 1000;
-  const cy = GOLD_MINE_Y * 1000;
+function PromisedLandNode({ ownerColor, isContested, holdTurns }: { ownerColor: string | null; isContested: boolean; holdTurns: number }) {
+  const cx = PROMISED_LAND_X * 1000;
+  const cy = PROMISED_LAND_Y * 1000;
 
   return (
     <g>
-      {/* Glow ring when owned */}
-      {ownerColor && (
-        <circle cx={cx} cy={cy} r={55} fill="none" stroke={ownerColor} strokeWidth={3} opacity={0.6} />
+      {/* Pulsing glow when held */}
+      {ownerColor && !isContested && (
+        <circle cx={cx} cy={cy} r={65} fill="none" stroke={ownerColor} strokeWidth={4} opacity={0.5}>
+          <animate attributeName="r" values="60;70;60" dur="2s" repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0.3;0.7;0.3" dur="2s" repeatCount="indefinite" />
+        </circle>
       )}
       {/* Contested ring */}
       {isContested && (
-        <circle cx={cx} cy={cy} r={55} fill="none" stroke="#e74c3c" strokeWidth={3} strokeDasharray="8 6" opacity={0.7}>
+        <circle cx={cx} cy={cy} r={65} fill="none" stroke="#e74c3c" strokeWidth={3} strokeDasharray="8 6" opacity={0.7}>
           <animate attributeName="stroke-dashoffset" from="0" to="20" dur="1s" repeatCount="indefinite" />
         </circle>
       )}
-      {/* Mine body */}
-      <circle cx={cx} cy={cy} r={35} fill="#2a1a0e" stroke="#f1c40f" strokeWidth={3} />
-      {/* Icon */}
-      <text x={cx} y={cy + 8} textAnchor="middle" fontSize={30}>&#9935;</text>
+      {/* Radial gradient glow */}
+      <defs>
+        <radialGradient id="promised-land-glow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#fffbe6" stopOpacity={0.9} />
+          <stop offset="70%" stopColor="#f4d03f" stopOpacity={0.4} />
+          <stop offset="100%" stopColor="#f39c12" stopOpacity={0} />
+        </radialGradient>
+      </defs>
+      <circle cx={cx} cy={cy} r={50} fill="url(#promised-land-glow)" />
+      {/* Inner circle */}
+      <circle cx={cx} cy={cy} r={35} fill="#1a1a2e" stroke="#f4d03f" strokeWidth={3} />
+      {/* Crown icon */}
+      <text x={cx} y={cy + 10} textAnchor="middle" fontSize={32}>👑</text>
       {/* Label */}
-      <text x={cx} y={cy + 58} textAnchor="middle" fontSize={13} fontWeight="700" fill="#f1c40f">
-        Gold Mine
+      <text x={cx} y={cy + 58} textAnchor="middle" fontSize={12} fontWeight="700" fill="#f4d03f">
+        The Promised Land
       </text>
+      {/* Status text */}
       <text
         x={cx} y={cy + 73}
         textAnchor="middle" fontSize={11}
         fill={isContested ? '#e74c3c' : ownerColor ? ownerColor : '#888'}
       >
-        {isContested ? 'Contested!' : ownerColor ? `+${GOLD_MINE_INCOME}g/turn` : 'Unoccupied'}
+        {isContested ? 'Contested!' : ownerColor ? `Held ${holdTurns}/${PROMISED_LAND_HOLD_TURNS} turns` : 'Unclaimed'}
       </text>
+      {/* Progress pips */}
+      {ownerColor && !isContested && holdTurns > 0 && (
+        <g>
+          {Array.from({ length: PROMISED_LAND_HOLD_TURNS }).map((_, i) => (
+            <circle
+              key={i}
+              cx={cx - ((PROMISED_LAND_HOLD_TURNS - 1) * 12) / 2 + i * 12}
+              cy={cy + 85}
+              r={5}
+              fill={i < holdTurns ? ownerColor : '#333'}
+              stroke={i < holdTurns ? ownerColor : '#666'}
+              strokeWidth={1}
+            />
+          ))}
+        </g>
+      )}
     </g>
   );
 }
@@ -486,7 +516,7 @@ function getTroopProgress(troop: TroopGroup): number {
   return (troop.totalTurns - troop.turnsRemaining) / troop.totalTurns;
 }
 
-export default function BattleMap({ players, troopsInTransit, occupyingTroops, animate, subPhase, goldMineOwnerId }: BattleMapProps) {
+export default function BattleMap({ players, troopsInTransit, occupyingTroops, animate, subPhase, promisedLandOwnerId, promisedLandHoldTurns = 0 }: BattleMapProps) {
   const playerMap = useMemo(
     () => new Map(players.map((p) => [p.playerId, p])),
     [players],
@@ -553,7 +583,7 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
       // Pre-compute mine contest state for animation decisions
       const mineOccupierPlayerIds = new Set(
         occupyingTroops
-          .filter(occ => occ.targetPlayerId === GOLD_MINE_ID && occ.units > 0)
+          .filter(occ => occ.targetPlayerId === PROMISED_LAND_ID && occ.units > 0)
           .map(occ => occ.attackerPlayerId)
       );
 
@@ -635,7 +665,7 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
 
         // Calculate current turn-based position
         const progress = getTroopProgress(troop);
-        const isMineTarget = troop.targetPlayerId === GOLD_MINE_ID;
+        const isMineTarget = troop.targetPlayerId === PROMISED_LAND_ID;
         const standoffFrac = dist > 0 ? ATTACK_STANDOFF / dist : 0;
         const clampedProgress = isMineTarget ? progress : Math.min(progress, 1 - standoffFrac);
 
@@ -724,16 +754,16 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
 
       <image href="/map-background.png" x="0" y="0" width="1000" height="1000" />
 
-      {/* Gold Mine — rendered before troops so troops paint on top */}
+      {/* The Promised Land — rendered before troops so troops paint on top */}
       {(() => {
-        const minePlayerIds = new Set(
+        const landPlayerIds = new Set(
           occupyingTroops
-            .filter(occ => occ.targetPlayerId === GOLD_MINE_ID && occ.units > 0)
+            .filter(occ => occ.targetPlayerId === PROMISED_LAND_ID && occ.units > 0)
             .map(occ => occ.attackerPlayerId)
         );
-        const isMineContested = minePlayerIds.size > 1;
-        const ownerColor = goldMineOwnerId ? (playerMap.get(goldMineOwnerId)?.color ?? null) : null;
-        return <GoldMineNode ownerColor={ownerColor} isContested={isMineContested} />;
+        const isContested = landPlayerIds.size > 1;
+        const ownerColor = promisedLandOwnerId ? (playerMap.get(promisedLandOwnerId)?.color ?? null) : null;
+        return <PromisedLandNode ownerColor={ownerColor} isContested={isContested} holdTurns={promisedLandHoldTurns} />;
       })()}
 
       {/* Walking troops — sorted by Y for depth (lower on screen = closer to camera = rendered on top) */}
@@ -744,11 +774,11 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
         .map(({ troop, posData }) => {
           const sIcon = troop.paused ? 'zzz'
             : troop.targetPlayerId === troop.attackerPlayerId ? '🏠'
-            : troop.targetPlayerId === GOLD_MINE_ID ? '$'
+            : troop.targetPlayerId === PROMISED_LAND_ID ? '👑'
             : '⚔';
           const sColor = troop.paused ? '#aaa'
             : troop.targetPlayerId === troop.attackerPlayerId ? 'white'
-            : troop.targetPlayerId === GOLD_MINE_ID ? '#f1c40f'
+            : troop.targetPlayerId === PROMISED_LAND_ID ? '#f1c40f'
             : (playerMap.get(troop.targetPlayerId)?.color ?? 'white');
           return (
             <TroopSprite
@@ -799,8 +829,8 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
           const dy = targetPos.y - attacker.y;
           // Mine troops sit directly on the mine; city troops use standoff
           let pos: { x: number; y: number };
-          if (occ.targetPlayerId === GOLD_MINE_ID) {
-            pos = { x: GOLD_MINE_X, y: GOLD_MINE_Y };
+          if (occ.targetPlayerId === PROMISED_LAND_ID) {
+            pos = { x: PROMISED_LAND_X, y: PROMISED_LAND_Y };
           } else {
             const dist = Math.sqrt(dx * dx + dy * dy);
             const nx = dist > 0 ? dx / dist : 0;
@@ -818,17 +848,17 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
         .sort((a, b) => a.pos.y - b.pos.y)
         .map((entry) => {
           // Mine occupiers: only attack-animate when contested (multiple players at mine)
-          const isMineOccupier = entry.occ.targetPlayerId === GOLD_MINE_ID;
+          const isMineOccupier = entry.occ.targetPlayerId === PROMISED_LAND_ID;
           const minePlayerIds = new Set(
             occupyingTroops
-              .filter(occ => occ.targetPlayerId === GOLD_MINE_ID && occ.units > 0)
+              .filter(occ => occ.targetPlayerId === PROMISED_LAND_ID && occ.units > 0)
               .map(occ => occ.attackerPlayerId)
           );
           const isMineContested = minePlayerIds.size > 1;
           const isAttacking = isMineOccupier
             ? (subPhase === 'resolving' && isMineContested)
             : (subPhase === 'resolving');
-          const sIcon = isMineOccupier ? '$' : '⚔';
+          const sIcon = isMineOccupier ? '👑' : '⚔';
           const sColor = isMineOccupier
             ? '#f1c40f'
             : (playerMap.get(entry.occ.targetPlayerId)?.color ?? 'white');

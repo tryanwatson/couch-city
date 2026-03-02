@@ -33,26 +33,23 @@ import {
   VALID_ATTACK_AMOUNTS,
   RESOLVING_PHASE_DURATION_MS,
   troopGroupRadius,
-  GOLD_MINE_ID,
-  GOLD_MINE_X,
-  GOLD_MINE_Y,
-  GOLD_MINE_INCOME,
-  GOLD_MINE_TRAVEL_TURNS,
+  PROMISED_LAND_ID,
+  PROMISED_LAND_X,
+  PROMISED_LAND_Y,
+  PROMISED_LAND_TRAVEL_TURNS,
+  PROMISED_LAND_HOLD_TURNS,
 } from '../../shared/constants';
 import { generateRoomCode } from './utils';
 
 const rooms = new Map<string, ServerRoom>();
 
-function totalMilitaryAtHome(mil: Record<TroopType, number>): number {
-  return Object.values(mil).reduce((sum, n) => sum + n, 0);
-}
 
 function totalBuilders(builders: Record<UpgradeCategory, number>): number {
   return Object.values(builders).reduce((s, n) => s + n, 0);
 }
 
 function clampWorkers(player: ServerCityPlayer): void {
-  const civilians = Math.max(0, Math.floor(player.population) - totalMilitaryAtHome(player.militaryAtHome));
+  const civilians = Math.max(0, Math.floor(player.population));
   const tb = totalBuilders(player.builders);
   const total = player.farmers + player.miners + player.merchants + tb;
   if (total <= civilians) return;
@@ -114,7 +111,8 @@ export function createRoom(hostSocketId: string): ServerRoom {
     occupyingTroops: [],
     combatHitPlayerIds: [],
     winnerPlayerId: null,
-    goldMineOwnerId: null,
+    promisedLandOwnerId: null,
+    promisedLandHoldTurns: 0,
   };
 
   rooms.set(roomId, room);
@@ -270,7 +268,8 @@ export function startGame(
   room.troopsInTransit = [];
   room.occupyingTroops = [];
   room.winnerPlayerId = null;
-  room.goldMineOwnerId = null;
+  room.promisedLandOwnerId = null;
+  room.promisedLandHoldTurns = 0;
 
   return { room };
 }
@@ -357,25 +356,6 @@ function runUpdatePhase(room: ServerRoom): void {
     player.hp = Math.min(player.maxHp, player.hp + HP_REGEN_PER_TURN);
   }
 
-  // Gold mine income — before combat so income is awarded even if troops die this turn
-  const mineOccupierPlayerIds = new Set(
-    room.occupyingTroops
-      .filter(occ => occ.targetPlayerId === GOLD_MINE_ID && occ.units > 0)
-      .map(occ => occ.attackerPlayerId)
-  );
-  if (mineOccupierPlayerIds.size === 1) {
-    const ownerId = Array.from(mineOccupierPlayerIds)[0];
-    const owner = room.players.get(ownerId);
-    if (owner && owner.alive) {
-      owner.gold += GOLD_MINE_INCOME;
-      room.goldMineOwnerId = ownerId;
-    } else {
-      room.goldMineOwnerId = null;
-    }
-  } else {
-    room.goldMineOwnerId = null; // contested or empty
-  }
-
   // Existing occupying troops fight garrison and deal siege damage
   room.combatHitPlayerIds = [];
   resolveSiege(room);
@@ -394,14 +374,36 @@ function runUpdatePhase(room: ServerRoom): void {
   const arrived = room.troopsInTransit.filter(tg => tg.turnsRemaining <= 0 && tg.units > 0);
 
   // Batch mine arrivals for simultaneous resolution (prevents first-in-array advantage)
-  const mineArrivals = arrived.filter(tg => tg.targetPlayerId === GOLD_MINE_ID);
+  const mineArrivals = arrived.filter(tg => tg.targetPlayerId === PROMISED_LAND_ID);
   if (mineArrivals.length > 0) {
     resolveMineCombat(room, mineArrivals);
   }
 
+  // Promised Land ownership — after combat so it reflects this turn's outcome
+  const landOccupiers = new Set(
+    room.occupyingTroops
+      .filter(occ => occ.targetPlayerId === PROMISED_LAND_ID && occ.units > 0)
+      .map(occ => occ.attackerPlayerId)
+  );
+  if (landOccupiers.size === 1) {
+    const ownerId = Array.from(landOccupiers)[0];
+    if (room.players.get(ownerId)?.alive) {
+      room.promisedLandHoldTurns = room.promisedLandOwnerId === ownerId
+        ? room.promisedLandHoldTurns + 1
+        : 1;
+      room.promisedLandOwnerId = ownerId;
+    } else {
+      room.promisedLandOwnerId = null;
+      room.promisedLandHoldTurns = 0;
+    }
+  } else {
+    room.promisedLandOwnerId = null;
+    room.promisedLandHoldTurns = 0;
+  }
+
   // Resolve city arrivals sequentially (each targets a different garrison)
   for (const tg of arrived) {
-    if (tg.targetPlayerId === GOLD_MINE_ID) continue;
+    if (tg.targetPlayerId === PROMISED_LAND_ID) continue;
     if (!room.combatHitPlayerIds.includes(tg.targetPlayerId) && tg.attackerPlayerId !== tg.targetPlayerId) {
       room.combatHitPlayerIds.push(tg.targetPlayerId);
     }
@@ -446,6 +448,20 @@ function runUpdatePhase(room: ServerRoom): void {
     // Remove arrived troops and field combat casualties now that animation has played
     room.troopsInTransit = room.troopsInTransit.filter(tg => tg.turnsRemaining > 0 && tg.units > 0);
     room.combatHitPlayerIds = [];
+
+    // Promised Land win condition: hold uncontested for N consecutive turns
+    // Checked here (after resolving animation) so players see combat play out first
+    if (room.promisedLandHoldTurns >= PROMISED_LAND_HOLD_TURNS && room.promisedLandOwnerId) {
+      const landWinner = room.players.get(room.promisedLandOwnerId);
+      if (landWinner && landWinner.alive) {
+        room.phase = 'gameover';
+        room.subPhase = null;
+        room.winnerPlayerId = landWinner.playerId;
+        if (broadcastFn) broadcastFn(room.roomId);
+        return;
+      }
+    }
+
     room.subPhase = 'planning';
     room.turnNumber += 1;
     for (const [, player] of room.players) {
@@ -465,12 +481,12 @@ function detectFieldCollisions(room: ServerRoom): void {
     const tg1 = transit[i];
     if (tg1.units <= 0) continue;
     // Skip mine-bound troops (separate lane, no player target to look up)
-    if (tg1.targetPlayerId === GOLD_MINE_ID || tg1.attackerPlayerId === GOLD_MINE_ID) continue;
+    if (tg1.targetPlayerId === PROMISED_LAND_ID || tg1.attackerPlayerId === PROMISED_LAND_ID) continue;
 
     for (let j = i + 1; j < transit.length; j++) {
       const tg2 = transit[j];
       if (tg2.units <= 0) continue;
-      if (tg2.targetPlayerId === GOLD_MINE_ID || tg2.attackerPlayerId === GOLD_MINE_ID) continue;
+      if (tg2.targetPlayerId === PROMISED_LAND_ID || tg2.attackerPlayerId === PROMISED_LAND_ID) continue;
 
       // Only opposing groups on the same lane (A→B vs B→A)
       if (
@@ -558,7 +574,7 @@ function detectFieldCollisions(room: ServerRoom): void {
 function mergeIntoOccupiers(room: ServerRoom, tg: TroopGroup): void {
   const existing = room.occupyingTroops.find(
     occ => occ.attackerPlayerId === tg.attackerPlayerId
-      && occ.targetPlayerId === GOLD_MINE_ID
+      && occ.targetPlayerId === PROMISED_LAND_ID
       && occ.troopType === tg.troopType
   );
   if (existing) {
@@ -567,7 +583,7 @@ function mergeIntoOccupiers(room: ServerRoom, tg: TroopGroup): void {
     room.occupyingTroops.push({
       id: tg.id,
       attackerPlayerId: tg.attackerPlayerId,
-      targetPlayerId: GOLD_MINE_ID,
+      targetPlayerId: PROMISED_LAND_ID,
       troopType: tg.troopType,
       units: tg.units,
       turnsRemaining: 0,
@@ -585,7 +601,7 @@ function resolveMineCombat(room: ServerRoom, arrivingMineGroups: TroopGroup[]): 
   }>();
 
   for (const occ of room.occupyingTroops) {
-    if (occ.targetPlayerId !== GOLD_MINE_ID || occ.units <= 0) continue;
+    if (occ.targetPlayerId !== PROMISED_LAND_ID || occ.units <= 0) continue;
     let entry = playerGroups.get(occ.attackerPlayerId);
     if (!entry) {
       entry = { arriving: [], occupying: [], totalCP: 0 };
@@ -618,8 +634,8 @@ function resolveMineCombat(room: ServerRoom, arrivingMineGroups: TroopGroup[]): 
   // Mark all arriving groups for combat animation
   for (const tg of arrivingMineGroups) {
     tg.fieldCombatUnits = tg.units;
-    tg.fieldCombatX = GOLD_MINE_X;
-    tg.fieldCombatY = GOLD_MINE_Y;
+    tg.fieldCombatX = PROMISED_LAND_X;
+    tg.fieldCombatY = PROMISED_LAND_Y;
     tg.inFieldCombat = true;
   }
 
@@ -645,13 +661,13 @@ function resolveMineCombat(room: ServerRoom, arrivingMineGroups: TroopGroup[]): 
         room.troopsInTransit.push({
           id: occ.id + '-minefight',
           attackerPlayerId: occ.attackerPlayerId,
-          targetPlayerId: GOLD_MINE_ID,
+          targetPlayerId: PROMISED_LAND_ID,
           troopType: occ.troopType,
           units: 0,
           turnsRemaining: 0,
           totalTurns: 0,
-          fieldCombatX: GOLD_MINE_X,
-          fieldCombatY: GOLD_MINE_Y,
+          fieldCombatX: PROMISED_LAND_X,
+          fieldCombatY: PROMISED_LAND_Y,
           fieldCombatUnits: occ.units,
           inFieldCombat: true,
         });
@@ -673,13 +689,13 @@ function resolveMineCombat(room: ServerRoom, arrivingMineGroups: TroopGroup[]): 
       room.troopsInTransit.push({
         id: occ.id + '-minefight',
         attackerPlayerId: occ.attackerPlayerId,
-        targetPlayerId: GOLD_MINE_ID,
+        targetPlayerId: PROMISED_LAND_ID,
         troopType: occ.troopType,
         units: 0,
         turnsRemaining: 0,
         totalTurns: 0,
-        fieldCombatX: GOLD_MINE_X,
-        fieldCombatY: GOLD_MINE_Y,
+        fieldCombatX: PROMISED_LAND_X,
+        fieldCombatY: PROMISED_LAND_Y,
         fieldCombatUnits: occ.units,
         inFieldCombat: true,
       });
@@ -785,7 +801,7 @@ function resolveSiege(room: ServerRoom): void {
   }
 
   for (const [targetId, occupiers] of occupiersByTarget) {
-    if (targetId === GOLD_MINE_ID) continue; // Mine occupiers don't siege — handled separately
+    if (targetId === PROMISED_LAND_ID) continue; // Mine occupiers don't siege — handled separately
     const defender = room.players.get(targetId);
     if (!defender || !defender.alive) continue;
 
@@ -927,7 +943,7 @@ export function allocateWorkers(
   }
 
   const tb = totalBuilders(builders);
-  const civilians = Math.floor(player.population) - totalMilitaryAtHome(player.militaryAtHome);
+  const civilians = Math.floor(player.population);
   if (farmers + miners + merchants + tb > civilians) {
     return { error: 'Not enough civilians for this allocation' };
   }
@@ -1011,15 +1027,9 @@ export function spendMilitary(
     return { error: 'Not enough materials or gold' };
   }
 
-  const civilians = Math.floor(player.population) - totalMilitaryAtHome(player.militaryAtHome);
-  if (civilians < config.troops) {
-    return { error: 'Not enough civilians to train' };
-  }
-
   player.materials -= config.materials;
   player.gold -= config.gold;
   player.militaryAtHome[troopType] += config.troops;
-  clampWorkers(player);
 
   return { room };
 }
@@ -1041,7 +1051,7 @@ export function sendAttack(
   if (attackerPlayerId === targetPlayerId) return { error: 'Cannot attack yourself' };
 
   // Gold mine is always a valid target; player targets must exist and be alive
-  if (targetPlayerId !== GOLD_MINE_ID) {
+  if (targetPlayerId !== PROMISED_LAND_ID) {
     const target = room.players.get(targetPlayerId);
     if (!target) return { error: 'Target not found' };
     if (!target.alive) return { error: 'Target city is already eliminated' };
@@ -1054,10 +1064,8 @@ export function sendAttack(
   if (attacker.militaryAtHome[troopType] < units) return { error: 'Not enough troops' };
 
   attacker.militaryAtHome[troopType] -= units;
-  attacker.population -= units;
-  clampWorkers(attacker);
 
-  const travelTurns = targetPlayerId === GOLD_MINE_ID ? GOLD_MINE_TRAVEL_TURNS : TROOP_TRAVEL_TURNS;
+  const travelTurns = targetPlayerId === PROMISED_LAND_ID ? PROMISED_LAND_TRAVEL_TURNS : TROOP_TRAVEL_TURNS;
 
   // Merge into existing group sent this same planning phase (same target, same type, freshly created)
   const existing = room.troopsInTransit.find(
@@ -1100,9 +1108,9 @@ function getTroopCurrentPosition(
   const originY = tg.startY ?? (attacker?.y ?? 0);
 
   let targetX: number, targetY: number;
-  if (tg.targetPlayerId === GOLD_MINE_ID) {
-    targetX = GOLD_MINE_X;
-    targetY = GOLD_MINE_Y;
+  if (tg.targetPlayerId === PROMISED_LAND_ID) {
+    targetX = PROMISED_LAND_X;
+    targetY = PROMISED_LAND_Y;
   } else if (tg.targetPlayerId === tg.attackerPlayerId) {
     targetX = attacker?.x ?? 0;
     targetY = attacker?.y ?? 0;
@@ -1217,7 +1225,7 @@ export function redirectTroops(
   if (newTargetPlayerId === tg.targetPlayerId) return { error: 'Already heading to that target' };
 
   // Validate new target
-  if (newTargetPlayerId !== GOLD_MINE_ID) {
+  if (newTargetPlayerId !== PROMISED_LAND_ID) {
     const newTarget = room.players.get(newTargetPlayerId);
     if (!newTarget) return { error: 'Target not found' };
     if (!newTarget.alive) return { error: 'Target is eliminated' };
@@ -1227,9 +1235,9 @@ export function redirectTroops(
 
   // Resolve new target position
   let newTargetX: number, newTargetY: number;
-  if (newTargetPlayerId === GOLD_MINE_ID) {
-    newTargetX = GOLD_MINE_X;
-    newTargetY = GOLD_MINE_Y;
+  if (newTargetPlayerId === PROMISED_LAND_ID) {
+    newTargetX = PROMISED_LAND_X;
+    newTargetY = PROMISED_LAND_Y;
   } else {
     const newTarget = room.players.get(newTargetPlayerId)!;
     newTargetX = newTarget.x;
@@ -1241,9 +1249,9 @@ export function redirectTroops(
 
   // Resolve old target position for ratio calculation
   let oldTargetX: number, oldTargetY: number;
-  if (tg.targetPlayerId === GOLD_MINE_ID) {
-    oldTargetX = GOLD_MINE_X;
-    oldTargetY = GOLD_MINE_Y;
+  if (tg.targetPlayerId === PROMISED_LAND_ID) {
+    oldTargetX = PROMISED_LAND_X;
+    oldTargetY = PROMISED_LAND_Y;
   } else {
     const oldTarget = room.players.get(tg.targetPlayerId);
     oldTargetX = oldTarget?.x ?? currentPos.x;
@@ -1288,9 +1296,9 @@ export function recallOccupyingTroops(
 
   // Determine start position (where the troops currently are)
   let startX: number, startY: number;
-  if (occ.targetPlayerId === GOLD_MINE_ID) {
-    startX = GOLD_MINE_X;
-    startY = GOLD_MINE_Y;
+  if (occ.targetPlayerId === PROMISED_LAND_ID) {
+    startX = PROMISED_LAND_X;
+    startY = PROMISED_LAND_Y;
   } else {
     const targetCity = room.players.get(occ.targetPlayerId);
     startX = targetCity?.x ?? 0.5;
@@ -1330,7 +1338,8 @@ export function resetRoom(
   room.troopsInTransit = [];
   room.occupyingTroops = [];
   room.winnerPlayerId = null;
-  room.goldMineOwnerId = null;
+  room.promisedLandOwnerId = null;
+  room.promisedLandHoldTurns = 0;
 
   for (const [, player] of room.players) {
     player.color = '';
@@ -1399,6 +1408,7 @@ export function sanitizeState(room: ServerRoom): RoomStatePayload {
     occupyingTroops: room.occupyingTroops,
     combatHitPlayerIds: room.combatHitPlayerIds,
     winnerPlayerId: room.winnerPlayerId,
-    goldMineOwnerId: room.goldMineOwnerId,
+    promisedLandOwnerId: room.promisedLandOwnerId,
+    promisedLandHoldTurns: room.promisedLandHoldTurns,
   };
 }
