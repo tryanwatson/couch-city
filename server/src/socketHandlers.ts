@@ -1,4 +1,5 @@
 import type { Server, Socket } from 'socket.io';
+import type { UpgradeCategory } from '../../shared/types';
 import {
   createRoom,
   getRoom,
@@ -8,8 +9,7 @@ import {
   startGame,
   allocateWorkers,
   setGrowthMultiplier,
-  upgradeCulture,
-  upgradeMilitary,
+  unlockUpgrade,
   spendMilitary,
   sendAttack,
   endTurn,
@@ -22,7 +22,7 @@ import {
   redirectTroops,
   recallOccupyingTroops,
 } from './roomManager';
-import { generateCityName } from '../../shared/constants';
+import { generateCityName, ALL_UPGRADE_CATEGORIES } from '../../shared/constants';
 
 function broadcastRoom(io: Server, roomId: string): void {
   const room = getRoom(roomId);
@@ -144,22 +144,16 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     broadcastRoom(io, data.roomId);
   });
 
-  socket.on('player:upgrade_culture', (data) => {
-    if (!data?.roomId || !data?.playerId) {
+  socket.on('player:unlock_upgrade', (data) => {
+    if (!data?.roomId || !data?.playerId || !data?.category) {
       socket.emit('room:error', { message: 'Missing required fields' });
       return;
     }
-    const result = upgradeCulture(data.roomId, data.playerId);
-    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
-    broadcastRoom(io, data.roomId);
-  });
-
-  socket.on('player:upgrade_military', (data) => {
-    if (!data?.roomId || !data?.playerId) {
-      socket.emit('room:error', { message: 'Missing required fields' });
+    if (!ALL_UPGRADE_CATEGORIES.includes(data.category as UpgradeCategory)) {
+      socket.emit('room:error', { message: 'Invalid upgrade category' });
       return;
     }
-    const result = upgradeMilitary(data.roomId, data.playerId);
+    const result = unlockUpgrade(data.roomId, data.playerId, data.category);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     broadcastRoom(io, data.roomId);
   });

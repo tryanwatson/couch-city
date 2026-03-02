@@ -1,7 +1,7 @@
 export type Phase = 'lobby' | 'playing' | 'gameover';
 export type PlayingSubPhase = 'planning' | 'resolving';
 export type TroopType = 'warrior' | 'cavalry' | 'rifleman' | 'truck';
-export type UpgradeCategory = 'culture' | 'military';
+export type UpgradeCategory = 'culture' | 'military' | 'farming' | 'mining' | 'trade';
 
 // Client-safe player stats — zeros during lobby, populated on startGame
 export interface CityPlayerInfo {
@@ -11,18 +11,17 @@ export interface CityPlayerInfo {
   connected: boolean;
   alive: boolean;
   food: number;
-  resources: number;
+  materials: number;
   gold: number;
   goldIncome: number; // derived: merchants × GOLD_PER_MERCHANT (display convenience)
   farmers: number;    // worker allocation: food producers
-  miners: number;     // worker allocation: resource producers
+  miners: number;     // worker allocation: material producers
   merchants: number;  // worker allocation: gold producers
   growthMultiplier: number; // 1/2/3 — scales food cost and growth rate
   militaryAtHome: Record<TroopType, number>;
   population: number;
   culture: number;       // passive score from completed upgrades
-  cultureLevel: number;  // unlock count — gates how many culture upgrades can be built
-  militaryLevel: number; // unlock count — gates how many military upgrades can be built
+  upgradeLevel: Record<UpgradeCategory, number>; // unlock count per category — gates how many upgrades can be built
   builders: Record<UpgradeCategory, number>; // workers assigned to building per category
   upgradesCompleted: Record<UpgradeCategory, number>;  // completed upgrades per category
   upgradeProgress: Record<UpgradeCategory, number>;    // current build progress per category
@@ -80,7 +79,7 @@ export interface ServerCityPlayer {
   lastSeen: number;
   alive: boolean;
   food: number;
-  resources: number;
+  materials: number;
   gold: number;
   goldIncome: number;
   farmers: number;
@@ -90,8 +89,7 @@ export interface ServerCityPlayer {
   militaryAtHome: Record<TroopType, number>;
   population: number;
   culture: number;
-  cultureLevel: number;
-  militaryLevel: number;
+  upgradeLevel: Record<UpgradeCategory, number>;
   builders: Record<UpgradeCategory, number>;
   upgradesCompleted: Record<UpgradeCategory, number>;
   upgradeProgress: Record<UpgradeCategory, number>;

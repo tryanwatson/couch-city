@@ -1,11 +1,11 @@
-// Economy — initial resource amounts
+// Economy — initial amounts
 export const INITIAL_FOOD = 100;
-export const INITIAL_RESOURCES = 100;
+export const INITIAL_MATERIALS = 100;
 export const INITIAL_GOLD = 100;
 
 // Worker yields (per turn per worker)
 export const FOOD_PER_FARMER = 3;
-export const RESOURCES_PER_MINER = 1;
+export const MATERIALS_PER_MINER = 1;
 export const GOLD_PER_MERCHANT = 1;
 
 // Food consumption & population dynamics
@@ -17,20 +17,30 @@ export const VALID_GROWTH_MULTIPLIERS = [1, 2, 3] as const; // 1x/2x/3x food cos
 // Population
 export const INITIAL_POPULATION = 10;
 
-// Culture upgrade — unlocks upgrade building slots
-export const CULTURE_UPGRADE_COST_FOOD = 30;
-export const CULTURE_UPGRADE_COST_GOLD = 50;
-
-// Military upgrade — unlocks troop types
-export const MILITARY_UPGRADE_COST_FOOD = 30;
-export const MILITARY_UPGRADE_COST_GOLD = 50;
-
-// Upgrades — build progress system
+// Upgrades — unlock costs & build progress system
 import type { UpgradeCategory } from "./types";
+
+export const UPGRADE_UNLOCK_COST = { materials: 30, gold: 50 } as const;
+
 export const UPGRADE_PROGRESS: Record<UpgradeCategory, readonly number[]> = {
   culture: [10, 30, 80, 200, 500],
   military: [20, 60, 150],
+  farming: [30, 100],
+  mining: [30, 100],
+  trade: [30, 100],
 };
+
+export const ALL_UPGRADE_CATEGORIES: readonly UpgradeCategory[] = [
+  'culture', 'military', 'farming', 'mining', 'trade',
+] as const;
+
+export function zeroUpgradeRecord(): Record<UpgradeCategory, number> {
+  return { culture: 0, military: 0, farming: 0, mining: 0, trade: 0 };
+}
+
+export function yieldMultiplier(upgradesCompleted: number): number {
+  return 1 + upgradesCompleted;
+}
 export const PROGRESS_PER_BUILDER = 1; // progress per builder per turn
 export const MONUMENT_CULTURE_PER_TURN = 5; // passive culture score per completed upgrade per turn
 export const CULTURE_WIN_THRESHOLD = 1000; // first player to reach this culture score wins
@@ -54,12 +64,12 @@ export const COMBAT_POWER: Record<TroopType, number> = {
 
 export const TRAINING_CONFIG: Record<
   TroopType,
-  { food: number; gold: number; troops: number }
+  { materials: number; gold: number; troops: number }
 > = {
-  warrior: { food: 20, gold: 20, troops: 10 },
-  cavalry: { food: 50, gold: 50, troops: 5 },
-  rifleman: { food: 100, gold: 150, troops: 3 },
-  truck: { food: 200, gold: 400, troops: 1 },
+  warrior:  { materials: 20,  gold: 20,  troops: 10 },
+  cavalry:  { materials: 50,  gold: 50,  troops: 5 },
+  rifleman: { materials: 100, gold: 150, troops: 3 },
+  truck:    { materials: 200, gold: 400, troops: 1 },
 };
 
 export const INITIAL_MILITARY: Record<TroopType, number> = {

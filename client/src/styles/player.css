@@ -514,6 +514,13 @@
   background: var(--color-farming-accent);
 }
 .section-farming .food-breakdown-net { border-color: var(--color-farming-row); }
+.section-farming .upgrade-science {
+  background: rgba(74, 153, 96, 0.2);
+  border-color: var(--color-farming-accent);
+}
+.section-farming .upgrade-science:hover:not(:disabled) {
+  background: rgba(74, 153, 96, 0.35);
+}
 
 /* --- Mining (Grey) --- */
 .section-mining {
@@ -530,6 +537,13 @@
 .section-mining .worker-btn:hover:not(:disabled) {
   background: rgba(107, 122, 141, 0.35);
 }
+.section-mining .upgrade-science {
+  background: rgba(107, 122, 141, 0.2);
+  border-color: var(--color-mining-accent);
+}
+.section-mining .upgrade-science:hover:not(:disabled) {
+  background: rgba(107, 122, 141, 0.35);
+}
 
 /* --- Trade (Gold) --- */
 .section-trade {
@@ -544,6 +558,13 @@
   background: rgba(196, 154, 60, 0.15);
 }
 .section-trade .worker-btn:hover:not(:disabled) {
+  background: rgba(196, 154, 60, 0.35);
+}
+.section-trade .upgrade-science {
+  background: rgba(196, 154, 60, 0.2);
+  border-color: var(--color-trade-accent);
+}
+.section-trade .upgrade-science:hover:not(:disabled) {
   background: rgba(196, 154, 60, 0.35);
 }
 
@@ -594,6 +615,15 @@
 }
 .build-progress-bar-fill.military-progress-fill {
   background: linear-gradient(90deg, #c0392b, #e74c3c);
+}
+.build-progress-bar-fill.farming-progress-fill {
+  background: linear-gradient(90deg, #27ae60, #2ecc71);
+}
+.build-progress-bar-fill.mining-progress-fill {
+  background: linear-gradient(90deg, #7f8c8d, #95a5a6);
+}
+.build-progress-bar-fill.trade-progress-fill {
+  background: linear-gradient(90deg, #d4a017, #f1c40f);
 }
 .builder-assignment {
   display: flex;

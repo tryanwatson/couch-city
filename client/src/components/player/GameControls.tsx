@@ -3,19 +3,17 @@ import type { Socket } from 'socket.io-client';
 import type { RoomStatePayload, TroopType, UpgradeCategory } from '../../../../shared/types';
 import {
   FOOD_PER_FARMER,
-  RESOURCES_PER_MINER,
+  MATERIALS_PER_MINER,
   GOLD_PER_MERCHANT,
   FOOD_PER_CITIZEN,
   POP_GROWTH_RATE,
   POP_STARVATION_RATE,
   VALID_GROWTH_MULTIPLIERS,
-  CULTURE_UPGRADE_COST_FOOD,
-  CULTURE_UPGRADE_COST_GOLD,
-  MILITARY_UPGRADE_COST_FOOD,
-  MILITARY_UPGRADE_COST_GOLD,
+  UPGRADE_UNLOCK_COST,
   MONUMENT_CULTURE_PER_TURN,
   UPGRADE_PROGRESS,
   PROGRESS_PER_BUILDER,
+  yieldMultiplier,
   CULTURE_WIN_THRESHOLD,
   TROOP_TYPES,
   TRAINING_CONFIG,
@@ -40,7 +38,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
   const [localFarmers, setLocalFarmers] = useState(0);
   const [localMiners, setLocalMiners] = useState(0);
   const [localMerchants, setLocalMerchants] = useState(0);
-  const [localBuilders, setLocalBuilders] = useState<Record<UpgradeCategory, number>>({ culture: 0, military: 0 });
+  const [localBuilders, setLocalBuilders] = useState<Record<UpgradeCategory, number>>({ culture: 0, military: 0, farming: 0, mining: 0, trade: 0 });
   const [localGrowthMultiplier, setLocalGrowthMultiplier] = useState(1);
   const [expandedSections, setExpandedSections] = useState<Record<SectionId, boolean>>({
     farming: true,
@@ -83,12 +81,8 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
     socket.emit('player:set_growth_multiplier', { roomId: roomState.roomId, playerId, multiplier });
   };
 
-  const handleUpgradeCulture = () => {
-    socket.emit('player:upgrade_culture', { roomId: roomState.roomId, playerId });
-  };
-
-  const handleUpgradeMilitary = () => {
-    socket.emit('player:upgrade_military', { roomId: roomState.roomId, playerId });
+  const handleUnlockUpgrade = (category: UpgradeCategory) => {
+    socket.emit('player:unlock_upgrade', { roomId: roomState.roomId, playerId, category });
   };
 
   const handleSpendMilitary = (troopType: TroopType) => {
@@ -164,8 +158,13 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
   const totalWorkers = localFarmers + localMiners + localMerchants + totalBuildersCount;
   const unassigned = civilians - totalWorkers;
 
+  // Yield multipliers
+  const farmingMult = yieldMultiplier(me.upgradesCompleted.farming);
+  const miningMult = yieldMultiplier(me.upgradesCompleted.mining);
+  const tradeMult = yieldMultiplier(me.upgradesCompleted.trade);
+
   // Farming / food calculations
-  const foodProduced = localFarmers * FOOD_PER_FARMER;
+  const foodProduced = localFarmers * FOOD_PER_FARMER * farmingMult;
   const foodConsumed = Math.floor(me.population) * FOOD_PER_CITIZEN * localGrowthMultiplier;
   const netFood = foodProduced - foodConsumed;
   const effectiveGrowthRate = POP_GROWTH_RATE * localGrowthMultiplier;
@@ -176,20 +175,43 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
     : Math.max(1, Math.floor(pop * (1 - POP_STARVATION_RATE)));
 
   // Mining
-  const resourcesPerTurn = localMiners * RESOURCES_PER_MINER;
+  const materialsPerTurn = localMiners * MATERIALS_PER_MINER * miningMult;
 
   // Trade
-  const goldPerTurn = localMerchants * GOLD_PER_MERCHANT;
+  const goldPerTurn = localMerchants * GOLD_PER_MERCHANT * tradeMult;
 
+  // Generic upgrade affordability check
+  const canAffordUpgrade = me.materials >= UPGRADE_UNLOCK_COST.materials && me.gold >= UPGRADE_UNLOCK_COST.gold;
+
+  // Culture upgrade state
   const completedCulture = me.upgradesCompleted.culture;
-  const hasBuildSlot = completedCulture < me.cultureLevel;
+  const hasBuildSlot = completedCulture < me.upgradeLevel.culture;
   const atMaxCultureUpgrades = completedCulture >= UPGRADE_PROGRESS.culture.length;
-  const canAffordCultureUpgrade = !atMaxCultureUpgrades && me.cultureLevel < UPGRADE_PROGRESS.culture.length && me.food >= CULTURE_UPGRADE_COST_FOOD && me.gold >= CULTURE_UPGRADE_COST_GOLD;
+  const canAffordCultureUpgrade = !atMaxCultureUpgrades && me.upgradeLevel.culture < UPGRADE_PROGRESS.culture.length && canAffordUpgrade;
 
+  // Military upgrade state
   const completedMilitary = me.upgradesCompleted.military;
-  const hasMilitaryBuildSlot = completedMilitary < me.militaryLevel;
+  const hasMilitaryBuildSlot = completedMilitary < me.upgradeLevel.military;
   const atMaxMilitaryUpgrades = completedMilitary >= UPGRADE_PROGRESS.military.length;
-  const canAffordMilitaryUpgrade = !atMaxMilitaryUpgrades && me.militaryLevel < UPGRADE_PROGRESS.military.length && me.food >= MILITARY_UPGRADE_COST_FOOD && me.gold >= MILITARY_UPGRADE_COST_GOLD;
+  const canAffordMilitaryUpgrade = !atMaxMilitaryUpgrades && me.upgradeLevel.military < UPGRADE_PROGRESS.military.length && canAffordUpgrade;
+
+  // Farming upgrade state
+  const completedFarming = me.upgradesCompleted.farming;
+  const hasFarmingBuildSlot = completedFarming < me.upgradeLevel.farming;
+  const atMaxFarmingUpgrades = completedFarming >= UPGRADE_PROGRESS.farming.length;
+  const canAffordFarmingUpgrade = !atMaxFarmingUpgrades && me.upgradeLevel.farming < UPGRADE_PROGRESS.farming.length && canAffordUpgrade;
+
+  // Mining upgrade state
+  const completedMining = me.upgradesCompleted.mining;
+  const hasMiningBuildSlot = completedMining < me.upgradeLevel.mining;
+  const atMaxMiningUpgrades = completedMining >= UPGRADE_PROGRESS.mining.length;
+  const canAffordMiningUpgrade = !atMaxMiningUpgrades && me.upgradeLevel.mining < UPGRADE_PROGRESS.mining.length && canAffordUpgrade;
+
+  // Trade upgrade state
+  const completedTrade = me.upgradesCompleted.trade;
+  const hasTradeBuildSlot = completedTrade < me.upgradeLevel.trade;
+  const atMaxTradeUpgrades = completedTrade >= UPGRADE_PROGRESS.trade.length;
+  const canAffordTradeUpgrade = !atMaxTradeUpgrades && me.upgradeLevel.trade < UPGRADE_PROGRESS.trade.length && canAffordUpgrade;
   const targets = roomState.players.filter((p) => p.alive && p.playerId !== playerId);
   const myTransit = roomState.troopsInTransit.filter((tg) => tg.attackerPlayerId === playerId);
 
@@ -323,6 +345,62 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
               Higher multipliers consume more food but grow population faster.
               Starving cities lose {Math.round(POP_STARVATION_RATE * 100)}% pop/turn.
             </p>
+
+            {/* Farming upgrade */}
+            {hasFarmingBuildSlot ? (
+              <div className="build-progress-container">
+                <div className="build-progress-header">
+                  <span>Building Upgrade {completedFarming + 1}</span>
+                  <span>{me.upgradeProgress.farming}/{UPGRADE_PROGRESS.farming[completedFarming]}</span>
+                </div>
+                <div className="build-progress-bar-wrapper">
+                  <div
+                    className="build-progress-bar-fill farming-progress-fill"
+                    style={{ width: `${Math.min(100, (me.upgradeProgress.farming / UPGRADE_PROGRESS.farming[completedFarming]) * 100)}%` }}
+                  />
+                </div>
+                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                <div className="builder-assignment">
+                  <span className="builder-label">Builders</span>
+                  <div className="section-header-workers" onClick={e => e.stopPropagation()}>
+                    <button
+                      className="worker-btn"
+                      onClick={() => { const updated = { ...localBuilders, farming: localBuilders.farming - 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
+                      disabled={localBuilders.farming <= 0 || controlsDisabled}
+                    >-</button>
+                    <span className="worker-count">{localBuilders.farming}</span>
+                    <button
+                      className="worker-btn"
+                      onClick={() => { const updated = { ...localBuilders, farming: localBuilders.farming + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
+                      disabled={unassigned <= 0 || controlsDisabled}
+                    >+</button>
+                  </div>
+                </div>
+                {localBuilders.farming > 0 && (
+                  <div className="build-eta">
+                    ~{Math.ceil((UPGRADE_PROGRESS.farming[completedFarming] - me.upgradeProgress.farming) / (localBuilders.farming * PROGRESS_PER_BUILDER))} turns remaining
+                  </div>
+                )}
+                <p className="section-explainer">Yield: {FOOD_PER_FARMER} x {farmingMult} = {FOOD_PER_FARMER * farmingMult}/farmer → {FOOD_PER_FARMER * (farmingMult + 1)}/farmer</p>
+              </div>
+            ) : atMaxFarmingUpgrades ? (
+              <div className="resource-row">
+                <span className="resource-label">All farming upgrades completed! ({farmingMult}x yield)</span>
+              </div>
+            ) : (
+              <div className="upgrade-buttons">
+                <button
+                  className="upgrade-btn upgrade-science"
+                  onClick={() => handleUnlockUpgrade('farming')}
+                  disabled={!canAffordFarmingUpgrade || controlsDisabled}
+                  title={`Costs ${UPGRADE_UNLOCK_COST.materials} materials + ${UPGRADE_UNLOCK_COST.gold} gold`}
+                >
+                  <span className="upgrade-btn-title">📜 Unlock Farming Upgrade</span>
+                  <span className="upgrade-btn-cost">{UPGRADE_UNLOCK_COST.materials} materials + {UPGRADE_UNLOCK_COST.gold} gold</span>
+                  <span className="upgrade-btn-effect">Yield: {farmingMult}x → {farmingMult + 1}x</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -347,8 +425,8 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
             >+</button>
           </div>
           <span className="section-header-summary">
-            <span className="summary-stockpile">🪨 {Math.floor(me.resources)}</span>
-            <span className="summary-rate rate-positive">+{resourcesPerTurn}/t</span>
+            <span className="summary-stockpile">🪨 {Math.floor(me.materials)}</span>
+            <span className="summary-rate rate-positive">+{materialsPerTurn}/t</span>
           </span>
         </button>
 
@@ -356,8 +434,64 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           <div className="section-body-inner">
             <div className="resource-row">
               <span className="resource-label">Per miner</span>
-              <span className="resource-rate">+{RESOURCES_PER_MINER} resources/turn</span>
+              <span className="resource-rate">+{MATERIALS_PER_MINER * miningMult} materials/turn</span>
             </div>
+
+            {/* Mining upgrade */}
+            {hasMiningBuildSlot ? (
+              <div className="build-progress-container">
+                <div className="build-progress-header">
+                  <span>Building Upgrade {completedMining + 1}</span>
+                  <span>{me.upgradeProgress.mining}/{UPGRADE_PROGRESS.mining[completedMining]}</span>
+                </div>
+                <div className="build-progress-bar-wrapper">
+                  <div
+                    className="build-progress-bar-fill mining-progress-fill"
+                    style={{ width: `${Math.min(100, (me.upgradeProgress.mining / UPGRADE_PROGRESS.mining[completedMining]) * 100)}%` }}
+                  />
+                </div>
+                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                <div className="builder-assignment">
+                  <span className="builder-label">Builders</span>
+                  <div className="section-header-workers" onClick={e => e.stopPropagation()}>
+                    <button
+                      className="worker-btn"
+                      onClick={() => { const updated = { ...localBuilders, mining: localBuilders.mining - 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
+                      disabled={localBuilders.mining <= 0 || controlsDisabled}
+                    >-</button>
+                    <span className="worker-count">{localBuilders.mining}</span>
+                    <button
+                      className="worker-btn"
+                      onClick={() => { const updated = { ...localBuilders, mining: localBuilders.mining + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
+                      disabled={unassigned <= 0 || controlsDisabled}
+                    >+</button>
+                  </div>
+                </div>
+                {localBuilders.mining > 0 && (
+                  <div className="build-eta">
+                    ~{Math.ceil((UPGRADE_PROGRESS.mining[completedMining] - me.upgradeProgress.mining) / (localBuilders.mining * PROGRESS_PER_BUILDER))} turns remaining
+                  </div>
+                )}
+                <p className="section-explainer">Yield: {MATERIALS_PER_MINER} x {miningMult} = {MATERIALS_PER_MINER * miningMult}/miner → {MATERIALS_PER_MINER * (miningMult + 1)}/miner</p>
+              </div>
+            ) : atMaxMiningUpgrades ? (
+              <div className="resource-row">
+                <span className="resource-label">All mining upgrades completed! ({miningMult}x yield)</span>
+              </div>
+            ) : (
+              <div className="upgrade-buttons">
+                <button
+                  className="upgrade-btn upgrade-science"
+                  onClick={() => handleUnlockUpgrade('mining')}
+                  disabled={!canAffordMiningUpgrade || controlsDisabled}
+                  title={`Costs ${UPGRADE_UNLOCK_COST.materials} materials + ${UPGRADE_UNLOCK_COST.gold} gold`}
+                >
+                  <span className="upgrade-btn-title">📜 Unlock Mining Upgrade</span>
+                  <span className="upgrade-btn-cost">{UPGRADE_UNLOCK_COST.materials} materials + {UPGRADE_UNLOCK_COST.gold} gold</span>
+                  <span className="upgrade-btn-effect">Yield: {miningMult}x → {miningMult + 1}x</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -391,8 +525,64 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           <div className="section-body-inner">
             <div className="resource-row">
               <span className="resource-label">Per merchant</span>
-              <span className="resource-rate">+{GOLD_PER_MERCHANT} gold/turn</span>
+              <span className="resource-rate">+{GOLD_PER_MERCHANT * tradeMult} gold/turn</span>
             </div>
+
+            {/* Trade upgrade */}
+            {hasTradeBuildSlot ? (
+              <div className="build-progress-container">
+                <div className="build-progress-header">
+                  <span>Building Upgrade {completedTrade + 1}</span>
+                  <span>{me.upgradeProgress.trade}/{UPGRADE_PROGRESS.trade[completedTrade]}</span>
+                </div>
+                <div className="build-progress-bar-wrapper">
+                  <div
+                    className="build-progress-bar-fill trade-progress-fill"
+                    style={{ width: `${Math.min(100, (me.upgradeProgress.trade / UPGRADE_PROGRESS.trade[completedTrade]) * 100)}%` }}
+                  />
+                </div>
+                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                <div className="builder-assignment">
+                  <span className="builder-label">Builders</span>
+                  <div className="section-header-workers" onClick={e => e.stopPropagation()}>
+                    <button
+                      className="worker-btn"
+                      onClick={() => { const updated = { ...localBuilders, trade: localBuilders.trade - 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
+                      disabled={localBuilders.trade <= 0 || controlsDisabled}
+                    >-</button>
+                    <span className="worker-count">{localBuilders.trade}</span>
+                    <button
+                      className="worker-btn"
+                      onClick={() => { const updated = { ...localBuilders, trade: localBuilders.trade + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
+                      disabled={unassigned <= 0 || controlsDisabled}
+                    >+</button>
+                  </div>
+                </div>
+                {localBuilders.trade > 0 && (
+                  <div className="build-eta">
+                    ~{Math.ceil((UPGRADE_PROGRESS.trade[completedTrade] - me.upgradeProgress.trade) / (localBuilders.trade * PROGRESS_PER_BUILDER))} turns remaining
+                  </div>
+                )}
+                <p className="section-explainer">Yield: {GOLD_PER_MERCHANT} x {tradeMult} = {GOLD_PER_MERCHANT * tradeMult}/merchant → {GOLD_PER_MERCHANT * (tradeMult + 1)}/merchant</p>
+              </div>
+            ) : atMaxTradeUpgrades ? (
+              <div className="resource-row">
+                <span className="resource-label">All trade upgrades completed! ({tradeMult}x yield)</span>
+              </div>
+            ) : (
+              <div className="upgrade-buttons">
+                <button
+                  className="upgrade-btn upgrade-science"
+                  onClick={() => handleUnlockUpgrade('trade')}
+                  disabled={!canAffordTradeUpgrade || controlsDisabled}
+                  title={`Costs ${UPGRADE_UNLOCK_COST.materials} materials + ${UPGRADE_UNLOCK_COST.gold} gold`}
+                >
+                  <span className="upgrade-btn-title">📜 Unlock Trade Upgrade</span>
+                  <span className="upgrade-btn-cost">{UPGRADE_UNLOCK_COST.materials} materials + {UPGRADE_UNLOCK_COST.gold} gold</span>
+                  <span className="upgrade-btn-effect">Yield: {tradeMult}x → {tradeMult + 1}x</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -403,7 +593,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           <span className={`section-chevron${expandedSections.culture ? ' section-chevron-open' : ''}`}>&#9656;</span>
           <span className="section-header-title">🏛️ Culture</span>
           <span className="section-header-summary">
-            <span className="summary-detail">Lvl {me.cultureLevel} · {completedCulture} built</span>
+            <span className="summary-detail">Lvl {me.upgradeLevel.culture} · {completedCulture} built</span>
             {completedCulture > 0 && (
               <span className="summary-rate rate-positive">+{completedCulture * MONUMENT_CULTURE_PER_TURN}/t</span>
             )}
@@ -418,8 +608,16 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
 
         <div className={`section-body${expandedSections.culture ? '' : ' collapsed'}`}>
           <div className="section-body-inner">
+            {completedCulture > 0 && (
+              <div className="resource-row" style={{ marginTop: 4 }}>
+                <span className="resource-label">Culture/turn</span>
+                <span className="resource-amount">{Math.floor(me.culture)}</span>
+                <span className="resource-rate">+{completedCulture * MONUMENT_CULTURE_PER_TURN}/turn</span>
+              </div>
+            )}
+
+            {/* Culture upgrade */}
             {hasBuildSlot ? (
-              /* BUILD IN PROGRESS — show progress bar and builder controls */
               <div className="build-progress-container">
                 <div className="build-progress-header">
                   <span>Building Upgrade {completedCulture + 1}</span>
@@ -459,25 +657,17 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                 <span className="resource-label">All upgrades completed!</span>
               </div>
             ) : (
-              /* UNLOCK BUTTON — no build slot available yet */
               <div className="upgrade-buttons">
                 <button
                   className="upgrade-btn upgrade-science"
-                  onClick={handleUpgradeCulture}
+                  onClick={() => handleUnlockUpgrade('culture')}
                   disabled={!canAffordCultureUpgrade || controlsDisabled}
-                  title={`Costs ${CULTURE_UPGRADE_COST_FOOD} food + ${CULTURE_UPGRADE_COST_GOLD} gold`}
+                  title={`Costs ${UPGRADE_UNLOCK_COST.materials} materials + ${UPGRADE_UNLOCK_COST.gold} gold`}
                 >
                   <span className="upgrade-btn-title">📜 Unlock Upgrade</span>
-                  <span className="upgrade-btn-cost">{CULTURE_UPGRADE_COST_FOOD} food + {CULTURE_UPGRADE_COST_GOLD} gold</span>
-                  <span className="upgrade-btn-effect">Level {me.cultureLevel} → {me.cultureLevel + 1}</span>
+                  <span className="upgrade-btn-cost">{UPGRADE_UNLOCK_COST.materials} materials + {UPGRADE_UNLOCK_COST.gold} gold</span>
+                  <span className="upgrade-btn-effect">Level {me.upgradeLevel.culture} → {me.upgradeLevel.culture + 1}</span>
                 </button>
-              </div>
-            )}
-            {completedCulture > 0 && (
-              <div className="resource-row" style={{ marginTop: 4 }}>
-                <span className="resource-label">Culture/turn</span>
-                <span className="resource-amount">{Math.floor(me.culture)}</span>
-                <span className="resource-rate">+{completedCulture * MONUMENT_CULTURE_PER_TURN}/turn</span>
               </div>
             )}
           </div>
@@ -497,6 +687,32 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
 
         <div className={`section-body${expandedSections.military ? '' : ' collapsed'}`}>
           <div className="section-body-inner">
+            {/* Troop training — only unlocked types */}
+            <div className="upgrade-buttons">
+              {TROOP_TYPES.map((type) => {
+                const troopIndex = TROOP_TYPES.indexOf(type);
+                const isUnlocked = troopIndex === 0 || me.upgradesCompleted.military >= troopIndex;
+                if (!isUnlocked) return null;
+                const config = TRAINING_CONFIG[type];
+                const count = me.militaryAtHome[type];
+                const canAfford = me.materials >= config.materials && me.gold >= config.gold;
+                const canTrain = canAfford && civilians >= config.troops;
+                return (
+                  <button
+                    key={type}
+                    className="upgrade-btn upgrade-military"
+                    onClick={() => handleSpendMilitary(type)}
+                    disabled={!canTrain || controlsDisabled}
+                    title={!canAfford ? 'Not enough materials or gold' : civilians < config.troops ? `Need ${config.troops - civilians} more civilians` : ''}
+                  >
+                    <span className="upgrade-btn-title">Train {type.charAt(0).toUpperCase() + type.slice(1)} (CP:{COMBAT_POWER[type]})</span>
+                    <span className="upgrade-btn-cost">{config.materials} materials + {config.gold} gold</span>
+                    <span className="upgrade-btn-effect">+{config.troops} units | At home: {count}</span>
+                  </button>
+                );
+              })}
+            </div>
+
             {/* Military upgrade unlock/build */}
             {hasMilitaryBuildSlot ? (
               <div className="build-progress-container">
@@ -544,42 +760,16 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
               <div className="upgrade-buttons">
                 <button
                   className="upgrade-btn upgrade-military"
-                  onClick={handleUpgradeMilitary}
+                  onClick={() => handleUnlockUpgrade('military')}
                   disabled={!canAffordMilitaryUpgrade || controlsDisabled}
-                  title={`Costs ${MILITARY_UPGRADE_COST_FOOD} food + ${MILITARY_UPGRADE_COST_GOLD} gold`}
+                  title={`Costs ${UPGRADE_UNLOCK_COST.materials} materials + ${UPGRADE_UNLOCK_COST.gold} gold`}
                 >
                   <span className="upgrade-btn-title">📜 Unlock Upgrade</span>
-                  <span className="upgrade-btn-cost">{MILITARY_UPGRADE_COST_FOOD} food + {MILITARY_UPGRADE_COST_GOLD} gold</span>
+                  <span className="upgrade-btn-cost">{UPGRADE_UNLOCK_COST.materials} materials + {UPGRADE_UNLOCK_COST.gold} gold</span>
                   <span className="upgrade-btn-effect">Unlocks: {TROOP_TYPES[completedMilitary + 1] ? TROOP_TYPES[completedMilitary + 1].charAt(0).toUpperCase() + TROOP_TYPES[completedMilitary + 1].slice(1) : 'next troop'}</span>
                 </button>
               </div>
             )}
-
-            {/* Troop training — only unlocked types */}
-            <div className="upgrade-buttons">
-              {TROOP_TYPES.map((type) => {
-                const troopIndex = TROOP_TYPES.indexOf(type);
-                const isUnlocked = troopIndex === 0 || me.upgradesCompleted.military >= troopIndex;
-                if (!isUnlocked) return null;
-                const config = TRAINING_CONFIG[type];
-                const count = me.militaryAtHome[type];
-                const canAfford = me.food >= config.food && me.gold >= config.gold;
-                const canTrain = canAfford && civilians >= config.troops;
-                return (
-                  <button
-                    key={type}
-                    className="upgrade-btn upgrade-military"
-                    onClick={() => handleSpendMilitary(type)}
-                    disabled={!canTrain || controlsDisabled}
-                    title={!canAfford ? 'Not enough resources' : civilians < config.troops ? `Need ${config.troops - civilians} more civilians` : ''}
-                  >
-                    <span className="upgrade-btn-title">Train {type.charAt(0).toUpperCase() + type.slice(1)} (CP:{COMBAT_POWER[type]})</span>
-                    <span className="upgrade-btn-cost">{config.food} food + {config.gold} gold</span>
-                    <span className="upgrade-btn-effect">+{config.troops} units | At home: {count}</span>
-                  </button>
-                );
-              })}
-            </div>
           </div>
         </div>
       </div>
