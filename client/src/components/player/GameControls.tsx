@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { Socket } from 'socket.io-client';
-import type { RoomStatePayload, TroopType } from '../../../../shared/types';
+import type { RoomStatePayload, TroopType, UpgradeCategory } from '../../../../shared/types';
 import {
   FOOD_PER_FARMER,
   RESOURCES_PER_MINER,
@@ -11,8 +11,10 @@ import {
   VALID_GROWTH_MULTIPLIERS,
   CULTURE_UPGRADE_COST_FOOD,
   CULTURE_UPGRADE_COST_GOLD,
+  MILITARY_UPGRADE_COST_FOOD,
+  MILITARY_UPGRADE_COST_GOLD,
   MONUMENT_CULTURE_PER_TURN,
-  UPGRADE_PROGRESS_REQUIRED,
+  UPGRADE_PROGRESS,
   PROGRESS_PER_BUILDER,
   CULTURE_WIN_THRESHOLD,
   TROOP_TYPES,
@@ -38,7 +40,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
   const [localFarmers, setLocalFarmers] = useState(0);
   const [localMiners, setLocalMiners] = useState(0);
   const [localMerchants, setLocalMerchants] = useState(0);
-  const [localBuilders, setLocalBuilders] = useState(0);
+  const [localBuilders, setLocalBuilders] = useState<Record<UpgradeCategory, number>>({ culture: 0, military: 0 });
   const [localGrowthMultiplier, setLocalGrowthMultiplier] = useState(1);
   const [expandedSections, setExpandedSections] = useState<Record<SectionId, boolean>>({
     farming: true,
@@ -72,7 +74,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
     }
   }, [me?.farmers, me?.miners, me?.merchants, me?.builders, me?.growthMultiplier]);
 
-  const handleAllocateWorkers = (farmers: number, miners: number, merchants: number, builders: number) => {
+  const handleAllocateWorkers = (farmers: number, miners: number, merchants: number, builders: Record<UpgradeCategory, number>) => {
     socket.emit('player:allocate_workers', { roomId: roomState.roomId, playerId, farmers, miners, merchants, builders });
   };
 
@@ -85,6 +87,9 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
     socket.emit('player:upgrade_culture', { roomId: roomState.roomId, playerId });
   };
 
+  const handleUpgradeMilitary = () => {
+    socket.emit('player:upgrade_military', { roomId: roomState.roomId, playerId });
+  };
 
   const handleSpendMilitary = (troopType: TroopType) => {
     socket.emit('player:spend_military', { roomId: roomState.roomId, playerId, troopType });
@@ -155,7 +160,8 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
 
   const totalMilitary = Object.values(me.militaryAtHome).reduce((s, n) => s + n, 0);
   const civilians = Math.floor(me.population) - totalMilitary;
-  const totalWorkers = localFarmers + localMiners + localMerchants + localBuilders;
+  const totalBuildersCount = Object.values(localBuilders).reduce((s, n) => s + n, 0);
+  const totalWorkers = localFarmers + localMiners + localMerchants + totalBuildersCount;
   const unassigned = civilians - totalWorkers;
 
   // Farming / food calculations
@@ -177,8 +183,13 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
 
   const completedCulture = me.upgradesCompleted.culture;
   const hasBuildSlot = completedCulture < me.cultureLevel;
-  const atMaxUpgrades = completedCulture >= UPGRADE_PROGRESS_REQUIRED.length;
-  const canAffordCultureUpgrade = !atMaxUpgrades && me.cultureLevel < UPGRADE_PROGRESS_REQUIRED.length && me.food >= CULTURE_UPGRADE_COST_FOOD && me.gold >= CULTURE_UPGRADE_COST_GOLD;
+  const atMaxCultureUpgrades = completedCulture >= UPGRADE_PROGRESS.culture.length;
+  const canAffordCultureUpgrade = !atMaxCultureUpgrades && me.cultureLevel < UPGRADE_PROGRESS.culture.length && me.food >= CULTURE_UPGRADE_COST_FOOD && me.gold >= CULTURE_UPGRADE_COST_GOLD;
+
+  const completedMilitary = me.upgradesCompleted.military;
+  const hasMilitaryBuildSlot = completedMilitary < me.militaryLevel;
+  const atMaxMilitaryUpgrades = completedMilitary >= UPGRADE_PROGRESS.military.length;
+  const canAffordMilitaryUpgrade = !atMaxMilitaryUpgrades && me.militaryLevel < UPGRADE_PROGRESS.military.length && me.food >= MILITARY_UPGRADE_COST_FOOD && me.gold >= MILITARY_UPGRADE_COST_GOLD;
   const targets = roomState.players.filter((p) => p.alive && p.playerId !== playerId);
   const myTransit = roomState.troopsInTransit.filter((tg) => tg.attackerPlayerId === playerId);
 
@@ -412,12 +423,12 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
               <div className="build-progress-container">
                 <div className="build-progress-header">
                   <span>Building Upgrade {completedCulture + 1}</span>
-                  <span>{me.upgradeProgress.culture}/{UPGRADE_PROGRESS_REQUIRED[completedCulture]}</span>
+                  <span>{me.upgradeProgress.culture}/{UPGRADE_PROGRESS.culture[completedCulture]}</span>
                 </div>
                 <div className="build-progress-bar-wrapper">
                   <div
                     className="build-progress-bar-fill"
-                    style={{ width: `${Math.min(100, (me.upgradeProgress.culture / UPGRADE_PROGRESS_REQUIRED[completedCulture]) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (me.upgradeProgress.culture / UPGRADE_PROGRESS.culture[completedCulture]) * 100)}%` }}
                   />
                 </div>
                 {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
@@ -426,24 +437,24 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                   <div className="section-header-workers" onClick={e => e.stopPropagation()}>
                     <button
                       className="worker-btn"
-                      onClick={() => { const v = localBuilders - 1; setLocalBuilders(v); handleAllocateWorkers(localFarmers, localMiners, localMerchants, v); }}
-                      disabled={localBuilders <= 0 || controlsDisabled}
+                      onClick={() => { const updated = { ...localBuilders, culture: localBuilders.culture - 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
+                      disabled={localBuilders.culture <= 0 || controlsDisabled}
                     >-</button>
-                    <span className="worker-count">{localBuilders}</span>
+                    <span className="worker-count">{localBuilders.culture}</span>
                     <button
                       className="worker-btn"
-                      onClick={() => { const v = localBuilders + 1; setLocalBuilders(v); handleAllocateWorkers(localFarmers, localMiners, localMerchants, v); }}
+                      onClick={() => { const updated = { ...localBuilders, culture: localBuilders.culture + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
                       disabled={unassigned <= 0 || controlsDisabled}
                     >+</button>
                   </div>
                 </div>
-                {localBuilders > 0 && (
+                {localBuilders.culture > 0 && (
                   <div className="build-eta">
-                    ~{Math.ceil((UPGRADE_PROGRESS_REQUIRED[completedCulture] - me.upgradeProgress.culture) / (localBuilders * PROGRESS_PER_BUILDER))} turns remaining
+                    ~{Math.ceil((UPGRADE_PROGRESS.culture[completedCulture] - me.upgradeProgress.culture) / (localBuilders.culture * PROGRESS_PER_BUILDER))} turns remaining
                   </div>
                 )}
               </div>
-            ) : atMaxUpgrades ? (
+            ) : atMaxCultureUpgrades ? (
               <div className="resource-row">
                 <span className="resource-label">All upgrades completed!</span>
               </div>
@@ -486,8 +497,70 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
 
         <div className={`section-body${expandedSections.military ? '' : ' collapsed'}`}>
           <div className="section-body-inner">
+            {/* Military upgrade unlock/build */}
+            {hasMilitaryBuildSlot ? (
+              <div className="build-progress-container">
+                <div className="build-progress-header">
+                  <span>Building Upgrade {completedMilitary + 1}</span>
+                  <span>{me.upgradeProgress.military}/{UPGRADE_PROGRESS.military[completedMilitary]}</span>
+                </div>
+                <div className="build-progress-bar-wrapper">
+                  <div
+                    className="build-progress-bar-fill military-progress-fill"
+                    style={{ width: `${Math.min(100, (me.upgradeProgress.military / UPGRADE_PROGRESS.military[completedMilitary]) * 100)}%` }}
+                  />
+                </div>
+                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                <div className="builder-assignment">
+                  <span className="builder-label">Builders</span>
+                  <div className="section-header-workers" onClick={e => e.stopPropagation()}>
+                    <button
+                      className="worker-btn"
+                      onClick={() => { const updated = { ...localBuilders, military: localBuilders.military - 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
+                      disabled={localBuilders.military <= 0 || controlsDisabled}
+                    >-</button>
+                    <span className="worker-count">{localBuilders.military}</span>
+                    <button
+                      className="worker-btn"
+                      onClick={() => { const updated = { ...localBuilders, military: localBuilders.military + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
+                      disabled={unassigned <= 0 || controlsDisabled}
+                    >+</button>
+                  </div>
+                </div>
+                {localBuilders.military > 0 && (
+                  <div className="build-eta">
+                    ~{Math.ceil((UPGRADE_PROGRESS.military[completedMilitary] - me.upgradeProgress.military) / (localBuilders.military * PROGRESS_PER_BUILDER))} turns remaining
+                  </div>
+                )}
+                <p className="section-explainer">
+                  Unlocks: {TROOP_TYPES[completedMilitary + 1] ? TROOP_TYPES[completedMilitary + 1].charAt(0).toUpperCase() + TROOP_TYPES[completedMilitary + 1].slice(1) : '?'}
+                </p>
+              </div>
+            ) : atMaxMilitaryUpgrades ? (
+              <div className="resource-row">
+                <span className="resource-label">All troop types unlocked!</span>
+              </div>
+            ) : (
+              <div className="upgrade-buttons">
+                <button
+                  className="upgrade-btn upgrade-military"
+                  onClick={handleUpgradeMilitary}
+                  disabled={!canAffordMilitaryUpgrade || controlsDisabled}
+                  title={`Costs ${MILITARY_UPGRADE_COST_FOOD} food + ${MILITARY_UPGRADE_COST_GOLD} gold`}
+                >
+                  <span className="upgrade-btn-title">📜 Unlock Upgrade</span>
+                  <span className="upgrade-btn-cost">{MILITARY_UPGRADE_COST_FOOD} food + {MILITARY_UPGRADE_COST_GOLD} gold</span>
+                  <span className="upgrade-btn-effect">Unlocks: {TROOP_TYPES[completedMilitary + 1] ? TROOP_TYPES[completedMilitary + 1].charAt(0).toUpperCase() + TROOP_TYPES[completedMilitary + 1].slice(1) : 'next troop'}</span>
+                </button>
+              </div>
+            )}
+
+            {/* Troop training — only unlocked types */}
             <div className="upgrade-buttons">
               {TROOP_TYPES.map((type) => {
+                const troopIndex = TROOP_TYPES.indexOf(type);
+                const isUnlocked = troopIndex === 0 || me.upgradesCompleted.military >= troopIndex;
+                if (!isUnlocked) return null;
                 const config = TRAINING_CONFIG[type];
                 const count = me.militaryAtHome[type];
                 const canAfford = me.food >= config.food && me.gold >= config.gold;

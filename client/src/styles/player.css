@@ -592,6 +592,9 @@
   transition: width 0.5s ease;
   border-radius: var(--radius-sm);
 }
+.build-progress-bar-fill.military-progress-fill {
+  background: linear-gradient(90deg, #c0392b, #e74c3c);
+}
 .builder-assignment {
   display: flex;
   align-items: center;

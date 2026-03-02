@@ -1,4 +1,4 @@
-import type { ServerRoom, ServerCityPlayer, RoomStatePayload, TroopGroup, TroopType } from '../../shared/types';
+import type { ServerRoom, ServerCityPlayer, RoomStatePayload, TroopGroup, TroopType, UpgradeCategory } from '../../shared/types';
 import {
   PLAYER_COLORS,
   INITIAL_FOOD,
@@ -14,8 +14,10 @@ import {
   INITIAL_POPULATION,
   CULTURE_UPGRADE_COST_FOOD,
   CULTURE_UPGRADE_COST_GOLD,
+  MILITARY_UPGRADE_COST_FOOD,
+  MILITARY_UPGRADE_COST_GOLD,
   MONUMENT_CULTURE_PER_TURN,
-  UPGRADE_PROGRESS_REQUIRED,
+  UPGRADE_PROGRESS,
   PROGRESS_PER_BUILDER,
   CULTURE_WIN_THRESHOLD,
   INITIAL_MILITARY,
@@ -45,28 +47,38 @@ function totalMilitaryAtHome(mil: Record<TroopType, number>): number {
   return Object.values(mil).reduce((sum, n) => sum + n, 0);
 }
 
+function totalBuilders(builders: Record<UpgradeCategory, number>): number {
+  return Object.values(builders).reduce((s, n) => s + n, 0);
+}
+
 function clampWorkers(player: ServerCityPlayer): void {
   const civilians = Math.max(0, Math.floor(player.population) - totalMilitaryAtHome(player.militaryAtHome));
-  const total = player.farmers + player.miners + player.merchants + player.builders;
+  const tb = totalBuilders(player.builders);
+  const total = player.farmers + player.miners + player.merchants + tb;
   if (total <= civilians) return;
 
   if (civilians <= 0) {
     player.farmers = 0;
     player.miners = 0;
     player.merchants = 0;
-    player.builders = 0;
+    player.builders = { culture: 0, military: 0 };
   } else {
     const ratio = civilians / total;
     player.farmers = Math.floor(player.farmers * ratio);
     player.miners = Math.floor(player.miners * ratio);
     player.merchants = Math.floor(player.merchants * ratio);
-    player.builders = Math.floor(player.builders * ratio);
+    for (const cat of Object.keys(player.builders) as UpgradeCategory[]) {
+      player.builders[cat] = Math.floor(player.builders[cat] * ratio);
+    }
   }
   player.goldIncome = player.merchants * GOLD_PER_MERCHANT;
 
-  // If no active build slot, force builders to 0
+  // Zero out builders for categories with no active build slot
   if (player.upgradesCompleted.culture >= player.cultureLevel) {
-    player.builders = 0;
+    player.builders.culture = 0;
+  }
+  if (player.upgradesCompleted.military >= player.militaryLevel) {
+    player.builders.military = 0;
   }
 }
 
@@ -171,9 +183,10 @@ export function addPlayer(
     population: 0,
     culture: 0,
     cultureLevel: 0,
-    builders: 0,
-    upgradesCompleted: { culture: 0 },
-    upgradeProgress: { culture: 0 },
+    builders: { culture: 0, military: 0 },
+    upgradesCompleted: { culture: 0, military: 0 },
+    upgradeProgress: { culture: 0, military: 0 },
+    militaryLevel: 0,
     hp: 0,
     maxHp: MAX_HP,
     x: 0,
@@ -244,9 +257,10 @@ export function startGame(
     player.population = INITIAL_POPULATION;
     player.culture = 0;
     player.cultureLevel = 0;
-    player.builders = 0;
-    player.upgradesCompleted = { culture: 0 };
-    player.upgradeProgress = { culture: 0 };
+    player.militaryLevel = 0;
+    player.builders = { culture: 0, military: 0 };
+    player.upgradesCompleted = { culture: 0, military: 0 };
+    player.upgradeProgress = { culture: 0, military: 0 };
     player.hp = INITIAL_HP;
     player.maxHp = MAX_HP;
     player.alive = true;
@@ -308,14 +322,17 @@ function runUpdatePhase(room: ServerRoom): void {
     player.gold += player.goldIncome;
     player.culture += player.upgradesCompleted.culture * MONUMENT_CULTURE_PER_TURN;
 
-    // Build progress
-    if (player.upgradesCompleted.culture < player.cultureLevel && player.builders > 0) {
-      player.upgradeProgress.culture += player.builders * PROGRESS_PER_BUILDER;
-      const required = UPGRADE_PROGRESS_REQUIRED[player.upgradesCompleted.culture];
-      if (player.upgradeProgress.culture >= required) {
-        player.upgradesCompleted.culture += 1;
-        player.upgradeProgress.culture = 0;
-        player.builders = 0;
+    // Build progress (all categories)
+    for (const cat of ['culture', 'military'] as UpgradeCategory[]) {
+      const level = cat === 'culture' ? player.cultureLevel : player.militaryLevel;
+      if (player.upgradesCompleted[cat] < level && player.builders[cat] > 0) {
+        player.upgradeProgress[cat] += player.builders[cat] * PROGRESS_PER_BUILDER;
+        const required = UPGRADE_PROGRESS[cat][player.upgradesCompleted[cat]];
+        if (player.upgradeProgress[cat] >= required) {
+          player.upgradesCompleted[cat] += 1;
+          player.upgradeProgress[cat] = 0;
+          player.builders[cat] = 0;
+        }
       }
     }
   }
@@ -885,7 +902,7 @@ export function allocateWorkers(
   farmers: number,
   miners: number,
   merchants: number,
-  builders: number
+  builders: Record<UpgradeCategory, number>
 ): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
   const room = rooms.get(roomId);
   if (!room) return { error: 'Room not found' };
@@ -896,17 +913,26 @@ export function allocateWorkers(
 
   if (!Number.isInteger(farmers) || farmers < 0 ||
       !Number.isInteger(miners) || miners < 0 ||
-      !Number.isInteger(merchants) || merchants < 0 ||
-      !Number.isInteger(builders) || builders < 0) {
+      !Number.isInteger(merchants) || merchants < 0) {
     return { error: 'Worker counts must be non-negative integers' };
   }
 
-  if (builders > 0 && player.upgradesCompleted.culture >= player.cultureLevel) {
-    return { error: 'No active build project' };
+  for (const cat of Object.keys(builders) as UpgradeCategory[]) {
+    if (!Number.isInteger(builders[cat]) || builders[cat] < 0) {
+      return { error: 'Builder counts must be non-negative integers' };
+    }
   }
 
+  if (builders.culture > 0 && player.upgradesCompleted.culture >= player.cultureLevel) {
+    return { error: 'No active culture build project' };
+  }
+  if (builders.military > 0 && player.upgradesCompleted.military >= player.militaryLevel) {
+    return { error: 'No active military build project' };
+  }
+
+  const tb = totalBuilders(builders);
   const civilians = Math.floor(player.population) - totalMilitaryAtHome(player.militaryAtHome);
-  if (farmers + miners + merchants + builders > civilians) {
+  if (farmers + miners + merchants + tb > civilians) {
     return { error: 'Not enough civilians for this allocation' };
   }
 
@@ -951,13 +977,35 @@ export function upgradeCulture(
   if (typeof guard === 'string') return { error: guard };
   const player = guard;
 
-  if (player.cultureLevel >= UPGRADE_PROGRESS_REQUIRED.length) return { error: 'Maximum culture level reached' };
+  if (player.cultureLevel >= UPGRADE_PROGRESS.culture.length) return { error: 'Maximum culture level reached' };
   if (player.food < CULTURE_UPGRADE_COST_FOOD) return { error: 'Not enough food' };
   if (player.gold < CULTURE_UPGRADE_COST_GOLD) return { error: 'Not enough gold' };
 
   player.food -= CULTURE_UPGRADE_COST_FOOD;
   player.gold -= CULTURE_UPGRADE_COST_GOLD;
   player.cultureLevel += 1;
+
+  return { room };
+}
+
+export function upgradeMilitary(
+  roomId: string,
+  playerId: string
+): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
+  const room = rooms.get(roomId);
+  if (!room) return { error: 'Room not found' };
+
+  const guard = guardAction(room, playerId);
+  if (typeof guard === 'string') return { error: guard };
+  const player = guard;
+
+  if (player.militaryLevel >= UPGRADE_PROGRESS.military.length) return { error: 'Maximum military level reached' };
+  if (player.food < MILITARY_UPGRADE_COST_FOOD) return { error: 'Not enough food' };
+  if (player.gold < MILITARY_UPGRADE_COST_GOLD) return { error: 'Not enough gold' };
+
+  player.food -= MILITARY_UPGRADE_COST_FOOD;
+  player.gold -= MILITARY_UPGRADE_COST_GOLD;
+  player.militaryLevel += 1;
 
   return { room };
 }
@@ -976,6 +1024,12 @@ export function spendMilitary(
 
   const config = TRAINING_CONFIG[troopType];
   if (!config) return { error: 'Invalid troop type' };
+
+  // Gate troop types behind military upgrades (warriors always available)
+  const troopIndex = TROOP_TYPES.indexOf(troopType);
+  if (troopIndex > 0 && player.upgradesCompleted.military < troopIndex) {
+    return { error: `${troopType} not yet unlocked` };
+  }
 
   if (player.food < config.food || player.gold < config.gold) {
     return { error: 'Not enough resources' };
@@ -1317,9 +1371,10 @@ export function resetRoom(
     player.population = 0;
     player.culture = 0;
     player.cultureLevel = 0;
-    player.builders = 0;
-    player.upgradesCompleted = { culture: 0 };
-    player.upgradeProgress = { culture: 0 };
+    player.militaryLevel = 0;
+    player.builders = { culture: 0, military: 0 };
+    player.upgradesCompleted = { culture: 0, military: 0 };
+    player.upgradeProgress = { culture: 0, military: 0 };
     player.hp = 0;
     player.maxHp = MAX_HP;
     player.x = 0;
@@ -1349,6 +1404,7 @@ export function sanitizeState(room: ServerRoom): RoomStatePayload {
     population: p.population,
     culture: p.culture,
     cultureLevel: p.cultureLevel,
+    militaryLevel: p.militaryLevel,
     builders: p.builders,
     upgradesCompleted: p.upgradesCompleted,
     upgradeProgress: p.upgradeProgress,

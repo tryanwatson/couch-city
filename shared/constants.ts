@@ -21,8 +21,16 @@ export const INITIAL_POPULATION = 10;
 export const CULTURE_UPGRADE_COST_FOOD = 30;
 export const CULTURE_UPGRADE_COST_GOLD = 50;
 
+// Military upgrade — unlocks troop types
+export const MILITARY_UPGRADE_COST_FOOD = 30;
+export const MILITARY_UPGRADE_COST_GOLD = 50;
+
 // Upgrades — build progress system
-export const UPGRADE_PROGRESS_REQUIRED = [10, 30, 80, 200, 500] as const; // progress needed per level
+import type { UpgradeCategory } from "./types";
+export const UPGRADE_PROGRESS: Record<UpgradeCategory, readonly number[]> = {
+  culture: [10, 30, 80, 200, 500],
+  military: [20, 60, 150],
+};
 export const PROGRESS_PER_BUILDER = 1; // progress per builder per turn
 export const MONUMENT_CULTURE_PER_TURN = 5; // passive culture score per completed upgrade per turn
 export const CULTURE_WIN_THRESHOLD = 1000; // first player to reach this culture score wins

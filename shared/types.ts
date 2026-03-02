@@ -1,7 +1,7 @@
 export type Phase = 'lobby' | 'playing' | 'gameover';
 export type PlayingSubPhase = 'planning' | 'resolving';
 export type TroopType = 'warrior' | 'cavalry' | 'rifleman' | 'truck';
-export type UpgradeCategory = 'culture';
+export type UpgradeCategory = 'culture' | 'military';
 
 // Client-safe player stats — zeros during lobby, populated on startGame
 export interface CityPlayerInfo {
@@ -21,8 +21,9 @@ export interface CityPlayerInfo {
   militaryAtHome: Record<TroopType, number>;
   population: number;
   culture: number;       // passive score from completed upgrades
-  cultureLevel: number;  // unlock count — gates how many upgrades can be built
-  builders: number;      // workers assigned to building upgrades
+  cultureLevel: number;  // unlock count — gates how many culture upgrades can be built
+  militaryLevel: number; // unlock count — gates how many military upgrades can be built
+  builders: Record<UpgradeCategory, number>; // workers assigned to building per category
   upgradesCompleted: Record<UpgradeCategory, number>;  // completed upgrades per category
   upgradeProgress: Record<UpgradeCategory, number>;    // current build progress per category
   hp: number;
@@ -90,7 +91,8 @@ export interface ServerCityPlayer {
   population: number;
   culture: number;
   cultureLevel: number;
-  builders: number;
+  militaryLevel: number;
+  builders: Record<UpgradeCategory, number>;
   upgradesCompleted: Record<UpgradeCategory, number>;
   upgradeProgress: Record<UpgradeCategory, number>;
   hp: number;
