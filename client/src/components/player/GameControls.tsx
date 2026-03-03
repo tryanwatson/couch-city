@@ -25,6 +25,7 @@ import {
   PROMISED_LAND_HOLD_TURNS,
   HP_REGEN_PERCENT,
   DEFENSE_HP_PER_LEVEL,
+  UPGRADE_PROGRESS,
 } from "../../../../shared/constants";
 import BuildProgressBlock from "./BuildProgressBlock";
 import { useHoldToRepeat } from "../../hooks/useHoldToRepeat";
@@ -425,40 +426,72 @@ export default function GameControls({
       <div className="stats-header" style={{ borderTopColor: me.color }}>
         <div className="city-name">{me.name}</div>
 
-        <div className="stats-row">
-          <div className="stat-block stat-block-pop">
-            <span className="stat-label">👥 Pop</span>
-            <span className="stat-value">{pop}</span>
-            <span className="stat-rate">{unassigned} idle</span>
-            <span
-              className={`pop-growth-projection${!isFed ? " rate-negative" : ""}`}
-            >
-              {pop} → {projectedPop} next turn (
-              {isFed
-                ? `+${Math.round(effectiveGrowthRate * 100)}%`
-                : `-${Math.round(POP_STARVATION_RATE * 100)}%`}
-              )
+        <div className="stats-columns">
+          <div className="stats-col-pop">
+            <span className="stats-col-value">
+              👥 {pop} <span className="stats-idle">({unassigned} idle)</span>
             </span>
-            <div className="pop-growth-controls">
-              {(VALID_GROWTH_MULTIPLIERS as readonly number[]).map((m) => (
-                <button
-                  key={m}
-                  className={`growth-multiplier-btn${localGrowthMultiplier === m ? " active" : ""}`}
-                  onClick={() => handleSetGrowthMultiplier(m)}
-                  disabled={controlsDisabled}
-                >
-                  {m}x
-                </button>
-              ))}
+            <div className="stats-row-growth">
+              <span
+                className={`pop-growth-projection${!isFed ? " rate-negative" : ""}`}
+              >
+                👥 {pop} → {projectedPop} (
+                {isFed
+                  ? `+${Math.round(effectiveGrowthRate * 100)}%`
+                  : `-${Math.round(POP_STARVATION_RATE * 100)}%`}
+                )
+              </span>
+              <div className="stats-growth-buttons">
+                {(VALID_GROWTH_MULTIPLIERS as readonly number[]).map((m) => (
+                  <button
+                    key={m}
+                    className={`growth-multiplier-btn${localGrowthMultiplier === m ? " active" : ""}`}
+                    onClick={() => handleSetGrowthMultiplier(m)}
+                    disabled={controlsDisabled}
+                  >
+                    {m}x
+                  </button>
+                ))}
+              </div>
             </div>
-            <span className={`pop-food-warning${netFood < 0 ? "" : " hidden"}`}>
-              ⚠ {netFood < 0 ? Math.floor(me.food / Math.abs(netFood)) : 0} turns of food left
-            </span>
+            <div className={`stats-row-warning${netFood < 0 ? "" : " hidden"}`}>
+              ⚠ {netFood < 0 ? Math.floor(me.food / Math.abs(netFood)) : 0}{" "}
+              turns of food left
+            </div>
           </div>
-          <div className="stat-block stat-block-combat">
-            <span className="stat-label">⚔️ Combat Power</span>
-            <span className="stat-value">{totalCombatPower}</span>
-            <span className="stat-rate">at home</span>
+          <div className="stats-col-cp">
+            <span className="stats-col-value">⚔️ {totalCombatPower}</span>
+            <span className="stats-col-subtitle">Standing Army</span>
+            <div className="stats-upgrade-levels">
+              <div className="stats-upgrade-row">
+                <span className="stats-upgrade-item">
+                  🌾 {me.upgradesCompleted.farming}/
+                  {UPGRADE_PROGRESS.farming.length}
+                </span>
+                <span className="stats-upgrade-item">
+                  ⛏ {me.upgradesCompleted.mining}/
+                  {UPGRADE_PROGRESS.mining.length}
+                </span>
+                <span className="stats-upgrade-item">
+                  💰 {me.upgradesCompleted.trade}/
+                  {UPGRADE_PROGRESS.trade.length}
+                </span>
+              </div>
+              <div className="stats-upgrade-row">
+                <span className="stats-upgrade-item">
+                  🏛 {me.upgradesCompleted.culture}/
+                  {UPGRADE_PROGRESS.culture.length}
+                </span>
+                <span className="stats-upgrade-item">
+                  🛡 {me.upgradesCompleted.defense}/
+                  {UPGRADE_PROGRESS.defense.length}
+                </span>
+                <span className="stats-upgrade-item">
+                  ⚔ {me.upgradesCompleted.military}/
+                  {UPGRADE_PROGRESS.military.length}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1216,19 +1249,19 @@ export default function GameControls({
                       </span>
                     </div>
 
-                    {!isReturning && (
-                      <div className="troop-manage-actions">
-                        <button
-                          className="troop-action-btn"
-                          onClick={() =>
-                            isPaused
-                              ? handleResumeTroops(tg.id)
-                              : handlePauseTroops(tg.id)
-                          }
-                          disabled={controlsDisabled}
-                        >
-                          {isPaused ? "Resume" : "Pause"}
-                        </button>
+                    <div className="troop-manage-actions">
+                      <button
+                        className="troop-action-btn"
+                        onClick={() =>
+                          isPaused
+                            ? handleResumeTroops(tg.id)
+                            : handlePauseTroops(tg.id)
+                        }
+                        disabled={controlsDisabled}
+                      >
+                        {isPaused ? "Resume" : "Pause"}
+                      </button>
+                      {!isReturning && (
                         <button
                           className="troop-action-btn"
                           onClick={() => handleRecallTroops(tg.id)}
@@ -1236,31 +1269,31 @@ export default function GameControls({
                         >
                           Recall
                         </button>
-                        {(redirectTargets.length > 0 || canRedirectToLand) && (
-                          <select
-                            className="troop-redirect-select"
-                            value=""
-                            onChange={(e) => {
-                              if (e.target.value)
-                                handleRedirectTroops(tg.id, e.target.value);
-                            }}
-                            disabled={controlsDisabled}
-                          >
-                            <option value="">Redirect...</option>
-                            {canRedirectToLand && (
-                              <option value={PROMISED_LAND_ID}>
-                                The Promised Land
-                              </option>
-                            )}
-                            {redirectTargets.map((t) => (
-                              <option key={t.playerId} value={t.playerId}>
-                                {t.name}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-                    )}
+                      )}
+                      {(redirectTargets.length > 0 || canRedirectToLand) && (
+                        <select
+                          className="troop-redirect-select"
+                          value=""
+                          onChange={(e) => {
+                            if (e.target.value)
+                              handleRedirectTroops(tg.id, e.target.value);
+                          }}
+                          disabled={controlsDisabled}
+                        >
+                          <option value="">Redirect...</option>
+                          {canRedirectToLand && (
+                            <option value={PROMISED_LAND_ID}>
+                              The Promised Land
+                            </option>
+                          )}
+                          {redirectTargets.map((t) => (
+                            <option key={t.playerId} value={t.playerId}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
                   </div>
                 );
               })}
