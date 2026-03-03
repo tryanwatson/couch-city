@@ -319,6 +319,14 @@ function runUpdatePhase(room: ServerRoom): void {
     player.gold += player.goldIncome;
     player.culture += player.upgradesCompleted.culture * MONUMENT_CULTURE_PER_TURN;
 
+    // Cap builders to remaining build points (return excess to unallocated pool)
+    for (const cat of ALL_UPGRADE_CATEGORIES) {
+      if (player.upgradesCompleted[cat] < player.upgradeLevel[cat] && player.builders[cat] > 0) {
+        const remaining = UPGRADE_PROGRESS[cat][player.upgradesCompleted[cat]] - player.upgradeProgress[cat];
+        player.builders[cat] = Math.min(player.builders[cat], remaining);
+      }
+    }
+
     // Build progress (all categories)
     for (const cat of ALL_UPGRADE_CATEGORIES) {
       const level = player.upgradeLevel[cat];
@@ -403,7 +411,7 @@ function runUpdatePhase(room: ServerRoom): void {
     if (room.players.get(ownerId)?.alive) {
       room.promisedLandHoldTurns = room.promisedLandOwnerId === ownerId
         ? room.promisedLandHoldTurns + 1
-        : 1;
+        : 0;
       room.promisedLandOwnerId = ownerId;
     } else {
       room.promisedLandOwnerId = null;
@@ -955,6 +963,15 @@ export function allocateWorkers(
     }
   }
 
+  for (const cat of ALL_UPGRADE_CATEGORIES) {
+    if ((builders[cat] ?? 0) > 0 && player.upgradesCompleted[cat] < player.upgradeLevel[cat]) {
+      const remaining = UPGRADE_PROGRESS[cat][player.upgradesCompleted[cat]] - player.upgradeProgress[cat];
+      if (builders[cat] > remaining) {
+        return { error: `Too many builders for ${cat} (only ${remaining} build points remaining)` };
+      }
+    }
+  }
+
   const tb = totalBuilders(builders);
   const civilians = Math.floor(player.population);
   if (farmers + miners + merchants + tb > civilians) {
@@ -1276,7 +1293,10 @@ export function redirectTroops(
   if (oldRemainingDist > 0.001) {
     newTurns = Math.max(1, Math.round(tg.turnsRemaining * (newDist / oldRemainingDist)));
   } else {
-    newTurns = Math.max(1, Math.round(TROOP_TRAVEL_TURNS * (newDist / 0.7)));
+    const baseTurns = (newTargetPlayerId === PROMISED_LAND_ID || tg.targetPlayerId === PROMISED_LAND_ID)
+      ? PROMISED_LAND_TRAVEL_TURNS
+      : TROOP_TRAVEL_TURNS;
+    newTurns = Math.max(1, Math.round(baseTurns * (newDist / 0.7)));
   }
 
   tg.startX = currentPos.x;
@@ -1318,6 +1338,11 @@ export function recallOccupyingTroops(
     startY = targetCity?.y ?? 0.5;
   }
 
+  // PL is closer than a city — use the appropriate travel time
+  const returnTurns = occ.targetPlayerId === PROMISED_LAND_ID
+    ? PROMISED_LAND_TRAVEL_TURNS
+    : TROOP_TRAVEL_TURNS;
+
   // Move from occupying to transit (heading home)
   room.occupyingTroops.splice(occIndex, 1);
   room.troopsInTransit.push({
@@ -1326,8 +1351,8 @@ export function recallOccupyingTroops(
     targetPlayerId: playerId, // heading home
     troopType: occ.troopType,
     units: occ.units,
-    turnsRemaining: TROOP_TRAVEL_TURNS,
-    totalTurns: TROOP_TRAVEL_TURNS,
+    turnsRemaining: returnTurns,
+    totalTurns: returnTurns,
     startX,
     startY,
   });

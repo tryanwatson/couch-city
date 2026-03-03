@@ -155,6 +155,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
   const controlsDisabled = hasEndedTurn || isResolving;
 
   const totalMilitary = Object.values(me.militaryAtHome).reduce((s, n) => s + n, 0);
+  const totalCombatPower = TROOP_TYPES.reduce((s, t) => s + me.militaryAtHome[t] * COMBAT_POWER[t], 0);
   const civilians = Math.floor(me.population);
   const totalBuildersCount = Object.values(localBuilders).reduce((s, n) => s + n, 0);
   const totalWorkers = localFarmers + localMiners + localMerchants + totalBuildersCount;
@@ -263,8 +264,8 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
             <span className="stat-rate">{unassigned} idle</span>
           </div>
           <div className="stat-block">
-            <span className="stat-label">⚔️ Troops</span>
-            <span className="stat-value">{totalMilitary}</span>
+            <span className="stat-label">⚔️ Combat Power</span>
+            <span className="stat-value">{totalCombatPower}</span>
             <span className="stat-rate">at home</span>
           </div>
           <div className="stat-block">
@@ -381,7 +382,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                     <button
                       className="worker-btn"
                       onClick={() => { const updated = { ...localBuilders, farming: localBuilders.farming + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={unassigned <= 0 || controlsDisabled}
+                      disabled={unassigned <= 0 || controlsDisabled || localBuilders.farming >= (UPGRADE_PROGRESS.farming[completedFarming] - me.upgradeProgress.farming)}
                     >+</button>
                   </div>
                 </div>
@@ -472,7 +473,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                     <button
                       className="worker-btn"
                       onClick={() => { const updated = { ...localBuilders, mining: localBuilders.mining + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={unassigned <= 0 || controlsDisabled}
+                      disabled={unassigned <= 0 || controlsDisabled || localBuilders.mining >= (UPGRADE_PROGRESS.mining[completedMining] - me.upgradeProgress.mining)}
                     >+</button>
                   </div>
                 </div>
@@ -563,7 +564,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                     <button
                       className="worker-btn"
                       onClick={() => { const updated = { ...localBuilders, trade: localBuilders.trade + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={unassigned <= 0 || controlsDisabled}
+                      disabled={unassigned <= 0 || controlsDisabled || localBuilders.trade >= (UPGRADE_PROGRESS.trade[completedTrade] - me.upgradeProgress.trade)}
                     >+</button>
                   </div>
                 </div>
@@ -651,7 +652,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                     <button
                       className="worker-btn"
                       onClick={() => { const updated = { ...localBuilders, culture: localBuilders.culture + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={unassigned <= 0 || controlsDisabled}
+                      disabled={unassigned <= 0 || controlsDisabled || localBuilders.culture >= (UPGRADE_PROGRESS.culture[completedCulture] - me.upgradeProgress.culture)}
                     >+</button>
                   </div>
                 </div>
@@ -730,7 +731,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                     <button
                       className="worker-btn"
                       onClick={() => { const updated = { ...localBuilders, defense: localBuilders.defense + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={unassigned <= 0 || controlsDisabled}
+                      disabled={unassigned <= 0 || controlsDisabled || localBuilders.defense >= (UPGRADE_PROGRESS.defense[completedDefense] - me.upgradeProgress.defense)}
                     >+</button>
                   </div>
                 </div>
@@ -899,7 +900,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                     <button
                       className="worker-btn"
                       onClick={() => { const updated = { ...localBuilders, military: localBuilders.military + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={unassigned <= 0 || controlsDisabled}
+                      disabled={unassigned <= 0 || controlsDisabled || localBuilders.military >= (UPGRADE_PROGRESS.military[completedMilitary] - me.upgradeProgress.military)}
                     >+</button>
                   </div>
                 </div>
@@ -1078,11 +1079,16 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           </span>
         </div>
         <button
-          className={`end-turn-btn${hasEndedTurn ? ' ended' : ''}`}
-          onClick={handleEndTurn}
+          className={`end-turn-btn${hasEndedTurn ? ' ended' : unassigned > 0 ? ' idle-warning' : ''}`}
+          onClick={() => {
+            if (unassigned > 0) {
+              if (!window.confirm(`You have ${unassigned} unallocated population. Are you sure you want to end your turn?`)) return;
+            }
+            handleEndTurn();
+          }}
           disabled={hasEndedTurn || isResolving}
         >
-          {isResolving ? 'Resolving...' : hasEndedTurn ? 'Waiting for others...' : 'End Turn'}
+          {isResolving ? 'Resolving...' : hasEndedTurn ? 'Waiting for others...' : unassigned > 0 ? `End Turn (${unassigned} idle)` : 'End Turn'}
         </button>
       </div>
     </div>

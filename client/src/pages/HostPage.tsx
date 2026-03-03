@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRoomState } from '../hooks/useRoomState';
 import Lobby from '../components/host/Lobby';
 import BattleMap from '../components/host/BattleMap';
@@ -9,22 +9,28 @@ const STORAGE_KEY = 'party_game_host_room';
 export default function HostPage() {
   const { roomState, error, socket } = useRoomState();
   const [creating, setCreating] = useState(false);
+  const didInit = useRef(false);
 
   useEffect(() => {
-    // Try to reattach to an existing room
-    const savedRoomId = localStorage.getItem(STORAGE_KEY);
-    if (savedRoomId) {
-      socket.emit('host:attach_room', { roomId: savedRoomId });
-    } else {
-      // Create a new room
-      setCreating(true);
-      socket.emit('host:create_room', (roomId: string) => {
-        localStorage.setItem(STORAGE_KEY, roomId);
-        setCreating(false);
-      });
+    if (!didInit.current) {
+      didInit.current = true;
+
+      // Try to reattach to an existing room
+      const savedRoomId = localStorage.getItem(STORAGE_KEY);
+      if (savedRoomId) {
+        socket.emit('host:attach_room', { roomId: savedRoomId });
+      } else {
+        // Create a new room
+        setCreating(true);
+        socket.emit('host:create_room', (roomId: string) => {
+          localStorage.setItem(STORAGE_KEY, roomId);
+          setCreating(false);
+        });
+      }
     }
 
     // Handle attach failure: if we get an error about room not found, create a new one
+    // Registered outside the guard so it survives StrictMode cleanup/remount
     const handleError = (data: { message: string }) => {
       if (data.message === 'Room not found') {
         localStorage.removeItem(STORAGE_KEY);

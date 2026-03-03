@@ -96,7 +96,7 @@ export const HP_REGEN_PERCENT = 0.03; // 3% of maxHp per turn (ceil'd) — scale
 export const DEFENSE_HP_PER_LEVEL: readonly number[] = [50, 75, 100];
 
 // Combat
-export const TROOP_TRAVEL_TURNS = 3; // turns for troops to reach target (4 positions: home,1,2,enemy)
+export const TROOP_TRAVEL_TURNS = 4; // turns for troops to reach target (5 positions: home,1,2,3,enemy)
 export const SIEGE_DAMAGE_PER_CP = 1; // HP damage per CP per turn from occupying troops
 export const VALID_ATTACK_AMOUNTS = [1, 3, 5, 10, 25] as const;
 
@@ -119,7 +119,7 @@ export const FIELD_COMBAT_ADVANCE_FRAC = 0.2; // 1000ms — winner advances to d
 export const PROMISED_LAND_ID = '__PROMISED_LAND__';
 export const PROMISED_LAND_X = 0.5;
 export const PROMISED_LAND_Y = 0.5;
-export const PROMISED_LAND_TRAVEL_TURNS = 1; // turns for troops to reach it (shorter than city attacks)
+export const PROMISED_LAND_TRAVEL_TURNS = 2; // turns for troops to reach it (arrive the turn after sending)
 export const PROMISED_LAND_HOLD_TURNS = 3; // consecutive uncontested turns to win
 
 // Turn-based timing

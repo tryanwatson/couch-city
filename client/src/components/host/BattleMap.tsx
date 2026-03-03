@@ -1,6 +1,23 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
-import type { CityPlayerInfo, TroopGroup, TroopType, PlayingSubPhase } from '../../../../shared/types';
-import { CULTURE_WIN_THRESHOLD, COMBAT_POWER, TROOP_TYPES, RESOLVING_PHASE_DURATION_MS, FIELD_COMBAT_WALK_FRAC, FIELD_COMBAT_FIGHT_FRAC, FIELD_COMBAT_ADVANCE_FRAC, PROMISED_LAND_ID, PROMISED_LAND_X, PROMISED_LAND_Y, PROMISED_LAND_HOLD_TURNS } from '../../../../shared/constants';
+import { useEffect, useRef, useState, useMemo } from "react";
+import type {
+  CityPlayerInfo,
+  TroopGroup,
+  TroopType,
+  PlayingSubPhase,
+} from "../../../../shared/types";
+import {
+  CULTURE_WIN_THRESHOLD,
+  COMBAT_POWER,
+  TROOP_TYPES,
+  RESOLVING_PHASE_DURATION_MS,
+  FIELD_COMBAT_WALK_FRAC,
+  FIELD_COMBAT_FIGHT_FRAC,
+  FIELD_COMBAT_ADVANCE_FRAC,
+  PROMISED_LAND_ID,
+  PROMISED_LAND_X,
+  PROMISED_LAND_Y,
+  PROMISED_LAND_HOLD_TURNS,
+} from "../../../../shared/constants";
 
 interface SpriteSheetConfig {
   image: string;
@@ -14,7 +31,7 @@ interface SpriteSheetConfig {
 
 const SPRITE_SHEETS: Record<TroopType, SpriteSheetConfig> = {
   warrior: {
-    image: '/blue-warrior-ss.png',
+    image: "/blue-warrior-ss.png",
     startFrame: 0,
     walkFrames: 8,
     attackFrames: 8,
@@ -23,7 +40,7 @@ const SPRITE_SHEETS: Record<TroopType, SpriteSheetConfig> = {
     sheetHeight: 32,
   },
   cavalry: {
-    image: '/blue-horse-ss.png',
+    image: "/blue-horse-ss.png",
     startFrame: 0,
     walkFrames: 6,
     attackFrames: 10,
@@ -32,7 +49,7 @@ const SPRITE_SHEETS: Record<TroopType, SpriteSheetConfig> = {
     sheetHeight: 32,
   },
   rifleman: {
-    image: '/blue-soldier-rifle.png',
+    image: "/blue-soldier-rifle.png",
     startFrame: 1,
     walkFrames: 8,
     attackFrames: 8,
@@ -41,7 +58,7 @@ const SPRITE_SHEETS: Record<TroopType, SpriteSheetConfig> = {
     sheetHeight: 32,
   },
   truck: {
-    image: '/blue-truck.png',
+    image: "/blue-truck.png",
     startFrame: 0,
     walkFrames: 5,
     attackFrames: 11,
@@ -87,12 +104,15 @@ interface BattleMapProps {
   promisedLandHoldTurns?: number;
 }
 
-function resolveTargetPos(targetPlayerId: string, playerMap: Map<string, CityPlayerInfo>): { x: number; y: number } | null {
-  if (targetPlayerId === PROMISED_LAND_ID) return { x: PROMISED_LAND_X, y: PROMISED_LAND_Y };
+function resolveTargetPos(
+  targetPlayerId: string,
+  playerMap: Map<string, CityPlayerInfo>,
+): { x: number; y: number } | null {
+  if (targetPlayerId === PROMISED_LAND_ID)
+    return { x: PROMISED_LAND_X, y: PROMISED_LAND_Y };
   const target = playerMap.get(targetPlayerId);
   return target ? { x: target.x, y: target.y } : null;
 }
-
 
 const GOLDEN_ANGLE = 2.399963;
 
@@ -100,6 +120,7 @@ function TroopSprite({
   pos,
   units,
   frameIndex,
+  animTime,
   isAttacking,
   isIdle,
   facingLeft,
@@ -112,6 +133,7 @@ function TroopSprite({
   pos: { x: number; y: number };
   units: number;
   frameIndex: number;
+  animTime: number;
   isAttacking: boolean;
   isIdle: boolean;
   facingLeft: boolean;
@@ -137,49 +159,66 @@ function TroopSprite({
 
     let fi: number;
     if (isAttacking) {
-      fi = sheet.startFrame + sheet.walkFrames + ((frameIndex + i) % sheet.attackFrames);
+      fi =
+        sheet.startFrame +
+        sheet.walkFrames +
+        ((frameIndex + i) % sheet.attackFrames);
     } else if (isIdle) {
       fi = sheet.startFrame;
     } else {
       fi = sheet.startFrame + ((frameIndex + i) % sheet.walkFrames);
     }
+    const breathScale = isIdle
+      ? 1 + Math.sin(animTime / 200 + i * 2.3) * 0.01
+      : 1;
     const frameX = fi * sheet.frameWidth;
-    const flipTransform = facingLeft ? `translate(${2 * sx}, 0) scale(-1, 1)` : undefined;
+    const flipTransform = facingLeft
+      ? `translate(${2 * sx}, 0) scale(-1, 1)`
+      : undefined;
 
-    spriteData.push({ i, sx, sy, frameX, flipTransform });
+    spriteData.push({ i, sx, sy, frameX, flipTransform, breathScale });
   }
   spriteData.sort((a, b) => a.sy - b.sy);
 
-  const sprites = spriteData.map(({ i, sx, sy, frameX, flipTransform }) => (
-    <g key={i} transform={flipTransform}>
-      <svg
-        x={sx - TROOP_DISPLAY_SIZE / 2}
-        y={sy - TROOP_DISPLAY_SIZE / 2}
-        width={TROOP_DISPLAY_SIZE}
-        height={TROOP_DISPLAY_SIZE}
-        overflow="hidden"
-      >
-        <image
-          href={sheet.image}
-          x={-frameX * scale}
-          y={0}
-          width={sheet.sheetWidth * scale}
-          height={sheet.sheetHeight * scale}
-        />
-      </svg>
-    </g>
-  ));
+  const sprites = spriteData.map(
+    ({ i, sx, sy, frameX, flipTransform, breathScale }) => (
+      <g key={i} transform={flipTransform}>
+        <g
+          transform={
+            breathScale !== 1
+              ? `translate(${sx}, ${sy + TROOP_DISPLAY_SIZE / 2}) scale(1, ${breathScale}) translate(${-sx}, ${-(sy + TROOP_DISPLAY_SIZE / 2)})`
+              : undefined
+          }
+        >
+          <svg
+            x={sx - TROOP_DISPLAY_SIZE / 2}
+            y={sy - TROOP_DISPLAY_SIZE / 2}
+            width={TROOP_DISPLAY_SIZE}
+            height={TROOP_DISPLAY_SIZE}
+            overflow="hidden"
+          >
+            <image
+              href={sheet.image}
+              x={-frameX * scale}
+              y={0}
+              width={sheet.sheetWidth * scale}
+              height={sheet.sheetHeight * scale}
+            />
+          </svg>
+        </g>
+      </g>
+    ),
+  );
 
   const hueRotation = playerColor ? hueRotationForColor(playerColor) : 0;
-  const filterUrl = Math.abs(hueRotation) > 1
-    ? `url(#recolor-${playerColor!.replace('#', '')})`
-    : undefined;
+  const filterUrl =
+    Math.abs(hueRotation) > 1
+      ? `url(#recolor-${playerColor!.replace("#", "")})`
+      : undefined;
 
   return (
     <g opacity={opacity}>
-      <g filter={filterUrl}>
-        {sprites}
-      </g>
+      <g filter={filterUrl}>{sprites}</g>
       <text
         x={cx}
         y={cy - clusterRadius - TROOP_DISPLAY_SIZE / 2 - 4}
@@ -193,55 +232,68 @@ function TroopSprite({
       >
         {units * COMBAT_POWER[troopType]}
       </text>
-      {statusIcon && (() => {
-        const iconY = cy - clusterRadius - TROOP_DISPLAY_SIZE / 2 - 24;
-        if (statusIcon === '⚔') {
+      {statusIcon &&
+        (() => {
+          const iconY = cy - clusterRadius - TROOP_DISPLAY_SIZE / 2 - 24;
+          if (statusIcon === "⚔") {
+            return (
+              <>
+                <circle
+                  cx={cx}
+                  cy={iconY - 5}
+                  r={14}
+                  fill={statusColor ?? "white"}
+                  stroke="black"
+                  strokeWidth={2}
+                />
+                <text
+                  x={cx}
+                  y={iconY}
+                  textAnchor="middle"
+                  fontSize={16}
+                  fontWeight="700"
+                  fill="white"
+                >
+                  {statusIcon}
+                </text>
+              </>
+            );
+          }
           return (
-            <>
-              <circle
-                cx={cx}
-                cy={iconY - 5}
-                r={14}
-                fill={statusColor ?? 'white'}
-                stroke="black"
-                strokeWidth={2}
-              />
-              <text
-                x={cx}
-                y={iconY}
-                textAnchor="middle"
-                fontSize={16}
-                fontWeight="700"
-                fill="white"
-              >
-                {statusIcon}
-              </text>
-            </>
+            <text
+              x={cx}
+              y={iconY}
+              textAnchor="middle"
+              fontSize={16}
+              fontWeight="700"
+              fill={statusColor ?? "white"}
+              stroke="black"
+              strokeWidth={3}
+              paintOrder="stroke"
+            >
+              {statusIcon}
+            </text>
           );
-        }
-        return (
-          <text
-            x={cx}
-            y={iconY}
-            textAnchor="middle"
-            fontSize={16}
-            fontWeight="700"
-            fill={statusColor ?? 'white'}
-            stroke="black"
-            strokeWidth={3}
-            paintOrder="stroke"
-          >
-            {statusIcon}
-          </text>
-        );
-      })()}
+        })()}
     </g>
   );
 }
 
-const CASTLE_IMAGES = ['/red_castle_1.png', '/blue_castle_1.png', '/green_castle_1.png'];
+const CASTLE_IMAGES = [
+  "/red_castle_1.png",
+  "/blue_castle_1.png",
+  "/green_castle_1.png",
+];
 
-function CityNode({ player, playerIndex, isUnderSiege }: { player: CityPlayerInfo; playerIndex: number; isUnderSiege: boolean }) {
+function CityNode({
+  player,
+  playerIndex,
+  isUnderSiege,
+}: {
+  player: CityPlayerInfo;
+  playerIndex: number;
+  isUnderSiege: boolean;
+}) {
   const cx = player.x * 1000;
   const cy = player.y * 1000;
   const hpPct = player.maxHp > 0 ? player.hp / player.maxHp : 0;
@@ -263,7 +315,13 @@ function CityNode({ player, playerIndex, isUnderSiege }: { player: CityPlayerInf
           strokeDasharray="12 8"
           opacity={0.7}
         >
-          <animate attributeName="stroke-dashoffset" from="0" to="20" dur="1s" repeatCount="indefinite" />
+          <animate
+            attributeName="stroke-dashoffset"
+            from="0"
+            to="20"
+            dur="1s"
+            repeatCount="indefinite"
+          />
         </circle>
       )}
       {/* HP bar track */}
@@ -284,7 +342,7 @@ function CityNode({ player, playerIndex, isUnderSiege }: { player: CityPlayerInf
         width={BAR_W * hpPct}
         height={16}
         rx={4}
-        fill={hpPct <= 0.3 ? '#e74c3c' : '#1a8a4a'}
+        fill={hpPct <= 0.3 ? "#e74c3c" : "#1a8a4a"}
       />
       {/* HP label */}
       <text
@@ -304,9 +362,19 @@ function CityNode({ player, playerIndex, isUnderSiege }: { player: CityPlayerInf
         const shieldCy = cy - 67;
         const sw = 36;
         const sh = 44;
-        const cp = TROOP_TYPES.reduce((s, t) => s + player.militaryAtHome[t] * COMBAT_POWER[t], 0);
+        const cp = TROOP_TYPES.reduce(
+          (s, t) => s + player.militaryAtHome[t] * COMBAT_POWER[t],
+          0,
+        );
         const cpStr = String(cp);
-        const fs = cpStr.length <= 2 ? 18 : cpStr.length <= 3 ? 15 : cpStr.length <= 4 ? 12 : 10;
+        const fs =
+          cpStr.length <= 2
+            ? 18
+            : cpStr.length <= 3
+              ? 15
+              : cpStr.length <= 4
+                ? 12
+                : 10;
         return (
           <>
             <path
@@ -339,7 +407,7 @@ function CityNode({ player, playerIndex, isUnderSiege }: { player: CityPlayerInf
           cx={cx - BAR_W / 2 - 20}
           cy={cy - 67}
           r={10}
-          fill={player.endedTurn ? '#2ecc71' : '#e74c3c'}
+          fill={player.endedTurn ? "#2ecc71" : "#e74c3c"}
           stroke="white"
           strokeWidth={2}
         />
@@ -423,7 +491,10 @@ function CityNode({ player, playerIndex, isUnderSiege }: { player: CityPlayerInf
                 <rect
                   x={BOX_X + 6}
                   y={BOX_Y + 42}
-                  width={(BOX_W - 12) * Math.min(1, player.culture / CULTURE_WIN_THRESHOLD)}
+                  width={
+                    (BOX_W - 12) *
+                    Math.min(1, player.culture / CULTURE_WIN_THRESHOLD)
+                  }
                   height={6}
                   rx={3}
                   fill="#9b59b6"
@@ -446,7 +517,15 @@ function CityNode({ player, playerIndex, isUnderSiege }: { player: CityPlayerInf
   );
 }
 
-function PromisedLandNode({ ownerColor, isContested, holdTurns }: { ownerColor: string | null; isContested: boolean; holdTurns: number }) {
+function PromisedLandNode({
+  ownerColor,
+  isContested,
+  holdTurns,
+}: {
+  ownerColor: string | null;
+  isContested: boolean;
+  holdTurns: number;
+}) {
   const cx = PROMISED_LAND_X * 1000;
   const cy = PROMISED_LAND_Y * 1000;
 
@@ -454,15 +533,48 @@ function PromisedLandNode({ ownerColor, isContested, holdTurns }: { ownerColor: 
     <g>
       {/* Pulsing glow when held */}
       {ownerColor && !isContested && (
-        <circle cx={cx} cy={cy} r={65} fill="none" stroke={ownerColor} strokeWidth={4} opacity={0.5}>
-          <animate attributeName="r" values="60;70;60" dur="2s" repeatCount="indefinite" />
-          <animate attributeName="opacity" values="0.3;0.7;0.3" dur="2s" repeatCount="indefinite" />
+        <circle
+          cx={cx}
+          cy={cy}
+          r={65}
+          fill="none"
+          stroke={ownerColor}
+          strokeWidth={4}
+          opacity={0.5}
+        >
+          <animate
+            attributeName="r"
+            values="60;70;60"
+            dur="2s"
+            repeatCount="indefinite"
+          />
+          <animate
+            attributeName="opacity"
+            values="0.3;0.7;0.3"
+            dur="2s"
+            repeatCount="indefinite"
+          />
         </circle>
       )}
       {/* Contested ring */}
       {isContested && (
-        <circle cx={cx} cy={cy} r={65} fill="none" stroke="#e74c3c" strokeWidth={3} strokeDasharray="8 6" opacity={0.7}>
-          <animate attributeName="stroke-dashoffset" from="0" to="20" dur="1s" repeatCount="indefinite" />
+        <circle
+          cx={cx}
+          cy={cy}
+          r={65}
+          fill="none"
+          stroke="#e74c3c"
+          strokeWidth={3}
+          strokeDasharray="8 6"
+          opacity={0.7}
+        >
+          <animate
+            attributeName="stroke-dashoffset"
+            from="0"
+            to="20"
+            dur="1s"
+            repeatCount="indefinite"
+          />
         </circle>
       )}
       {/* Radial gradient glow */}
@@ -475,20 +587,42 @@ function PromisedLandNode({ ownerColor, isContested, holdTurns }: { ownerColor: 
       </defs>
       <circle cx={cx} cy={cy} r={50} fill="url(#promised-land-glow)" />
       {/* Inner circle */}
-      <circle cx={cx} cy={cy} r={35} fill="#1a1a2e" stroke="#f4d03f" strokeWidth={3} />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={35}
+        fill="#1a1a2e"
+        stroke="#f4d03f"
+        strokeWidth={3}
+      />
       {/* Crown icon */}
-      <text x={cx} y={cy + 10} textAnchor="middle" fontSize={32}>👑</text>
+      <text x={cx} y={cy + 10} textAnchor="middle" fontSize={32}>
+        👑
+      </text>
       {/* Label */}
-      <text x={cx} y={cy + 58} textAnchor="middle" fontSize={12} fontWeight="700" fill="#f4d03f">
+      <text
+        x={cx}
+        y={cy + 58}
+        textAnchor="middle"
+        fontSize={12}
+        fontWeight="700"
+        fill="#f4d03f"
+      >
         The Promised Land
       </text>
       {/* Status text */}
       <text
-        x={cx} y={cy + 73}
-        textAnchor="middle" fontSize={11}
-        fill={isContested ? '#e74c3c' : ownerColor ? ownerColor : '#888'}
+        x={cx}
+        y={cy + 73}
+        textAnchor="middle"
+        fontSize={11}
+        fill={isContested ? "#e74c3c" : ownerColor ? ownerColor : "#888"}
       >
-        {isContested ? 'Contested!' : ownerColor ? `Held ${holdTurns}/${PROMISED_LAND_HOLD_TURNS} turns` : 'Unclaimed'}
+        {isContested
+          ? "Contested!"
+          : ownerColor
+            ? `Held ${holdTurns}/${PROMISED_LAND_HOLD_TURNS} turns`
+            : "Unclaimed"}
       </text>
       {/* Progress pips */}
       {ownerColor && !isContested && holdTurns > 0 && (
@@ -499,8 +633,8 @@ function PromisedLandNode({ ownerColor, isContested, holdTurns }: { ownerColor: 
               cx={cx - ((PROMISED_LAND_HOLD_TURNS - 1) * 12) / 2 + i * 12}
               cy={cy + 85}
               r={5}
-              fill={i < holdTurns ? ownerColor : '#333'}
-              stroke={i < holdTurns ? ownerColor : '#666'}
+              fill={i < holdTurns ? ownerColor : "#333"}
+              stroke={i < holdTurns ? ownerColor : "#666"}
               strokeWidth={1}
             />
           ))}
@@ -516,7 +650,15 @@ function getTroopProgress(troop: TroopGroup): number {
   return (troop.totalTurns - troop.turnsRemaining) / troop.totalTurns;
 }
 
-export default function BattleMap({ players, troopsInTransit, occupyingTroops, animate, subPhase, promisedLandOwnerId, promisedLandHoldTurns = 0 }: BattleMapProps) {
+export default function BattleMap({
+  players,
+  troopsInTransit,
+  occupyingTroops,
+  animate,
+  subPhase,
+  promisedLandOwnerId,
+  promisedLandHoldTurns = 0,
+}: BattleMapProps) {
   const playerMap = useMemo(
     () => new Map(players.map((p) => [p.playerId, p])),
     [players],
@@ -532,26 +674,40 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
       })
       .map((p) => ({
         color: p.color,
-        filterId: `recolor-${p.color.replace('#', '')}`,
+        filterId: `recolor-${p.color.replace("#", "")}`,
         hueRotation: hueRotationForColor(p.color),
       }))
       .filter((f) => Math.abs(f.hueRotation) > 1);
   }, [players]);
 
-  const [troopPositions, setTroopPositions] = useState<Map<string, { x: number; y: number; facingLeft: boolean; isAttacking: boolean; isIdle: boolean; opacity: number; displayUnits: number }>>(
-    new Map(),
-  );
+  const [troopPositions, setTroopPositions] = useState<
+    Map<
+      string,
+      {
+        x: number;
+        y: number;
+        facingLeft: boolean;
+        isAttacking: boolean;
+        isIdle: boolean;
+        opacity: number;
+        displayUnits: number;
+      }
+    >
+  >(new Map());
   const [frameIndex, setFrameIndex] = useState(0);
+  const [animTime, setAnimTime] = useState(0);
   const rafRef = useRef<number | null>(null);
 
   // Track previous positions for resolving animation
-  const prevPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const prevPositionsRef = useRef<Map<string, { x: number; y: number }>>(
+    new Map(),
+  );
   const resolvingStartRef = useRef<number | null>(null);
   const prevSubPhaseRef = useRef<PlayingSubPhase | null | undefined>(null);
 
   // Detect transition to resolving phase
   useEffect(() => {
-    if (subPhase === 'resolving' && prevSubPhaseRef.current !== 'resolving') {
+    if (subPhase === "resolving" && prevSubPhaseRef.current !== "resolving") {
       // Capture current positions as "before" for animation
       const prev = new Map<string, { x: number; y: number }>();
       for (const [id, pos] of troopPositions) {
@@ -564,8 +720,23 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
   }, [subPhase, troopPositions]);
 
   // Lingering troops (arrived at target, attack animation)
-  const lingeringRef = useRef<Map<string, { troop: TroopGroup; pos: { x: number; y: number }; facingLeft: boolean; startMs: number }>>(new Map());
-  const [attackingTroops, setAttackingTroops] = useState<Map<string, { troop: TroopGroup; pos: { x: number; y: number }; facingLeft: boolean }>>(new Map());
+  const lingeringRef = useRef<
+    Map<
+      string,
+      {
+        troop: TroopGroup;
+        pos: { x: number; y: number };
+        facingLeft: boolean;
+        startMs: number;
+      }
+    >
+  >(new Map());
+  const [attackingTroops, setAttackingTroops] = useState<
+    Map<
+      string,
+      { troop: TroopGroup; pos: { x: number; y: number }; facingLeft: boolean }
+    >
+  >(new Map());
 
   useEffect(() => {
     if (!animate) {
@@ -578,19 +749,36 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
 
     const tick = () => {
       const now = Date.now();
-      const positions = new Map<string, { x: number; y: number; facingLeft: boolean; isAttacking: boolean; isIdle: boolean; opacity: number; displayUnits: number }>();
+      const positions = new Map<
+        string,
+        {
+          x: number;
+          y: number;
+          facingLeft: boolean;
+          isAttacking: boolean;
+          isIdle: boolean;
+          opacity: number;
+          displayUnits: number;
+        }
+      >();
 
       // Pre-compute mine contest state for animation decisions
       const mineOccupierPlayerIds = new Set(
         occupyingTroops
-          .filter(occ => occ.targetPlayerId === PROMISED_LAND_ID && occ.units > 0)
-          .map(occ => occ.attackerPlayerId)
+          .filter(
+            (occ) => occ.targetPlayerId === PROMISED_LAND_ID && occ.units > 0,
+          )
+          .map((occ) => occ.attackerPlayerId),
       );
 
       // During resolving, animate troops from old to new positions
-      const isResolving = subPhase === 'resolving' && resolvingStartRef.current != null;
+      const isResolving =
+        subPhase === "resolving" && resolvingStartRef.current != null;
       const animProgress = isResolving
-        ? Math.min(1, (now - resolvingStartRef.current!) / RESOLVING_PHASE_DURATION_MS)
+        ? Math.min(
+            1,
+            (now - resolvingStartRef.current!) / RESOLVING_PHASE_DURATION_MS,
+          )
         : 1;
 
       for (const troop of troopsInTransit) {
@@ -606,7 +794,11 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
         const facingLeft = dx < 0;
 
         // Field combat: 3-phase animation (walk → fight → advance/fade)
-        if (isResolving && troop.fieldCombatX != null && troop.fieldCombatY != null) {
+        if (
+          isResolving &&
+          troop.fieldCombatX != null &&
+          troop.fieldCombatY != null
+        ) {
           const midX = troop.fieldCombatX;
           const midY = troop.fieldCombatY;
           const prevPos = prevPositionsRef.current.get(troop.id);
@@ -639,9 +831,13 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
             attacking = true;
           } else {
             // Phase 3: Winner advances to destination step; loser fades out
-            const t = Math.min(1, (animProgress - fightEnd) / FIELD_COMBAT_ADVANCE_FRAC);
+            const t = Math.min(
+              1,
+              (animProgress - fightEnd) / FIELD_COMBAT_ADVANCE_FRAC,
+            );
             if (isWinner) {
-              const advanceDist = Math.abs(advanceX - midX) + Math.abs(advanceY - midY);
+              const advanceDist =
+                Math.abs(advanceX - midX) + Math.abs(advanceY - midY);
               if (advanceDist < 0.001) {
                 // No distance to advance (e.g. mine combat) — settle idle
                 posX = midX;
@@ -659,15 +855,28 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
             }
           }
 
-          positions.set(troop.id, { x: posX, y: posY, facingLeft: combatFacingLeft, isAttacking: attacking, isIdle: idle, opacity, displayUnits });
+          positions.set(troop.id, {
+            x: posX,
+            y: posY,
+            facingLeft: combatFacingLeft,
+            isAttacking: attacking,
+            isIdle: idle,
+            opacity,
+            displayUnits,
+          });
           continue;
         }
 
         // Calculate current turn-based position
         const progress = getTroopProgress(troop);
         const isMineTarget = troop.targetPlayerId === PROMISED_LAND_ID;
+        const isReturningHome = troop.targetPlayerId === troop.attackerPlayerId;
         const standoffFrac = dist > 0 ? ATTACK_STANDOFF / dist : 0;
-        const clampedProgress = isMineTarget ? progress : Math.min(progress, 1 - standoffFrac);
+        // Returning troops walk all the way home; attackers stop at standoff distance
+        const clampedProgress =
+          isMineTarget || isReturningHome
+            ? progress
+            : Math.min(progress, 1 - standoffFrac);
 
         let displayX = originX + dx * clampedProgress;
         let displayY = originY + dy * clampedProgress;
@@ -681,9 +890,25 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
           }
         }
 
-        // Check if troop has arrived (progress >= 1 - standoffFrac)
-        // Mine arrivals skip lingering — they become occupying troops on the server
-        if (!isMineTarget && progress >= 1 - standoffFrac && !isResolving) {
+        // Returning troops walk into their city — no lingering/attack animation
+        if (isReturningHome && progress >= 1 && !isResolving) {
+          positions.set(troop.id, {
+            x: targetPos.x,
+            y: targetPos.y,
+            facingLeft,
+            isAttacking: false,
+            isIdle: true,
+            opacity: 1,
+            displayUnits: troop.units,
+          });
+          // Check if troop has arrived (progress >= 1 - standoffFrac)
+          // Mine arrivals skip lingering — they become occupying troops on the server
+        } else if (
+          !isMineTarget &&
+          !isReturningHome &&
+          progress >= 1 - standoffFrac &&
+          !isResolving
+        ) {
           if (!lingeringRef.current.has(troop.id)) {
             const nx = dist > 0 ? dx / dist : 0;
             const ny = dist > 0 ? dy / dist : 0;
@@ -699,17 +924,28 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
           }
         } else {
           // Mine arrivals only attack-animate when enemies are present
-          const isMineArrivalContested = isMineTarget
-            && mineOccupierPlayerIds.size > 0
-            && Array.from(mineOccupierPlayerIds).some(id => id !== troop.attackerPlayerId);
-          const inArrivalCombat = isResolving && troop.turnsRemaining === 0
-            && (!isMineTarget || isMineArrivalContested);
+          const isMineArrivalContested =
+            isMineTarget &&
+            mineOccupierPlayerIds.size > 0 &&
+            Array.from(mineOccupierPlayerIds).some(
+              (id) => id !== troop.attackerPlayerId,
+            );
+          const inArrivalCombat =
+            isResolving &&
+            troop.turnsRemaining === 0 &&
+            (!isMineTarget || isMineArrivalContested);
           positions.set(troop.id, {
             x: displayX,
             y: displayY,
             facingLeft,
             isAttacking: inArrivalCombat,
-            isIdle: troop.paused || !isResolving || (isMineTarget && troop.turnsRemaining === 0 && !isMineArrivalContested && animProgress >= 1),
+            isIdle:
+              troop.paused ||
+              !isResolving ||
+              (isMineTarget &&
+                troop.turnsRemaining === 0 &&
+                !isMineArrivalContested &&
+                animProgress >= 1),
             opacity: 1,
             displayUnits: troop.units,
           });
@@ -724,10 +960,16 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
       }
 
       setTroopPositions(positions);
-      setAttackingTroops(new Map(
-        Array.from(lingeringRef.current.entries()).map(([id, l]) => [id, { troop: l.troop, pos: l.pos, facingLeft: l.facingLeft }])
-      ));
+      setAttackingTroops(
+        new Map(
+          Array.from(lingeringRef.current.entries()).map(([id, l]) => [
+            id,
+            { troop: l.troop, pos: l.pos, facingLeft: l.facingLeft },
+          ]),
+        ),
+      );
       setFrameIndex(Math.floor((now % 1600) / 100));
+      setAnimTime(now);
       rafRef.current = requestAnimationFrame(tick);
     };
 
@@ -752,40 +994,70 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
         ))}
       </defs>
 
-      <image href="/map-background.png" x="0" y="0" width="1000" height="1000" />
+      <image
+        href="/map-background.png"
+        x="0"
+        y="0"
+        width="1000"
+        height="1000"
+      />
 
       {/* The Promised Land — rendered before troops so troops paint on top */}
       {(() => {
         const landPlayerIds = new Set(
           occupyingTroops
-            .filter(occ => occ.targetPlayerId === PROMISED_LAND_ID && occ.units > 0)
-            .map(occ => occ.attackerPlayerId)
+            .filter(
+              (occ) => occ.targetPlayerId === PROMISED_LAND_ID && occ.units > 0,
+            )
+            .map((occ) => occ.attackerPlayerId),
         );
         const isContested = landPlayerIds.size > 1;
-        const ownerColor = promisedLandOwnerId ? (playerMap.get(promisedLandOwnerId)?.color ?? null) : null;
-        return <PromisedLandNode ownerColor={ownerColor} isContested={isContested} holdTurns={promisedLandHoldTurns} />;
+        const ownerColor = promisedLandOwnerId
+          ? (playerMap.get(promisedLandOwnerId)?.color ?? null)
+          : null;
+        return (
+          <PromisedLandNode
+            ownerColor={ownerColor}
+            isContested={isContested}
+            holdTurns={promisedLandHoldTurns}
+          />
+        );
       })()}
 
       {/* Walking troops — sorted by Y for depth (lower on screen = closer to camera = rendered on top) */}
       {troopsInTransit
         .map((troop) => ({ troop, posData: troopPositions.get(troop.id) }))
-        .filter((entry): entry is { troop: TroopGroup; posData: NonNullable<typeof entry.posData> } => entry.posData != null)
+        .filter(
+          (
+            entry,
+          ): entry is {
+            troop: TroopGroup;
+            posData: NonNullable<typeof entry.posData>;
+          } => entry.posData != null,
+        )
         .sort((a, b) => a.posData.y - b.posData.y)
         .map(({ troop, posData }) => {
-          const sIcon = troop.paused ? 'zzz'
-            : troop.targetPlayerId === troop.attackerPlayerId ? '🏠'
-            : troop.targetPlayerId === PROMISED_LAND_ID ? '👑'
-            : '⚔';
-          const sColor = troop.paused ? '#aaa'
-            : troop.targetPlayerId === troop.attackerPlayerId ? 'white'
-            : troop.targetPlayerId === PROMISED_LAND_ID ? '#f1c40f'
-            : (playerMap.get(troop.targetPlayerId)?.color ?? 'white');
+          const sIcon = troop.paused
+            ? "zzz"
+            : troop.targetPlayerId === troop.attackerPlayerId
+              ? "🏠"
+              : troop.targetPlayerId === PROMISED_LAND_ID
+                ? "👑"
+                : "⚔";
+          const sColor = troop.paused
+            ? "#aaa"
+            : troop.targetPlayerId === troop.attackerPlayerId
+              ? "white"
+              : troop.targetPlayerId === PROMISED_LAND_ID
+                ? "#f1c40f"
+                : (playerMap.get(troop.targetPlayerId)?.color ?? "white");
           return (
             <TroopSprite
               key={troop.id}
               pos={posData}
               units={posData.displayUnits}
               frameIndex={frameIndex}
+              animTime={animTime}
               isAttacking={posData.isAttacking}
               isIdle={posData.isIdle}
               facingLeft={posData.facingLeft}
@@ -807,20 +1079,23 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
             pos={lingering.pos}
             units={lingering.troop.units}
             frameIndex={frameIndex}
+            animTime={animTime}
             isAttacking={true}
             isIdle={false}
             facingLeft={lingering.facingLeft}
             troopType={lingering.troop.troopType}
             playerColor={playerMap.get(lingering.troop.attackerPlayerId)?.color}
             statusIcon="⚔"
-            statusColor={playerMap.get(lingering.troop.targetPlayerId)?.color ?? 'white'}
+            statusColor={
+              playerMap.get(lingering.troop.targetPlayerId)?.color ?? "white"
+            }
           />
         ))}
 
       {/* Occupying siege troops — idle at standoff distance from target city, or on mine center */}
       {/* Filter out occupiers whose ID is still in troopsInTransit (they're animating arrival) */}
       {occupyingTroops
-        .filter(occ => !troopsInTransit.some(tg => tg.id === occ.id))
+        .filter((occ) => !troopsInTransit.some((tg) => tg.id === occ.id))
         .map((occ) => {
           const attacker = playerMap.get(occ.attackerPlayerId);
           const targetPos = resolveTargetPos(occ.targetPlayerId, playerMap);
@@ -835,7 +1110,10 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
             const dist = Math.sqrt(dx * dx + dy * dy);
             const nx = dist > 0 ? dx / dist : 0;
             const ny = dist > 0 ? dy / dist : 0;
-            pos = { x: targetPos.x - nx * ATTACK_STANDOFF, y: targetPos.y - ny * ATTACK_STANDOFF };
+            pos = {
+              x: targetPos.x - nx * ATTACK_STANDOFF,
+              y: targetPos.y - ny * ATTACK_STANDOFF,
+            };
           }
           return {
             occ,
@@ -851,23 +1129,27 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
           const isMineOccupier = entry.occ.targetPlayerId === PROMISED_LAND_ID;
           const minePlayerIds = new Set(
             occupyingTroops
-              .filter(occ => occ.targetPlayerId === PROMISED_LAND_ID && occ.units > 0)
-              .map(occ => occ.attackerPlayerId)
+              .filter(
+                (occ) =>
+                  occ.targetPlayerId === PROMISED_LAND_ID && occ.units > 0,
+              )
+              .map((occ) => occ.attackerPlayerId),
           );
           const isMineContested = minePlayerIds.size > 1;
           const isAttacking = isMineOccupier
-            ? (subPhase === 'resolving' && isMineContested)
-            : (subPhase === 'resolving');
-          const sIcon = isMineOccupier ? '👑' : '⚔';
+            ? subPhase === "resolving" && isMineContested
+            : subPhase === "resolving";
+          const sIcon = isMineOccupier ? "👑" : "⚔";
           const sColor = isMineOccupier
-            ? '#f1c40f'
-            : (playerMap.get(entry.occ.targetPlayerId)?.color ?? 'white');
+            ? "#f1c40f"
+            : (playerMap.get(entry.occ.targetPlayerId)?.color ?? "white");
           return (
             <TroopSprite
               key={`siege-${entry.occ.id}`}
               pos={entry.pos}
               units={entry.occ.units}
               frameIndex={frameIndex}
+              animTime={animTime}
               isAttacking={isAttacking}
               isIdle={!isAttacking}
               facingLeft={entry.facingLeft}
@@ -881,9 +1163,16 @@ export default function BattleMap({ players, troopsInTransit, occupyingTroops, a
 
       {/* Cities — rendered last so they paint over troop lines */}
       {players.map((player, index) => {
-        const isUnderSiege = occupyingTroops.some(occ => occ.targetPlayerId === player.playerId);
+        const isUnderSiege = occupyingTroops.some(
+          (occ) => occ.targetPlayerId === player.playerId,
+        );
         return (
-          <CityNode key={player.playerId} player={player} playerIndex={index} isUnderSiege={isUnderSiege} />
+          <CityNode
+            key={player.playerId}
+            player={player}
+            playerIndex={index}
+            isUnderSiege={isUnderSiege}
+          />
         );
       })}
     </svg>
