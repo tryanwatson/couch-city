@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { CityPlayerInfo, UpgradeCategory } from '../../../../shared/types';
 import { UPGRADE_PROGRESS, UPGRADE_UNLOCK_COST, PROGRESS_PER_BUILDER } from '../../../../shared/constants';
+import { useHoldToRepeat } from '../../hooks/useHoldToRepeat';
 
 interface BuildProgressBlockProps {
   category: UpgradeCategory;
@@ -42,9 +43,19 @@ export default function BuildProgressBlock({
   const atMax = completed >= UPGRADE_PROGRESS[category].length;
   const canAfford = !atMax && me.upgradeLevel[category] < UPGRADE_PROGRESS[category].length && canAffordUpgrade;
 
+  const required = hasBuildSlot ? UPGRADE_PROGRESS[category][completed] : 0;
+  const remaining = required - me.upgradeProgress[category];
+
+  const builderMinusHold = useHoldToRepeat({
+    onAction: () => onAdjustBuilder(category, -1),
+    disabled: localBuilders[category] <= 0 || controlsDisabled || !hasBuildSlot,
+  });
+  const builderPlusHold = useHoldToRepeat({
+    onAction: () => onAdjustBuilder(category, 1),
+    disabled: unassigned <= 0 || controlsDisabled || !hasBuildSlot || localBuilders[category] >= remaining,
+  });
+
   if (hasBuildSlot) {
-    const required = UPGRADE_PROGRESS[category][completed];
-    const remaining = required - me.upgradeProgress[category];
 
     return (
       <div className="build-progress-container">
@@ -64,13 +75,13 @@ export default function BuildProgressBlock({
           <div className="section-header-workers" onClick={e => e.stopPropagation()}>
             <button
               className="worker-btn"
-              onClick={() => onAdjustBuilder(category, -1)}
+              {...builderMinusHold}
               disabled={localBuilders[category] <= 0 || controlsDisabled}
             >-</button>
             <span className="worker-count">{localBuilders[category]}</span>
             <button
               className="worker-btn"
-              onClick={() => onAdjustBuilder(category, 1)}
+              {...builderPlusHold}
               disabled={unassigned <= 0 || controlsDisabled || localBuilders[category] >= remaining}
             >+</button>
           </div>

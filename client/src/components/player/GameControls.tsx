@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { RoomStatePayload, TroopType, UpgradeCategory } from '../../../../shared/types';
 import {
@@ -23,6 +23,7 @@ import {
   DEFENSE_HP_PER_LEVEL,
 } from '../../../../shared/constants';
 import BuildProgressBlock from './BuildProgressBlock';
+import { useHoldToRepeat } from '../../hooks/useHoldToRepeat';
 
 interface GameControlsProps {
   roomState: RoomStatePayload;
@@ -73,9 +74,53 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
     }
   }, [me?.farmers, me?.miners, me?.merchants, me?.builders, me?.growthMultiplier]);
 
-  const handleAllocateWorkers = (farmers: number, miners: number, merchants: number, builders: Record<UpgradeCategory, number>) => {
-    socket.emit('player:allocate_workers', { roomId: roomState.roomId, playerId, farmers, miners, merchants, builders });
+  // --- Hold-to-repeat infrastructure (must be before early returns for hooks rules) ---
+  const controlsDisabled = !me || !me.alive || me.endedTurn || roomState.subPhase === 'resolving';
+  const civilians = me ? Math.floor(me.population) : 0;
+  const totalBuildersCount = Object.values(localBuilders).reduce((s, n) => s + n, 0);
+  const totalWorkers = localFarmers + localMiners + localMerchants + totalBuildersCount;
+  const unassigned = civilians - totalWorkers;
+
+  const latestAllocRef = useRef({ farmers: localFarmers, miners: localMiners, merchants: localMerchants, builders: localBuilders });
+  useEffect(() => {
+    latestAllocRef.current = { farmers: localFarmers, miners: localMiners, merchants: localMerchants, builders: localBuilders };
+  }, [localFarmers, localMiners, localMerchants, localBuilders]);
+
+  const emitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedEmit = useCallback(() => {
+    if (emitTimerRef.current) clearTimeout(emitTimerRef.current);
+    emitTimerRef.current = setTimeout(() => {
+      const { farmers, miners, merchants, builders } = latestAllocRef.current;
+      socket.emit('player:allocate_workers', { roomId: roomState.roomId, playerId, farmers, miners, merchants, builders });
+      emitTimerRef.current = null;
+    }, 100);
+  }, [socket, roomState.roomId, playerId]);
+
+  const workerHoldAction = (
+    setter: React.Dispatch<React.SetStateAction<number>>,
+    field: 'farmers' | 'miners' | 'merchants',
+    delta: number,
+  ) => () => {
+    setter(prev => {
+      const v = prev + delta;
+      if (v < 0) return prev;
+      if (delta > 0) {
+        const ref = { ...latestAllocRef.current, [field]: prev };
+        const tw = ref.farmers + ref.miners + ref.merchants + Object.values(ref.builders).reduce((s, n) => s + n, 0);
+        if (tw >= civilians) return prev;
+      }
+      latestAllocRef.current[field] = v;
+      return v;
+    });
+    debouncedEmit();
   };
+
+  const farmersMinusHold = useHoldToRepeat({ onAction: workerHoldAction(setLocalFarmers, 'farmers', -1), disabled: localFarmers <= 0 || controlsDisabled });
+  const farmersPlusHold = useHoldToRepeat({ onAction: workerHoldAction(setLocalFarmers, 'farmers', 1), disabled: unassigned <= 0 || controlsDisabled });
+  const minersMinusHold = useHoldToRepeat({ onAction: workerHoldAction(setLocalMiners, 'miners', -1), disabled: localMiners <= 0 || controlsDisabled });
+  const minersPlusHold = useHoldToRepeat({ onAction: workerHoldAction(setLocalMiners, 'miners', 1), disabled: unassigned <= 0 || controlsDisabled });
+  const merchantsMinusHold = useHoldToRepeat({ onAction: workerHoldAction(setLocalMerchants, 'merchants', -1), disabled: localMerchants <= 0 || controlsDisabled });
+  const merchantsPlusHold = useHoldToRepeat({ onAction: workerHoldAction(setLocalMerchants, 'merchants', 1), disabled: unassigned <= 0 || controlsDisabled });
 
   const handleSetGrowthMultiplier = (multiplier: number) => {
     setLocalGrowthMultiplier(multiplier);
@@ -155,14 +200,9 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
 
   const hasEndedTurn = me.endedTurn;
   const isResolving = roomState.subPhase === 'resolving';
-  const controlsDisabled = hasEndedTurn || isResolving;
 
   const totalMilitary = Object.values(me.militaryAtHome).reduce((s, n) => s + n, 0);
   const totalCombatPower = TROOP_TYPES.reduce((s, t) => s + me.militaryAtHome[t] * COMBAT_POWER[t], 0);
-  const civilians = Math.floor(me.population);
-  const totalBuildersCount = Object.values(localBuilders).reduce((s, n) => s + n, 0);
-  const totalWorkers = localFarmers + localMiners + localMerchants + totalBuildersCount;
-  const unassigned = civilians - totalWorkers;
 
   // Yield multipliers
   const farmingMult = yieldMultiplier(me.upgradesCompleted.farming);
@@ -192,9 +232,12 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
   const completedCulture = me.upgradesCompleted.culture;
 
   const adjustBuilder = (category: UpgradeCategory, delta: number) => {
-    const updated = { ...localBuilders, [category]: localBuilders[category] + delta };
-    setLocalBuilders(updated);
-    handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated);
+    setLocalBuilders(prev => {
+      const updated = { ...prev, [category]: prev[category] + delta };
+      latestAllocRef.current.builders = updated;
+      return updated;
+    });
+    debouncedEmit();
   };
 
   const targets = roomState.players.filter((p) => p.alive && p.playerId !== playerId);
@@ -260,13 +303,13 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           <div className="section-header-workers" onClick={e => e.stopPropagation()}>
             <button
               className="worker-btn"
-              onClick={() => { const v = localFarmers - 1; setLocalFarmers(v); handleAllocateWorkers(v, localMiners, localMerchants, localBuilders); }}
+              {...farmersMinusHold}
               disabled={localFarmers <= 0 || controlsDisabled}
             >-</button>
             <span className="worker-count">{localFarmers}</span>
             <button
               className="worker-btn"
-              onClick={() => { const v = localFarmers + 1; setLocalFarmers(v); handleAllocateWorkers(v, localMiners, localMerchants, localBuilders); }}
+              {...farmersPlusHold}
               disabled={unassigned <= 0 || controlsDisabled}
             >+</button>
           </div>
@@ -359,13 +402,13 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           <div className="section-header-workers" onClick={e => e.stopPropagation()}>
             <button
               className="worker-btn"
-              onClick={() => { const v = localMiners - 1; setLocalMiners(v); handleAllocateWorkers(localFarmers, v, localMerchants, localBuilders); }}
+              {...minersMinusHold}
               disabled={localMiners <= 0 || controlsDisabled}
             >-</button>
             <span className="worker-count">{localMiners}</span>
             <button
               className="worker-btn"
-              onClick={() => { const v = localMiners + 1; setLocalMiners(v); handleAllocateWorkers(localFarmers, v, localMerchants, localBuilders); }}
+              {...minersPlusHold}
               disabled={unassigned <= 0 || controlsDisabled}
             >+</button>
           </div>
@@ -410,13 +453,13 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
           <div className="section-header-workers" onClick={e => e.stopPropagation()}>
             <button
               className="worker-btn"
-              onClick={() => { const v = localMerchants - 1; setLocalMerchants(v); handleAllocateWorkers(localFarmers, localMiners, v, localBuilders); }}
+              {...merchantsMinusHold}
               disabled={localMerchants <= 0 || controlsDisabled}
             >-</button>
             <span className="worker-count">{localMerchants}</span>
             <button
               className="worker-btn"
-              onClick={() => { const v = localMerchants + 1; setLocalMerchants(v); handleAllocateWorkers(localFarmers, localMiners, v, localBuilders); }}
+              {...merchantsPlusHold}
               disabled={unassigned <= 0 || controlsDisabled}
             >+</button>
           </div>

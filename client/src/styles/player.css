@@ -753,18 +753,21 @@
   letter-spacing: 1px;
   color: var(--color-text-muted);
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
 .section-header-workers {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .section-header-workers .worker-count {
   font-size: 1rem;
   min-width: 24px;
+  text-align: center;
 }
 
 .section-header-workers .worker-btn {
@@ -776,14 +779,12 @@
 .section-header-summary {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
-  margin-left: auto;
+  flex: 1;
+  min-width: 0;
   font-size: 0.78rem;
   white-space: nowrap;
-}
-
-.section-header-workers + .section-header-summary {
-  margin-left: 8px;
 }
 
 .summary-stockpile {
