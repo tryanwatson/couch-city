@@ -11,8 +11,6 @@ import {
   VALID_GROWTH_MULTIPLIERS,
   UPGRADE_UNLOCK_COST,
   MONUMENT_CULTURE_PER_TURN,
-  UPGRADE_PROGRESS,
-  PROGRESS_PER_BUILDER,
   yieldMultiplier,
   CULTURE_WIN_THRESHOLD,
   TROOP_TYPES,
@@ -24,6 +22,7 @@ import {
   HP_REGEN_PERCENT,
   DEFENSE_HP_PER_LEVEL,
 } from '../../../../shared/constants';
+import BuildProgressBlock from './BuildProgressBlock';
 
 interface GameControlsProps {
   roomState: RoomStatePayload;
@@ -190,41 +189,13 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
   // Generic upgrade affordability check
   const canAffordUpgrade = me.materials >= UPGRADE_UNLOCK_COST.materials && me.gold >= UPGRADE_UNLOCK_COST.gold;
 
-  // Culture upgrade state
   const completedCulture = me.upgradesCompleted.culture;
-  const hasBuildSlot = completedCulture < me.upgradeLevel.culture;
-  const atMaxCultureUpgrades = completedCulture >= UPGRADE_PROGRESS.culture.length;
-  const canAffordCultureUpgrade = !atMaxCultureUpgrades && me.upgradeLevel.culture < UPGRADE_PROGRESS.culture.length && canAffordUpgrade;
 
-  // Military upgrade state
-  const completedMilitary = me.upgradesCompleted.military;
-  const hasMilitaryBuildSlot = completedMilitary < me.upgradeLevel.military;
-  const atMaxMilitaryUpgrades = completedMilitary >= UPGRADE_PROGRESS.military.length;
-  const canAffordMilitaryUpgrade = !atMaxMilitaryUpgrades && me.upgradeLevel.military < UPGRADE_PROGRESS.military.length && canAffordUpgrade;
-
-  // Farming upgrade state
-  const completedFarming = me.upgradesCompleted.farming;
-  const hasFarmingBuildSlot = completedFarming < me.upgradeLevel.farming;
-  const atMaxFarmingUpgrades = completedFarming >= UPGRADE_PROGRESS.farming.length;
-  const canAffordFarmingUpgrade = !atMaxFarmingUpgrades && me.upgradeLevel.farming < UPGRADE_PROGRESS.farming.length && canAffordUpgrade;
-
-  // Mining upgrade state
-  const completedMining = me.upgradesCompleted.mining;
-  const hasMiningBuildSlot = completedMining < me.upgradeLevel.mining;
-  const atMaxMiningUpgrades = completedMining >= UPGRADE_PROGRESS.mining.length;
-  const canAffordMiningUpgrade = !atMaxMiningUpgrades && me.upgradeLevel.mining < UPGRADE_PROGRESS.mining.length && canAffordUpgrade;
-
-  // Trade upgrade state
-  const completedTrade = me.upgradesCompleted.trade;
-  const hasTradeBuildSlot = completedTrade < me.upgradeLevel.trade;
-  const atMaxTradeUpgrades = completedTrade >= UPGRADE_PROGRESS.trade.length;
-  const canAffordTradeUpgrade = !atMaxTradeUpgrades && me.upgradeLevel.trade < UPGRADE_PROGRESS.trade.length && canAffordUpgrade;
-
-  // Defense upgrade state
-  const completedDefense = me.upgradesCompleted.defense;
-  const hasDefenseBuildSlot = completedDefense < me.upgradeLevel.defense;
-  const atMaxDefenseUpgrades = completedDefense >= UPGRADE_PROGRESS.defense.length;
-  const canAffordDefenseUpgrade = !atMaxDefenseUpgrades && me.upgradeLevel.defense < UPGRADE_PROGRESS.defense.length && canAffordUpgrade;
+  const adjustBuilder = (category: UpgradeCategory, delta: number) => {
+    const updated = { ...localBuilders, [category]: localBuilders[category] + delta };
+    setLocalBuilders(updated);
+    handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated);
+  };
 
   const targets = roomState.players.filter((p) => p.alive && p.playerId !== playerId);
   const myTransit = roomState.troopsInTransit.filter((tg) => tg.attackerPlayerId === playerId);
@@ -360,61 +331,21 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
               Starving cities lose {Math.round(POP_STARVATION_RATE * 100)}% pop/turn.
             </p>
 
-            {/* Farming upgrade */}
-            {hasFarmingBuildSlot ? (
-              <div className="build-progress-container">
-                <div className="build-progress-header">
-                  <span>Building Upgrade {completedFarming + 1}</span>
-                  <span>{me.upgradeProgress.farming}/{UPGRADE_PROGRESS.farming[completedFarming]}</span>
-                </div>
-                <div className="build-progress-bar-wrapper">
-                  <div
-                    className="build-progress-bar-fill farming-progress-fill"
-                    style={{ width: `${Math.min(100, (me.upgradeProgress.farming / UPGRADE_PROGRESS.farming[completedFarming]) * 100)}%` }}
-                  />
-                </div>
-                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-                <div className="builder-assignment">
-                  <span className="builder-label">Builders</span>
-                  <div className="section-header-workers" onClick={e => e.stopPropagation()}>
-                    <button
-                      className="worker-btn"
-                      onClick={() => { const updated = { ...localBuilders, farming: localBuilders.farming - 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={localBuilders.farming <= 0 || controlsDisabled}
-                    >-</button>
-                    <span className="worker-count">{localBuilders.farming}</span>
-                    <button
-                      className="worker-btn"
-                      onClick={() => { const updated = { ...localBuilders, farming: localBuilders.farming + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={unassigned <= 0 || controlsDisabled || localBuilders.farming >= (UPGRADE_PROGRESS.farming[completedFarming] - me.upgradeProgress.farming)}
-                    >+</button>
-                  </div>
-                </div>
-                {localBuilders.farming > 0 && (
-                  <div className="build-eta">
-                    ~{Math.ceil((UPGRADE_PROGRESS.farming[completedFarming] - me.upgradeProgress.farming) / (localBuilders.farming * PROGRESS_PER_BUILDER))} turns remaining
-                  </div>
-                )}
-                <p className="section-explainer">Yield: {FOOD_PER_FARMER} x {farmingMult} = {FOOD_PER_FARMER * farmingMult}/farmer → {FOOD_PER_FARMER * (farmingMult + 1)}/farmer</p>
-              </div>
-            ) : atMaxFarmingUpgrades ? (
-              <div className="resource-row">
-                <span className="resource-label">All farming upgrades completed! ({farmingMult}x yield)</span>
-              </div>
-            ) : (
-              <div className="upgrade-buttons">
-                <button
-                  className="upgrade-btn upgrade-science"
-                  onClick={() => handleUnlockUpgrade('farming')}
-                  disabled={!canAffordFarmingUpgrade || controlsDisabled}
-                  title={`Costs ${UPGRADE_UNLOCK_COST.materials} materials + ${UPGRADE_UNLOCK_COST.gold} gold`}
-                >
-                  <span className="upgrade-btn-title">📜 Unlock Farming Upgrade</span>
-                  <span className="upgrade-btn-cost">{UPGRADE_UNLOCK_COST.materials} materials + {UPGRADE_UNLOCK_COST.gold} gold</span>
-                  <span className="upgrade-btn-effect">Yield: {farmingMult}x → {farmingMult + 1}x</span>
-                </button>
-              </div>
-            )}
+            <BuildProgressBlock
+              category="farming"
+              me={me}
+              localBuilders={localBuilders}
+              onAdjustBuilder={adjustBuilder}
+              onUnlockUpgrade={handleUnlockUpgrade}
+              unassigned={unassigned}
+              controlsDisabled={controlsDisabled}
+              canAffordUpgrade={canAffordUpgrade}
+              progressBarClass="farming-progress-fill"
+              maxLabel={`All farming upgrades completed! (${farmingMult}x yield)`}
+              unlockLabel="📜 Unlock Farming Upgrade"
+              effectText={<>Yield: {farmingMult}x → {farmingMult + 1}x</>}
+              explainerText={<>Yield: {FOOD_PER_FARMER} x {farmingMult} = {FOOD_PER_FARMER * farmingMult}/farmer → {FOOD_PER_FARMER * (farmingMult + 1)}/farmer</>}
+            />
           </div>
         </div>
       </div>
@@ -451,61 +382,21 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
               <span className="resource-rate">+{MATERIALS_PER_MINER * miningMult} materials/turn</span>
             </div>
 
-            {/* Mining upgrade */}
-            {hasMiningBuildSlot ? (
-              <div className="build-progress-container">
-                <div className="build-progress-header">
-                  <span>Building Upgrade {completedMining + 1}</span>
-                  <span>{me.upgradeProgress.mining}/{UPGRADE_PROGRESS.mining[completedMining]}</span>
-                </div>
-                <div className="build-progress-bar-wrapper">
-                  <div
-                    className="build-progress-bar-fill mining-progress-fill"
-                    style={{ width: `${Math.min(100, (me.upgradeProgress.mining / UPGRADE_PROGRESS.mining[completedMining]) * 100)}%` }}
-                  />
-                </div>
-                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-                <div className="builder-assignment">
-                  <span className="builder-label">Builders</span>
-                  <div className="section-header-workers" onClick={e => e.stopPropagation()}>
-                    <button
-                      className="worker-btn"
-                      onClick={() => { const updated = { ...localBuilders, mining: localBuilders.mining - 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={localBuilders.mining <= 0 || controlsDisabled}
-                    >-</button>
-                    <span className="worker-count">{localBuilders.mining}</span>
-                    <button
-                      className="worker-btn"
-                      onClick={() => { const updated = { ...localBuilders, mining: localBuilders.mining + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={unassigned <= 0 || controlsDisabled || localBuilders.mining >= (UPGRADE_PROGRESS.mining[completedMining] - me.upgradeProgress.mining)}
-                    >+</button>
-                  </div>
-                </div>
-                {localBuilders.mining > 0 && (
-                  <div className="build-eta">
-                    ~{Math.ceil((UPGRADE_PROGRESS.mining[completedMining] - me.upgradeProgress.mining) / (localBuilders.mining * PROGRESS_PER_BUILDER))} turns remaining
-                  </div>
-                )}
-                <p className="section-explainer">Yield: {MATERIALS_PER_MINER} x {miningMult} = {MATERIALS_PER_MINER * miningMult}/miner → {MATERIALS_PER_MINER * (miningMult + 1)}/miner</p>
-              </div>
-            ) : atMaxMiningUpgrades ? (
-              <div className="resource-row">
-                <span className="resource-label">All mining upgrades completed! ({miningMult}x yield)</span>
-              </div>
-            ) : (
-              <div className="upgrade-buttons">
-                <button
-                  className="upgrade-btn upgrade-science"
-                  onClick={() => handleUnlockUpgrade('mining')}
-                  disabled={!canAffordMiningUpgrade || controlsDisabled}
-                  title={`Costs ${UPGRADE_UNLOCK_COST.materials} materials + ${UPGRADE_UNLOCK_COST.gold} gold`}
-                >
-                  <span className="upgrade-btn-title">📜 Unlock Mining Upgrade</span>
-                  <span className="upgrade-btn-cost">{UPGRADE_UNLOCK_COST.materials} materials + {UPGRADE_UNLOCK_COST.gold} gold</span>
-                  <span className="upgrade-btn-effect">Yield: {miningMult}x → {miningMult + 1}x</span>
-                </button>
-              </div>
-            )}
+            <BuildProgressBlock
+              category="mining"
+              me={me}
+              localBuilders={localBuilders}
+              onAdjustBuilder={adjustBuilder}
+              onUnlockUpgrade={handleUnlockUpgrade}
+              unassigned={unassigned}
+              controlsDisabled={controlsDisabled}
+              canAffordUpgrade={canAffordUpgrade}
+              progressBarClass="mining-progress-fill"
+              maxLabel={`All mining upgrades completed! (${miningMult}x yield)`}
+              unlockLabel="📜 Unlock Mining Upgrade"
+              effectText={<>Yield: {miningMult}x → {miningMult + 1}x</>}
+              explainerText={<>Yield: {MATERIALS_PER_MINER} x {miningMult} = {MATERIALS_PER_MINER * miningMult}/miner → {MATERIALS_PER_MINER * (miningMult + 1)}/miner</>}
+            />
           </div>
         </div>
       </div>
@@ -542,61 +433,21 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
               <span className="resource-rate">+{GOLD_PER_MERCHANT * tradeMult} gold/turn</span>
             </div>
 
-            {/* Trade upgrade */}
-            {hasTradeBuildSlot ? (
-              <div className="build-progress-container">
-                <div className="build-progress-header">
-                  <span>Building Upgrade {completedTrade + 1}</span>
-                  <span>{me.upgradeProgress.trade}/{UPGRADE_PROGRESS.trade[completedTrade]}</span>
-                </div>
-                <div className="build-progress-bar-wrapper">
-                  <div
-                    className="build-progress-bar-fill trade-progress-fill"
-                    style={{ width: `${Math.min(100, (me.upgradeProgress.trade / UPGRADE_PROGRESS.trade[completedTrade]) * 100)}%` }}
-                  />
-                </div>
-                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-                <div className="builder-assignment">
-                  <span className="builder-label">Builders</span>
-                  <div className="section-header-workers" onClick={e => e.stopPropagation()}>
-                    <button
-                      className="worker-btn"
-                      onClick={() => { const updated = { ...localBuilders, trade: localBuilders.trade - 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={localBuilders.trade <= 0 || controlsDisabled}
-                    >-</button>
-                    <span className="worker-count">{localBuilders.trade}</span>
-                    <button
-                      className="worker-btn"
-                      onClick={() => { const updated = { ...localBuilders, trade: localBuilders.trade + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={unassigned <= 0 || controlsDisabled || localBuilders.trade >= (UPGRADE_PROGRESS.trade[completedTrade] - me.upgradeProgress.trade)}
-                    >+</button>
-                  </div>
-                </div>
-                {localBuilders.trade > 0 && (
-                  <div className="build-eta">
-                    ~{Math.ceil((UPGRADE_PROGRESS.trade[completedTrade] - me.upgradeProgress.trade) / (localBuilders.trade * PROGRESS_PER_BUILDER))} turns remaining
-                  </div>
-                )}
-                <p className="section-explainer">Yield: {GOLD_PER_MERCHANT} x {tradeMult} = {GOLD_PER_MERCHANT * tradeMult}/merchant → {GOLD_PER_MERCHANT * (tradeMult + 1)}/merchant</p>
-              </div>
-            ) : atMaxTradeUpgrades ? (
-              <div className="resource-row">
-                <span className="resource-label">All trade upgrades completed! ({tradeMult}x yield)</span>
-              </div>
-            ) : (
-              <div className="upgrade-buttons">
-                <button
-                  className="upgrade-btn upgrade-science"
-                  onClick={() => handleUnlockUpgrade('trade')}
-                  disabled={!canAffordTradeUpgrade || controlsDisabled}
-                  title={`Costs ${UPGRADE_UNLOCK_COST.materials} materials + ${UPGRADE_UNLOCK_COST.gold} gold`}
-                >
-                  <span className="upgrade-btn-title">📜 Unlock Trade Upgrade</span>
-                  <span className="upgrade-btn-cost">{UPGRADE_UNLOCK_COST.materials} materials + {UPGRADE_UNLOCK_COST.gold} gold</span>
-                  <span className="upgrade-btn-effect">Yield: {tradeMult}x → {tradeMult + 1}x</span>
-                </button>
-              </div>
-            )}
+            <BuildProgressBlock
+              category="trade"
+              me={me}
+              localBuilders={localBuilders}
+              onAdjustBuilder={adjustBuilder}
+              onUnlockUpgrade={handleUnlockUpgrade}
+              unassigned={unassigned}
+              controlsDisabled={controlsDisabled}
+              canAffordUpgrade={canAffordUpgrade}
+              progressBarClass="trade-progress-fill"
+              maxLabel={`All trade upgrades completed! (${tradeMult}x yield)`}
+              unlockLabel="📜 Unlock Trade Upgrade"
+              effectText={<>Yield: {tradeMult}x → {tradeMult + 1}x</>}
+              explainerText={<>Yield: {GOLD_PER_MERCHANT} x {tradeMult} = {GOLD_PER_MERCHANT * tradeMult}/merchant → {GOLD_PER_MERCHANT * (tradeMult + 1)}/merchant</>}
+            />
           </div>
         </div>
       </div>
@@ -630,60 +481,18 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
               </div>
             )}
 
-            {/* Culture upgrade */}
-            {hasBuildSlot ? (
-              <div className="build-progress-container">
-                <div className="build-progress-header">
-                  <span>Building Upgrade {completedCulture + 1}</span>
-                  <span>{me.upgradeProgress.culture}/{UPGRADE_PROGRESS.culture[completedCulture]}</span>
-                </div>
-                <div className="build-progress-bar-wrapper">
-                  <div
-                    className="build-progress-bar-fill"
-                    style={{ width: `${Math.min(100, (me.upgradeProgress.culture / UPGRADE_PROGRESS.culture[completedCulture]) * 100)}%` }}
-                  />
-                </div>
-                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-                <div className="builder-assignment">
-                  <span className="builder-label">Builders</span>
-                  <div className="section-header-workers" onClick={e => e.stopPropagation()}>
-                    <button
-                      className="worker-btn"
-                      onClick={() => { const updated = { ...localBuilders, culture: localBuilders.culture - 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={localBuilders.culture <= 0 || controlsDisabled}
-                    >-</button>
-                    <span className="worker-count">{localBuilders.culture}</span>
-                    <button
-                      className="worker-btn"
-                      onClick={() => { const updated = { ...localBuilders, culture: localBuilders.culture + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={unassigned <= 0 || controlsDisabled || localBuilders.culture >= (UPGRADE_PROGRESS.culture[completedCulture] - me.upgradeProgress.culture)}
-                    >+</button>
-                  </div>
-                </div>
-                {localBuilders.culture > 0 && (
-                  <div className="build-eta">
-                    ~{Math.ceil((UPGRADE_PROGRESS.culture[completedCulture] - me.upgradeProgress.culture) / (localBuilders.culture * PROGRESS_PER_BUILDER))} turns remaining
-                  </div>
-                )}
-              </div>
-            ) : atMaxCultureUpgrades ? (
-              <div className="resource-row">
-                <span className="resource-label">All upgrades completed!</span>
-              </div>
-            ) : (
-              <div className="upgrade-buttons">
-                <button
-                  className="upgrade-btn upgrade-science"
-                  onClick={() => handleUnlockUpgrade('culture')}
-                  disabled={!canAffordCultureUpgrade || controlsDisabled}
-                  title={`Costs ${UPGRADE_UNLOCK_COST.materials} materials + ${UPGRADE_UNLOCK_COST.gold} gold`}
-                >
-                  <span className="upgrade-btn-title">📜 Unlock Upgrade</span>
-                  <span className="upgrade-btn-cost">{UPGRADE_UNLOCK_COST.materials} materials + {UPGRADE_UNLOCK_COST.gold} gold</span>
-                  <span className="upgrade-btn-effect">Level {me.upgradeLevel.culture} → {me.upgradeLevel.culture + 1}</span>
-                </button>
-              </div>
-            )}
+            <BuildProgressBlock
+              category="culture"
+              me={me}
+              localBuilders={localBuilders}
+              onAdjustBuilder={adjustBuilder}
+              onUnlockUpgrade={handleUnlockUpgrade}
+              unassigned={unassigned}
+              controlsDisabled={controlsDisabled}
+              canAffordUpgrade={canAffordUpgrade}
+              maxLabel="All upgrades completed!"
+              effectText={<>Level {me.upgradeLevel.culture} → {me.upgradeLevel.culture + 1}</>}
+            />
           </div>
         </div>
       </div>
@@ -710,62 +519,23 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
               <span className="resource-rate">+{Math.ceil(me.maxHp * HP_REGEN_PERCENT)}/turn (3% of max)</span>
             </div>
 
-            {hasDefenseBuildSlot ? (
-              <div className="build-progress-container">
-                <div className="build-progress-header">
-                  <span>Building Fortification {completedDefense + 1}</span>
-                  <span>{me.upgradeProgress.defense}/{UPGRADE_PROGRESS.defense[completedDefense]}</span>
-                </div>
-                <div className="build-progress-bar-wrapper">
-                  <div
-                    className="build-progress-bar-fill defense-progress-fill"
-                    style={{ width: `${Math.min(100, (me.upgradeProgress.defense / UPGRADE_PROGRESS.defense[completedDefense]) * 100)}%` }}
-                  />
-                </div>
-                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-                <div className="builder-assignment">
-                  <span className="builder-label">Builders</span>
-                  <div className="section-header-workers" onClick={e => e.stopPropagation()}>
-                    <button
-                      className="worker-btn"
-                      onClick={() => { const updated = { ...localBuilders, defense: localBuilders.defense - 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={localBuilders.defense <= 0 || controlsDisabled}
-                    >-</button>
-                    <span className="worker-count">{localBuilders.defense}</span>
-                    <button
-                      className="worker-btn"
-                      onClick={() => { const updated = { ...localBuilders, defense: localBuilders.defense + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={unassigned <= 0 || controlsDisabled || localBuilders.defense >= (UPGRADE_PROGRESS.defense[completedDefense] - me.upgradeProgress.defense)}
-                    >+</button>
-                  </div>
-                </div>
-                {localBuilders.defense > 0 && (
-                  <div className="build-eta">
-                    ~{Math.ceil((UPGRADE_PROGRESS.defense[completedDefense] - me.upgradeProgress.defense) / (localBuilders.defense * PROGRESS_PER_BUILDER))} turns remaining
-                  </div>
-                )}
-                <p className="section-explainer">
-                  Reward: +{DEFENSE_HP_PER_LEVEL[completedDefense]} max HP (→ {me.maxHp + DEFENSE_HP_PER_LEVEL[completedDefense]} total)
-                </p>
-              </div>
-            ) : atMaxDefenseUpgrades ? (
-              <div className="resource-row">
-                <span className="resource-label">All fortifications completed! ({me.maxHp} max HP)</span>
-              </div>
-            ) : (
-              <div className="upgrade-buttons">
-                <button
-                  className="upgrade-btn upgrade-defense"
-                  onClick={() => handleUnlockUpgrade('defense')}
-                  disabled={!canAffordDefenseUpgrade || controlsDisabled}
-                  title={`Costs ${UPGRADE_UNLOCK_COST.materials} materials + ${UPGRADE_UNLOCK_COST.gold} gold`}
-                >
-                  <span className="upgrade-btn-title">📜 Unlock Fortification</span>
-                  <span className="upgrade-btn-cost">{UPGRADE_UNLOCK_COST.materials} materials + {UPGRADE_UNLOCK_COST.gold} gold</span>
-                  <span className="upgrade-btn-effect">+{DEFENSE_HP_PER_LEVEL[completedDefense] ?? '?'} max HP</span>
-                </button>
-              </div>
-            )}
+            <BuildProgressBlock
+              category="defense"
+              me={me}
+              localBuilders={localBuilders}
+              onAdjustBuilder={adjustBuilder}
+              onUnlockUpgrade={handleUnlockUpgrade}
+              unassigned={unassigned}
+              controlsDisabled={controlsDisabled}
+              canAffordUpgrade={canAffordUpgrade}
+              progressBarClass="defense-progress-fill"
+              unlockBtnClass="upgrade-defense"
+              buildingLabel="Building Fortification"
+              maxLabel={`All fortifications completed! (${me.maxHp} max HP)`}
+              unlockLabel="📜 Unlock Fortification"
+              effectText={<>+{DEFENSE_HP_PER_LEVEL[me.upgradesCompleted.defense] ?? '?'} max HP</>}
+              explainerText={<>Reward: +{DEFENSE_HP_PER_LEVEL[me.upgradesCompleted.defense]} max HP (→ {me.maxHp + DEFENSE_HP_PER_LEVEL[me.upgradesCompleted.defense]} total)</>}
+            />
           </div>
         </div>
       </div>
@@ -917,63 +687,21 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
 
             <hr className="section-divider" />
 
-            {/* Military upgrade unlock/build */}
-            {hasMilitaryBuildSlot ? (
-              <div className="build-progress-container">
-                <div className="build-progress-header">
-                  <span>Building Upgrade {completedMilitary + 1}</span>
-                  <span>{me.upgradeProgress.military}/{UPGRADE_PROGRESS.military[completedMilitary]}</span>
-                </div>
-                <div className="build-progress-bar-wrapper">
-                  <div
-                    className="build-progress-bar-fill military-progress-fill"
-                    style={{ width: `${Math.min(100, (me.upgradeProgress.military / UPGRADE_PROGRESS.military[completedMilitary]) * 100)}%` }}
-                  />
-                </div>
-                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-                <div className="builder-assignment">
-                  <span className="builder-label">Builders</span>
-                  <div className="section-header-workers" onClick={e => e.stopPropagation()}>
-                    <button
-                      className="worker-btn"
-                      onClick={() => { const updated = { ...localBuilders, military: localBuilders.military - 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={localBuilders.military <= 0 || controlsDisabled}
-                    >-</button>
-                    <span className="worker-count">{localBuilders.military}</span>
-                    <button
-                      className="worker-btn"
-                      onClick={() => { const updated = { ...localBuilders, military: localBuilders.military + 1 }; setLocalBuilders(updated); handleAllocateWorkers(localFarmers, localMiners, localMerchants, updated); }}
-                      disabled={unassigned <= 0 || controlsDisabled || localBuilders.military >= (UPGRADE_PROGRESS.military[completedMilitary] - me.upgradeProgress.military)}
-                    >+</button>
-                  </div>
-                </div>
-                {localBuilders.military > 0 && (
-                  <div className="build-eta">
-                    ~{Math.ceil((UPGRADE_PROGRESS.military[completedMilitary] - me.upgradeProgress.military) / (localBuilders.military * PROGRESS_PER_BUILDER))} turns remaining
-                  </div>
-                )}
-                <p className="section-explainer">
-                  Unlocks: {TROOP_TYPES[completedMilitary + 1] ? TROOP_TYPES[completedMilitary + 1].charAt(0).toUpperCase() + TROOP_TYPES[completedMilitary + 1].slice(1) : '?'}
-                </p>
-              </div>
-            ) : atMaxMilitaryUpgrades ? (
-              <div className="resource-row">
-                <span className="resource-label">All troop types unlocked!</span>
-              </div>
-            ) : (
-              <div className="upgrade-buttons">
-                <button
-                  className="upgrade-btn upgrade-military"
-                  onClick={() => handleUnlockUpgrade('military')}
-                  disabled={!canAffordMilitaryUpgrade || controlsDisabled}
-                  title={`Costs ${UPGRADE_UNLOCK_COST.materials} materials + ${UPGRADE_UNLOCK_COST.gold} gold`}
-                >
-                  <span className="upgrade-btn-title">📜 Unlock Upgrade</span>
-                  <span className="upgrade-btn-cost">{UPGRADE_UNLOCK_COST.materials} materials + {UPGRADE_UNLOCK_COST.gold} gold</span>
-                  <span className="upgrade-btn-effect">Unlocks: {TROOP_TYPES[completedMilitary + 1] ? TROOP_TYPES[completedMilitary + 1].charAt(0).toUpperCase() + TROOP_TYPES[completedMilitary + 1].slice(1) : 'next troop'}</span>
-                </button>
-              </div>
-            )}
+            <BuildProgressBlock
+              category="military"
+              me={me}
+              localBuilders={localBuilders}
+              onAdjustBuilder={adjustBuilder}
+              onUnlockUpgrade={handleUnlockUpgrade}
+              unassigned={unassigned}
+              controlsDisabled={controlsDisabled}
+              canAffordUpgrade={canAffordUpgrade}
+              progressBarClass="military-progress-fill"
+              unlockBtnClass="upgrade-military"
+              maxLabel="All troop types unlocked!"
+              effectText={<>Unlocks: {TROOP_TYPES[me.upgradesCompleted.military + 1] ? TROOP_TYPES[me.upgradesCompleted.military + 1].charAt(0).toUpperCase() + TROOP_TYPES[me.upgradesCompleted.military + 1].slice(1) : 'next troop'}</>}
+              explainerText={<>Unlocks: {TROOP_TYPES[me.upgradesCompleted.military + 1] ? TROOP_TYPES[me.upgradesCompleted.military + 1].charAt(0).toUpperCase() + TROOP_TYPES[me.upgradesCompleted.military + 1].slice(1) : '?'}</>}
+            />
           </div>
         </div>
       </div>
