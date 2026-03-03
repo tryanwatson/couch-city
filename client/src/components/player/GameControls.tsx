@@ -95,6 +95,10 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
     socket.emit('player:send_attack', { roomId: roomState.roomId, playerId, targetPlayerId, units, troopType });
   };
 
+  const handleSendDonation = (targetPlayerId: string, units: number, troopType: TroopType) => {
+    socket.emit('player:send_donation', { roomId: roomState.roomId, playerId, targetPlayerId, units, troopType });
+  };
+
   const handleRecallTroops = (troopGroupId: string) => {
     socket.emit('player:recall_troops', { roomId: roomState.roomId, playerId, troopGroupId });
   };
@@ -874,6 +878,45 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
 
             <hr className="section-divider" />
 
+            {/* Donate troops */}
+            {targets.length > 0 && (
+              <div className="target-list">
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#2ecc71', marginBottom: 4 }}>Donate Troops</div>
+                {targets.map((target) => (
+                  <div key={`donate-${target.playerId}`} className="target-row donate-target-row">
+                    <div className="target-info">
+                      <span className="target-color-dot" style={{ backgroundColor: target.color }} />
+                      <span className="target-name">{target.name}</span>
+                      <span className="target-hp-small">{Math.ceil(target.hp)} HP</span>
+                    </div>
+                    {TROOP_TYPES.map((type) => {
+                      const count = me.militaryAtHome[type];
+                      if (count === 0) return null;
+                      return (
+                        <div key={type} className="attack-type-row">
+                          <span className="attack-type-label">{type.charAt(0).toUpperCase() + type.slice(1)} ({count})</span>
+                          <div className="attack-amounts">
+                            {(VALID_ATTACK_AMOUNTS as readonly number[]).map((amount) => (
+                              <button
+                                key={amount}
+                                className="attack-amount-btn donate-amount-btn"
+                                onClick={() => handleSendDonation(target.playerId, amount, type)}
+                                disabled={count < amount || controlsDisabled}
+                              >
+                                Give {amount}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <hr className="section-divider" />
+
             {/* Military upgrade unlock/build */}
             {hasMilitaryBuildSlot ? (
               <div className="build-progress-container">
@@ -961,7 +1004,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                 const redirectTargets = [
                   ...roomState.players.filter(p => p.alive && p.playerId !== playerId && p.playerId !== tg.targetPlayerId),
                 ];
-                const canRedirectToLand = tg.targetPlayerId !== PROMISED_LAND_ID;
+                const canRedirectToLand = tg.targetPlayerId !== PROMISED_LAND_ID && !tg.isDonation;
 
                 return (
                   <div key={tg.id} className={`troop-manage-row${isPaused ? ' troop-paused' : ''}`}>
@@ -970,7 +1013,7 @@ export default function GameControls({ roomState, playerId, socket }: GameContro
                         {tg.units} {tg.troopType}
                       </span>
                       <span className="troop-manage-target">
-                        {isReturning ? '← Home' : `→ ${targetName}`}
+                        {isReturning ? '← Home' : tg.isDonation ? `🎁 → ${targetName}` : `→ ${targetName}`}
                         {isPaused && ' (PAUSED)'}
                       </span>
                       <span className="troop-manage-eta">

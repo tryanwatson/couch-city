@@ -425,10 +425,35 @@ function runUpdatePhase(room: ServerRoom): void {
   // Resolve city arrivals sequentially (each targets a different garrison)
   for (const tg of arrived) {
     if (tg.targetPlayerId === PROMISED_LAND_ID) continue;
+    // Donations: add troops to recipient's garrison instead of fighting
+    if (tg.isDonation) {
+      const recipient = room.players.get(tg.targetPlayerId);
+      if (recipient && recipient.alive) {
+        recipient.militaryAtHome[tg.troopType] += tg.units;
+      }
+      continue;
+    }
     if (!room.combatHitPlayerIds.includes(tg.targetPlayerId) && tg.attackerPlayerId !== tg.targetPlayerId) {
       room.combatHitPlayerIds.push(tg.targetPlayerId);
     }
     resolveCombat(room, tg);
+  }
+
+  // Auto-recall donations heading to dead cities
+  for (const tg of room.troopsInTransit) {
+    if (tg.isDonation && tg.turnsRemaining > 0) {
+      const recipient = room.players.get(tg.targetPlayerId);
+      if (recipient && !recipient.alive) {
+        const currentPos = getTroopCurrentPosition(tg, room.players);
+        const turnsTraveled = tg.totalTurns - tg.turnsRemaining;
+        tg.startX = currentPos.x;
+        tg.startY = currentPos.y;
+        tg.targetPlayerId = tg.attackerPlayerId;
+        tg.turnsRemaining = Math.max(1, turnsTraveled);
+        tg.totalTurns = tg.turnsRemaining;
+        tg.isDonation = false;
+      }
+    }
   }
 
   // Culture win condition
@@ -503,11 +528,13 @@ function detectFieldCollisions(room: ServerRoom): void {
     if (tg1.units <= 0) continue;
     // Skip mine-bound troops (separate lane, no player target to look up)
     if (tg1.targetPlayerId === PROMISED_LAND_ID || tg1.attackerPlayerId === PROMISED_LAND_ID) continue;
+    if (tg1.isDonation) continue; // donations are peaceful — no field combat
 
     for (let j = i + 1; j < transit.length; j++) {
       const tg2 = transit[j];
       if (tg2.units <= 0) continue;
       if (tg2.targetPlayerId === PROMISED_LAND_ID || tg2.attackerPlayerId === PROMISED_LAND_ID) continue;
+      if (tg2.isDonation) continue;
 
       // Only opposing groups on the same lane (A→B vs B→A)
       if (
@@ -1104,7 +1131,8 @@ export function sendAttack(
       tg.targetPlayerId === targetPlayerId &&
       tg.troopType === troopType &&
       tg.turnsRemaining === travelTurns &&
-      tg.totalTurns === travelTurns,
+      tg.totalTurns === travelTurns &&
+      !tg.isDonation,
   );
 
   if (existing) {
@@ -1118,6 +1146,66 @@ export function sendAttack(
       units,
       turnsRemaining: travelTurns,
       totalTurns: travelTurns,
+    });
+  }
+
+  return { room };
+}
+
+export function sendDonation(
+  roomId: string,
+  senderPlayerId: string,
+  targetPlayerId: string,
+  units: number,
+  troopType: TroopType
+): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
+  const room = rooms.get(roomId);
+  if (!room) return { error: 'Room not found' };
+
+  const guard = guardAction(room, senderPlayerId);
+  if (typeof guard === 'string') return { error: guard };
+  const sender = guard;
+
+  if (senderPlayerId === targetPlayerId) return { error: 'Cannot donate to yourself' };
+  if (targetPlayerId === PROMISED_LAND_ID) return { error: 'Cannot donate to the Promised Land' };
+
+  const target = room.players.get(targetPlayerId);
+  if (!target) return { error: 'Target not found' };
+  if (!target.alive) return { error: 'Target city is already eliminated' };
+
+  if (!(VALID_ATTACK_AMOUNTS as readonly number[]).includes(units)) {
+    return { error: 'Invalid unit count' };
+  }
+  if (!COMBAT_POWER[troopType]) return { error: 'Invalid troop type' };
+  if (sender.militaryAtHome[troopType] < units) return { error: 'Not enough troops' };
+
+  sender.militaryAtHome[troopType] -= units;
+
+  const travelTurns = PROMISED_LAND_TRAVEL_TURNS; // donations travel fast (2 turns)
+
+  // Merge into existing donation group sent this same planning phase
+  const existing = room.troopsInTransit.find(
+    tg =>
+      tg.attackerPlayerId === senderPlayerId &&
+      tg.targetPlayerId === targetPlayerId &&
+      tg.troopType === troopType &&
+      tg.turnsRemaining === travelTurns &&
+      tg.totalTurns === travelTurns &&
+      tg.isDonation === true,
+  );
+
+  if (existing) {
+    existing.units += units;
+  } else {
+    room.troopsInTransit.push({
+      id: 'tg_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36),
+      attackerPlayerId: senderPlayerId,
+      targetPlayerId,
+      troopType,
+      units,
+      turnsRemaining: travelTurns,
+      totalTurns: travelTurns,
+      isDonation: true,
     });
   }
 
@@ -1255,6 +1343,9 @@ export function redirectTroops(
   if (newTargetPlayerId === tg.targetPlayerId) return { error: 'Already heading to that target' };
 
   // Validate new target
+  if (tg.isDonation && newTargetPlayerId === PROMISED_LAND_ID) {
+    return { error: 'Cannot redirect donations to the Promised Land' };
+  }
   if (newTargetPlayerId !== PROMISED_LAND_ID) {
     const newTarget = room.players.get(newTargetPlayerId);
     if (!newTarget) return { error: 'Target not found' };

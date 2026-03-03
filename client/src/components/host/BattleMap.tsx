@@ -871,10 +871,11 @@ export default function BattleMap({
         const progress = getTroopProgress(troop);
         const isMineTarget = troop.targetPlayerId === PROMISED_LAND_ID;
         const isReturningHome = troop.targetPlayerId === troop.attackerPlayerId;
+        const isDonation = troop.isDonation;
         const standoffFrac = dist > 0 ? ATTACK_STANDOFF / dist : 0;
-        // Returning troops walk all the way home; attackers stop at standoff distance
+        // Returning troops and donations walk all the way to the city; attackers stop at standoff distance
         const clampedProgress =
-          isMineTarget || isReturningHome
+          isMineTarget || isReturningHome || isDonation
             ? progress
             : Math.min(progress, 1 - standoffFrac);
 
@@ -890,8 +891,8 @@ export default function BattleMap({
           }
         }
 
-        // Returning troops walk into their city — no lingering/attack animation
-        if (isReturningHome && progress >= 1 && !isResolving) {
+        // Returning troops and donations walk into their city — no lingering/attack animation
+        if ((isReturningHome || isDonation) && progress >= 1 && !isResolving) {
           positions.set(troop.id, {
             x: targetPos.x,
             y: targetPos.y,
@@ -906,6 +907,7 @@ export default function BattleMap({
         } else if (
           !isMineTarget &&
           !isReturningHome &&
+          !isDonation &&
           progress >= 1 - standoffFrac &&
           !isResolving
         ) {
@@ -1041,16 +1043,20 @@ export default function BattleMap({
             ? "zzz"
             : troop.targetPlayerId === troop.attackerPlayerId
               ? "🏠"
-              : troop.targetPlayerId === PROMISED_LAND_ID
-                ? "👑"
-                : "⚔";
+              : troop.isDonation
+                ? "🎁"
+                : troop.targetPlayerId === PROMISED_LAND_ID
+                  ? "👑"
+                  : "⚔";
           const sColor = troop.paused
             ? "#aaa"
             : troop.targetPlayerId === troop.attackerPlayerId
               ? "white"
-              : troop.targetPlayerId === PROMISED_LAND_ID
-                ? "#f1c40f"
-                : (playerMap.get(troop.targetPlayerId)?.color ?? "white");
+              : troop.isDonation
+                ? "#2ecc71"
+                : troop.targetPlayerId === PROMISED_LAND_ID
+                  ? "#f1c40f"
+                  : (playerMap.get(troop.targetPlayerId)?.color ?? "white");
           return (
             <TroopSprite
               key={troop.id}
