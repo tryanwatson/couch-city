@@ -285,7 +285,7 @@ const CASTLE_IMAGES = [
   "/green_castle_1.png",
 ];
 
-function CityNode({
+function CityImageNode({
   player,
   playerIndex,
   isUnderSiege,
@@ -436,83 +436,87 @@ function CityNode({
           strokeWidth={3}
         />
       )}
+    </g>
+  );
+}
 
-      {/* Stats box */}
-      {(() => {
-        const hasCulture = player.culture > 0;
-        const BOX_W = 180;
-        const BOX_H = hasCulture ? 72 : 42;
-        const BOX_X = cx - BOX_W / 2;
-        const BOX_Y = cy + 66;
-        return (
-          <>
-            <rect
-              x={BOX_X}
-              y={BOX_Y}
-              width={BOX_W}
-              height={BOX_H}
-              rx={5}
-              fill="#3a3a3a"
-              stroke="black"
-              strokeWidth={2}
-            />
-            {/* Player name */}
-            <text
-              x={cx}
-              y={BOX_Y + 18}
-              textAnchor="middle"
-              fontSize={14}
-              fontWeight="700"
-              fill={player.color}
-            >
-              {player.name}
-            </text>
-            {/* Population */}
-            <text
-              x={cx}
-              y={BOX_Y + 34}
-              textAnchor="middle"
-              fontSize={13}
-              fill="white"
-            >
-              {`👥 ${Math.floor(player.population)}`}
-            </text>
-            {/* Culture progress */}
-            {hasCulture && (
-              <>
-                <rect
-                  x={BOX_X + 6}
-                  y={BOX_Y + 42}
-                  width={BOX_W - 12}
-                  height={6}
-                  rx={3}
-                  fill="#2a1a3e"
-                />
-                <rect
-                  x={BOX_X + 6}
-                  y={BOX_Y + 42}
-                  width={
-                    (BOX_W - 12) *
-                    Math.min(1, player.culture / CULTURE_WIN_THRESHOLD)
-                  }
-                  height={6}
-                  rx={3}
-                  fill="#9b59b6"
-                />
-                <text
-                  x={cx}
-                  y={BOX_Y + 62}
-                  textAnchor="middle"
-                  fontSize={11}
-                  fill="#c88de8"
-                >
-                  {`🏛️ ${player.upgradesCompleted.culture} · ${Math.floor(player.culture)}/${CULTURE_WIN_THRESHOLD}`}
-                </text>
-              </>
-            )}
-          </>
-        );
-      })()}
+function CityInfoNode({ player }: { player: CityPlayerInfo }) {
+  const cx = player.x * 1000;
+  const cy = player.y * 1000;
+  const isDead = !player.alive;
+
+  const hasCulture = player.culture > 0;
+  const BOX_W = 180;
+  const BOX_H = hasCulture ? 72 : 42;
+  const BOX_X = cx - BOX_W / 2;
+  const BOX_Y = cy + 66;
+
+  return (
+    <g opacity={isDead ? 0.35 : 1}>
+      <rect
+        x={BOX_X}
+        y={BOX_Y}
+        width={BOX_W}
+        height={BOX_H}
+        rx={5}
+        fill="#3a3a3a"
+        stroke="black"
+        strokeWidth={2}
+      />
+      {/* Player name */}
+      <text
+        x={cx}
+        y={BOX_Y + 18}
+        textAnchor="middle"
+        fontSize={14}
+        fontWeight="700"
+        fill={player.color}
+      >
+        {player.name}
+      </text>
+      {/* Population */}
+      <text
+        x={cx}
+        y={BOX_Y + 34}
+        textAnchor="middle"
+        fontSize={13}
+        fill="white"
+      >
+        {`👥 ${Math.floor(player.population)}`}
+      </text>
+      {/* Culture progress */}
+      {hasCulture && (
+        <>
+          <rect
+            x={BOX_X + 6}
+            y={BOX_Y + 42}
+            width={BOX_W - 12}
+            height={6}
+            rx={3}
+            fill="#2a1a3e"
+          />
+          <rect
+            x={BOX_X + 6}
+            y={BOX_Y + 42}
+            width={
+              (BOX_W - 12) *
+              Math.min(1, player.culture / CULTURE_WIN_THRESHOLD)
+            }
+            height={6}
+            rx={3}
+            fill="#9b59b6"
+          />
+          <text
+            x={cx}
+            y={BOX_Y + 62}
+            textAnchor="middle"
+            fontSize={11}
+            fill="#c88de8"
+          >
+            {`🏛️ ${player.upgradesCompleted.culture} · ${Math.floor(player.culture)}/${CULTURE_WIN_THRESHOLD}`}
+          </text>
+        </>
+      )}
     </g>
   );
 }
@@ -1098,38 +1102,6 @@ export default function BattleMap({
           />
         ))}
 
-      {/* Defending troops — stationed near own city */}
-      {players.map((player) => {
-        const defendingTypes = TROOP_TYPES.filter(
-          (t) => player.militaryDefending[t] > 0,
-        );
-        if (defendingTypes.length === 0 || !player.alive) return null;
-        return defendingTypes.map((type, i) => {
-          const angle = ((Math.PI * 2) / Math.max(defendingTypes.length, 1)) * i - Math.PI / 2;
-          const offset = 0.045;
-          const pos = {
-            x: player.x + Math.cos(angle) * offset,
-            y: player.y + Math.sin(angle) * offset,
-          };
-          return (
-            <TroopSprite
-              key={`defend-${player.playerId}-${type}`}
-              pos={pos}
-              units={player.militaryDefending[type]}
-              frameIndex={frameIndex}
-              animTime={animTime}
-              isAttacking={false}
-              isIdle={true}
-              facingLeft={false}
-              troopType={type}
-              playerColor={player.color}
-              statusIcon="🛡"
-              statusColor={player.color}
-            />
-          );
-        });
-      })}
-
       {/* Occupying siege troops — idle at standoff distance from target city, or on mine center */}
       {/* Filter out occupiers whose ID is still in troopsInTransit (they're animating arrival) */}
       {occupyingTroops
@@ -1199,13 +1171,13 @@ export default function BattleMap({
           );
         })}
 
-      {/* Cities — rendered last so they paint over troop lines */}
+      {/* City images — rendered before troops so troops paint on top */}
       {players.map((player, index) => {
         const isUnderSiege = occupyingTroops.some(
           (occ) => occ.targetPlayerId === player.playerId,
         );
         return (
-          <CityNode
+          <CityImageNode
             key={player.playerId}
             player={player}
             playerIndex={index}
@@ -1213,6 +1185,44 @@ export default function BattleMap({
           />
         );
       })}
+
+      {/* Defending troops — rendered after city images but before info boxes */}
+      {players.map((player) => {
+        const defendingTypes = TROOP_TYPES.filter(
+          (t) => player.militaryDefending[t] > 0,
+        );
+        if (defendingTypes.length === 0 || !player.alive) return null;
+        return defendingTypes.map((type, i) => {
+          const spread = defendingTypes.length > 1
+            ? (i - (defendingTypes.length - 1) / 2) * 0.03
+            : 0;
+          const pos = {
+            x: player.x + spread,
+            y: player.y + 0.04,
+          };
+          return (
+            <TroopSprite
+              key={`defend-${player.playerId}-${type}`}
+              pos={pos}
+              units={player.militaryDefending[type]}
+              frameIndex={frameIndex}
+              animTime={animTime}
+              isAttacking={false}
+              isIdle={true}
+              facingLeft={player.x > PROMISED_LAND_X}
+              troopType={type}
+              playerColor={player.color}
+              statusIcon="🛡"
+              statusColor={player.color}
+            />
+          );
+        });
+      })}
+
+      {/* City info boxes — rendered last so they appear on top of troops */}
+      {players.map((player) => (
+        <CityInfoNode key={player.playerId} player={player} />
+      ))}
     </svg>
   );
 }
