@@ -89,6 +89,34 @@ function hueRotationForColor(targetHex: string): number {
   return hexToHue(targetHex) - SOURCE_BLUE_HUE;
 }
 
+function pureHueRgb(hex: string): { r: number; g: number; b: number } {
+  const h = hexToHue(hex) / 60;
+  const x = 1 - Math.abs((h % 2) - 1);
+  let r = 0,
+    g = 0,
+    b = 0;
+  if (h < 1) {
+    r = 1;
+    g = x;
+  } else if (h < 2) {
+    r = x;
+    g = 1;
+  } else if (h < 3) {
+    g = 1;
+    b = x;
+  } else if (h < 4) {
+    g = x;
+    b = 1;
+  } else if (h < 5) {
+    r = x;
+    b = 1;
+  } else {
+    r = 1;
+    b = x;
+  }
+  return { r, g, b };
+}
+
 const TROOP_DISPLAY_SIZE = 64;
 const ATTACK_STANDOFF = 0.09;
 const ATTACK_LINGER_MS = 5000;
@@ -279,19 +307,11 @@ function TroopSprite({
   );
 }
 
-const CASTLE_IMAGES = [
-  "/red_castle_1.png",
-  "/blue_castle_1.png",
-  "/green_castle_1.png",
-];
-
 function CityImageNode({
   player,
-  playerIndex,
   isUnderSiege,
 }: {
   player: CityPlayerInfo;
-  playerIndex: number;
   isUnderSiege: boolean;
 }) {
   const cx = player.x * 1000;
@@ -299,7 +319,6 @@ function CityImageNode({
   const hpPct = player.maxHp > 0 ? player.hp / player.maxHp : 0;
   const isDead = !player.alive;
   const BAR_W = 120;
-  const HALF = 28;
 
   return (
     <g opacity={isDead ? 0.35 : 1}>
@@ -413,29 +432,16 @@ function CityImageNode({
         />
       )}
 
-      {/* City — castle image for first 3 players, colored square for rest */}
-      {playerIndex < CASTLE_IMAGES.length ? (
-        <image
-          href={CASTLE_IMAGES[playerIndex]}
-          x={cx - 64}
-          y={cy - 64}
-          width={128}
-          height={128}
-          opacity={isDead ? 0.3 : 1}
-        />
-      ) : (
-        <rect
-          x={cx - HALF}
-          y={cy - HALF}
-          width={HALF * 2}
-          height={HALF * 2}
-          rx={6}
-          fill={player.color}
-          fillOpacity={isDead ? 0.3 : 0.85}
-          stroke={player.color}
-          strokeWidth={3}
-        />
-      )}
+      {/* City castle */}
+      <image
+        href="/uncolored-castle.png"
+        x={cx - 64}
+        y={cy - 64}
+        width={128}
+        height={128}
+        opacity={isDead ? 0.3 : 1}
+        filter={`url(#castle-${player.color.replace("#", "")})`}
+      />
     </g>
   );
 }
@@ -682,6 +688,25 @@ export default function BattleMap({
         hueRotation: hueRotationForColor(p.color),
       }))
       .filter((f) => Math.abs(f.hueRotation) > 1);
+  }, [players]);
+
+  const castleColorFilters = useMemo(() => {
+    const seen = new Set<string>();
+    return players
+      .filter((p) => {
+        if (seen.has(p.color)) return false;
+        seen.add(p.color);
+        return true;
+      })
+      .map((p) => {
+        const { r, g, b } = pureHueRgb(p.color);
+        return {
+          filterId: `castle-${p.color.replace("#", "")}`,
+          r,
+          g,
+          b,
+        };
+      });
   }, [players]);
 
   const [troopPositions, setTroopPositions] = useState<
@@ -998,6 +1023,15 @@ export default function BattleMap({
             <feColorMatrix type="hueRotate" values={String(hueRotation)} />
           </filter>
         ))}
+        {castleColorFilters.map(({ filterId, r, g, b }) => (
+          <filter key={filterId} id={filterId} colorInterpolationFilters="sRGB">
+            <feColorMatrix type="saturate" values="0" />
+            <feColorMatrix
+              type="matrix"
+              values={`${r * 1.3} 0 0 0 0 0 ${g * 1.3} 0 0 0 0 0 ${b * 1.3} 0 0 0 0 0 1 0`}
+            />
+          </filter>
+        ))}
       </defs>
 
       <image
@@ -1172,7 +1206,7 @@ export default function BattleMap({
         })}
 
       {/* City images — rendered before troops so troops paint on top */}
-      {players.map((player, index) => {
+      {players.map((player) => {
         const isUnderSiege = occupyingTroops.some(
           (occ) => occ.targetPlayerId === player.playerId,
         );
@@ -1180,7 +1214,6 @@ export default function BattleMap({
           <CityImageNode
             key={player.playerId}
             player={player}
-            playerIndex={index}
             isUnderSiege={isUnderSiege}
           />
         );
