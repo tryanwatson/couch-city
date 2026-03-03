@@ -316,9 +316,7 @@ function CityImageNode({
 }) {
   const cx = player.x * 1000;
   const cy = player.y * 1000;
-  const hpPct = player.maxHp > 0 ? player.hp / player.maxHp : 0;
   const isDead = !player.alive;
-  const BAR_W = 120;
 
   return (
     <g opacity={isDead ? 0.35 : 1}>
@@ -343,95 +341,6 @@ function CityImageNode({
           />
         </circle>
       )}
-      {/* HP bar track */}
-      <rect
-        x={cx - BAR_W / 2}
-        y={cy - 75}
-        width={BAR_W}
-        height={16}
-        rx={4}
-        fill="#1f2e50"
-        stroke="black"
-        strokeWidth={2}
-      />
-      {/* HP bar fill */}
-      <rect
-        x={cx - BAR_W / 2}
-        y={cy - 75}
-        width={BAR_W * hpPct}
-        height={16}
-        rx={4}
-        fill={hpPct <= 0.3 ? "#e74c3c" : "#1a8a4a"}
-      />
-      {/* HP label */}
-      <text
-        x={cx}
-        y={cy - 63}
-        textAnchor="middle"
-        fontSize={13}
-        fill="white"
-        fontWeight="700"
-      >
-        {Math.ceil(player.hp)}/{player.maxHp}
-      </text>
-
-      {/* Combat power shield */}
-      {(() => {
-        const shieldCx = cx + BAR_W / 2 + 30;
-        const shieldCy = cy - 67;
-        const sw = 36;
-        const sh = 44;
-        const cp = TROOP_TYPES.reduce(
-          (s, t) => s + player.militaryDefending[t] * COMBAT_POWER[t],
-          0,
-        );
-        const cpStr = String(cp);
-        const fs =
-          cpStr.length <= 2
-            ? 18
-            : cpStr.length <= 3
-              ? 15
-              : cpStr.length <= 4
-                ? 12
-                : 10;
-        return (
-          <>
-            <path
-              d={`M${shieldCx},${shieldCy - sh / 2}
-                  l${sw / 2},0 l${sw * 0.08},${sh * 0.15}
-                  l0,${sh * 0.45} l-${sw / 2 + sw * 0.08},${sh * 0.4}
-                  l-${sw / 2 + sw * 0.08},-${sh * 0.4}
-                  l0,-${sh * 0.45} l${sw * 0.08},-${sh * 0.15} z`}
-              fill="#3a3a3a"
-              stroke="black"
-              strokeWidth={2}
-            />
-            <text
-              x={shieldCx}
-              y={shieldCy + fs * 0.2}
-              textAnchor="middle"
-              fontSize={fs}
-              fontWeight="800"
-              fill="#f0c040"
-            >
-              {cp}
-            </text>
-          </>
-        );
-      })()}
-
-      {/* End turn indicator */}
-      {player.alive && (
-        <circle
-          cx={cx - BAR_W / 2 - 20}
-          cy={cy - 67}
-          r={10}
-          fill={player.endedTurn ? "#2ecc71" : "#e74c3c"}
-          stroke="white"
-          strokeWidth={2}
-        />
-      )}
-
       {/* City castle */}
       <image
         href="/uncolored-castle.png"
@@ -450,15 +359,23 @@ function CityInfoNode({ player }: { player: CityPlayerInfo }) {
   const cx = player.x * 1000;
   const cy = player.y * 1000;
   const isDead = !player.alive;
+  const hpPct = player.maxHp > 0 ? player.hp / player.maxHp : 0;
 
   const hasCulture = player.culture > 0;
   const BOX_W = 180;
-  const BOX_H = hasCulture ? 72 : 42;
+  const BAR_W = 120;
+  const BOX_H = hasCulture ? 90 : 58;
   const BOX_X = cx - BOX_W / 2;
-  const BOX_Y = cy + 66;
+  const BOX_Y = cy - 70 - BOX_H;
+
+  const cp = TROOP_TYPES.reduce(
+    (s, t) => s + player.militaryDefending[t] * COMBAT_POWER[t],
+    0,
+  );
 
   return (
     <g opacity={isDead ? 0.35 : 1}>
+      {/* Box background */}
       <rect
         x={BOX_X}
         y={BOX_Y}
@@ -472,7 +389,7 @@ function CityInfoNode({ player }: { player: CityPlayerInfo }) {
       {/* Player name */}
       <text
         x={cx}
-        y={BOX_Y + 18}
+        y={BOX_Y + 16}
         textAnchor="middle"
         fontSize={14}
         fontWeight="700"
@@ -480,10 +397,63 @@ function CityInfoNode({ player }: { player: CityPlayerInfo }) {
       >
         {player.name}
       </text>
-      {/* Population */}
+      {/* End turn indicator */}
+      {player.alive && (
+        <circle
+          cx={cx - BAR_W / 2 - 14}
+          cy={BOX_Y + 30}
+          r={6}
+          fill={player.endedTurn ? "#2ecc71" : "#e74c3c"}
+          stroke="white"
+          strokeWidth={1.5}
+        />
+      )}
+      {/* HP bar track */}
+      <rect
+        x={cx - BAR_W / 2}
+        y={BOX_Y + 22}
+        width={BAR_W}
+        height={16}
+        rx={4}
+        fill="#1f2e50"
+        stroke="black"
+        strokeWidth={1}
+      />
+      {/* HP bar fill */}
+      <rect
+        x={cx - BAR_W / 2}
+        y={BOX_Y + 22}
+        width={BAR_W * hpPct}
+        height={16}
+        rx={4}
+        fill={hpPct <= 0.3 ? "#e74c3c" : "#1a8a4a"}
+      />
+      {/* HP label */}
       <text
         x={cx}
         y={BOX_Y + 34}
+        textAnchor="middle"
+        fontSize={12}
+        fill="white"
+        fontWeight="700"
+      >
+        {Math.ceil(player.hp)}/{player.maxHp}
+      </text>
+      {/* Combat power */}
+      <text
+        x={cx + BAR_W / 2 + 16}
+        y={BOX_Y + 34}
+        textAnchor="middle"
+        fontSize={12}
+        fontWeight="800"
+        fill="#f0c040"
+      >
+        ⚔{cp}
+      </text>
+      {/* Population */}
+      <text
+        x={cx}
+        y={BOX_Y + 52}
         textAnchor="middle"
         fontSize={13}
         fill="white"
@@ -495,7 +465,7 @@ function CityInfoNode({ player }: { player: CityPlayerInfo }) {
         <>
           <rect
             x={BOX_X + 6}
-            y={BOX_Y + 42}
+            y={BOX_Y + 60}
             width={BOX_W - 12}
             height={6}
             rx={3}
@@ -503,7 +473,7 @@ function CityInfoNode({ player }: { player: CityPlayerInfo }) {
           />
           <rect
             x={BOX_X + 6}
-            y={BOX_Y + 42}
+            y={BOX_Y + 60}
             width={
               (BOX_W - 12) *
               Math.min(1, player.culture / CULTURE_WIN_THRESHOLD)
@@ -514,7 +484,7 @@ function CityInfoNode({ player }: { player: CityPlayerInfo }) {
           />
           <text
             x={cx}
-            y={BOX_Y + 62}
+            y={BOX_Y + 80}
             textAnchor="middle"
             fontSize={11}
             fill="#c88de8"
@@ -609,6 +579,17 @@ function PromisedLandNode({
       <text x={cx} y={cy + 10} textAnchor="middle" fontSize={32}>
         👑
       </text>
+      {/* Info box background */}
+      <rect
+        x={cx - 75}
+        y={cy + 44}
+        width={150}
+        height={ownerColor && !isContested && holdTurns > 0 ? 52 : 36}
+        rx={5}
+        fill="#3a3a3a"
+        stroke="black"
+        strokeWidth={2}
+      />
       {/* Label */}
       <text
         x={cx}

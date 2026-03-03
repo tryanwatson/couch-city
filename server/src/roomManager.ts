@@ -8,6 +8,7 @@ import {
   MATERIALS_PER_MINER,
   GOLD_PER_MERCHANT,
   FOOD_PER_CITIZEN,
+  FOOD_PER_TROOP,
   POP_GROWTH_RATE,
   POP_STARVATION_RATE,
   VALID_GROWTH_MULTIPLIERS,
@@ -77,6 +78,77 @@ function clampWorkers(player: ServerCityPlayer): void {
       player.builders[cat] = 0;
     }
   }
+}
+
+function countPlayerTroops(player: ServerCityPlayer, room: ServerRoom): number {
+  let total = 0;
+  for (const type of TROOP_TYPES) {
+    total += player.militaryAtHome[type] + player.militaryDefending[type];
+  }
+  for (const tg of room.troopsInTransit) {
+    if (tg.attackerPlayerId === player.playerId) {
+      total += tg.units;
+    }
+  }
+  for (const tg of room.occupyingTroops) {
+    if (tg.attackerPlayerId === player.playerId) {
+      total += tg.units;
+    }
+  }
+  return total;
+}
+
+function disbandTroops(player: ServerCityPlayer, room: ServerRoom, count: number): void {
+  if (count <= 0) return;
+  let remaining = count;
+
+  // Phase 1: disband from militaryAtHome (proportional across types)
+  remaining = disbandFromPool(player.militaryAtHome, remaining);
+
+  // Phase 2: disband from militaryDefending
+  if (remaining > 0) {
+    remaining = disbandFromPool(player.militaryDefending, remaining);
+  }
+
+  // Phase 3: disband from troopsInTransit belonging to this player
+  if (remaining > 0) {
+    const playerGroups = room.troopsInTransit.filter(tg => tg.attackerPlayerId === player.playerId);
+    const transitTotal = playerGroups.reduce((s, tg) => s + tg.units, 0);
+    if (transitTotal > 0) {
+      const ratio = Math.max(0, (transitTotal - remaining) / transitTotal);
+      for (const tg of playerGroups) {
+        tg.units = Math.floor(tg.units * ratio);
+      }
+      room.troopsInTransit = room.troopsInTransit.filter(tg => tg.units > 0);
+    }
+  }
+
+  // Phase 4: disband from occupyingTroops belonging to this player
+  if (remaining > 0) {
+    const playerGroups = room.occupyingTroops.filter(tg => tg.attackerPlayerId === player.playerId);
+    const occTotal = playerGroups.reduce((s, tg) => s + tg.units, 0);
+    if (occTotal > 0) {
+      const ratio = Math.max(0, (occTotal - remaining) / occTotal);
+      for (const tg of playerGroups) {
+        tg.units = Math.floor(tg.units * ratio);
+      }
+      room.occupyingTroops = room.occupyingTroops.filter(tg => tg.units > 0);
+    }
+  }
+}
+
+function disbandFromPool(pool: Record<TroopType, number>, count: number): number {
+  const total = TROOP_TYPES.reduce((s, t) => s + pool[t], 0);
+  if (total <= 0) return count;
+  if (count >= total) {
+    for (const type of TROOP_TYPES) pool[type] = 0;
+    return count - total;
+  }
+  const ratio = (total - count) / total;
+  for (const type of TROOP_TYPES) {
+    pool[type] = Math.floor(pool[type] * ratio);
+  }
+  return 0;
 }
 
 function cpBasedTrade(unitsA: number, cpPerA: number, unitsB: number, cpPerB: number): { survivorsA: number; survivorsB: number } {
@@ -447,6 +519,17 @@ function runUpdatePhase(room: ServerRoom): void {
       player.food = 0;
       player.population = Math.max(1, Math.floor(pop * (1 - POP_STARVATION_RATE)));
       clampWorkers(player);
+    }
+
+    // Troop food consumption (troops eat after population — last to be affected)
+    const totalTroops = countPlayerTroops(player, room);
+    const troopFoodNeeded = totalTroops * FOOD_PER_TROOP;
+    if (player.food >= troopFoodNeeded) {
+      player.food -= troopFoodNeeded;
+    } else {
+      const fedTroops = Math.floor(player.food / FOOD_PER_TROOP);
+      player.food = 0;
+      disbandTroops(player, room, totalTroops - fedTroops);
     }
   }
 

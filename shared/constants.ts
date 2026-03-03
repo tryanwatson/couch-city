@@ -10,6 +10,7 @@ export const GOLD_PER_MERCHANT = 2;
 
 // Food consumption & population dynamics
 export const FOOD_PER_CITIZEN = 1; // each citizen eats 1 food/turn from stockpile
+export const FOOD_PER_TROOP = 1; // each troop eats 1 food/turn regardless of type
 export const POP_GROWTH_RATE = 0.2; // +20% population when fed (base rate, scales with multiplier)
 export const POP_STARVATION_RATE = 0.2; // -20% population per turn when starving
 export const VALID_GROWTH_MULTIPLIERS = [1, 2, 3] as const; // 1x/2x/3x food cost & growth rate
