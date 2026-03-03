@@ -175,6 +175,65 @@ function TroopSprite({
 
 const CASTLE_IMAGES = ['/red_castle_1.png', '/blue_castle_1.png', '/green_castle_1.png'];
 
+const MAP_CENTER = { x: 0.5, y: 0.5 }; // The "promised land" - center of the map
+
+function DefendingTroops({
+  player,
+  frameIndex,
+}: {
+  player: CityPlayerInfo;
+  frameIndex: number;
+}) {
+  // Render defending troops at home, positioned between city and map center
+  const cx = player.x * 1000;
+  const cy = player.y * 1000;
+
+  // Calculate direction toward center (the "promised land")
+  const dx = MAP_CENTER.x - player.x;
+  const dy = MAP_CENTER.y - player.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const nx = dist > 0 ? dx / dist : 0;
+  const ny = dist > 0 ? dy / dist : 0;
+
+  // Defending troops should face toward the center (promised land)
+  const facingLeft = dx < 0;
+
+  // Position defending troops in front of the city, toward center
+  const DEFENDER_OFFSET = 85; // SVG units from city center toward promised land
+
+  // Collect all troop types with units at home
+  const troopEntries = TROOP_TYPES.filter(type => player.militaryAtHome[type] > 0);
+  if (troopEntries.length === 0) return null;
+
+  // Spread different troop types in an arc perpendicular to the center direction
+  const perpX = -ny; // perpendicular direction
+  const perpY = nx;
+  const SPREAD = 50; // SVG units between different troop types
+
+  return (
+    <g>
+      {troopEntries.map((troopType, typeIndex) => {
+        const units = player.militaryAtHome[troopType];
+        const offset = (typeIndex - (troopEntries.length - 1) / 2) * SPREAD;
+        const posX = (cx + nx * DEFENDER_OFFSET + perpX * offset) / 1000;
+        const posY = (cy + ny * DEFENDER_OFFSET + perpY * offset) / 1000;
+
+        return (
+          <TroopSprite
+            key={`defender-${player.playerId}-${troopType}`}
+            pos={{ x: posX, y: posY }}
+            units={Math.min(units, 10)} // Cap visual units to avoid clutter
+            frameIndex={frameIndex}
+            isAttacking={false}
+            facingLeft={facingLeft}
+            troopType={troopType}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
 function CityNode({ player, playerIndex }: { player: CityPlayerInfo; playerIndex: number }) {
   const cx = player.x * 1000;
   const cy = player.y * 1000;
@@ -503,6 +562,15 @@ export default function BattleMap({ players, troopsInTransit, animate }: BattleM
           isAttacking={true}
           facingLeft={lingering.facingLeft}
           troopType={lingering.troop.troopType}
+        />
+      ))}
+
+      {/* Defending troops at home — rendered before cities */}
+      {players.map((player) => (
+        <DefendingTroops
+          key={`defenders-${player.playerId}`}
+          player={player}
+          frameIndex={frameIndex}
         />
       ))}
 
