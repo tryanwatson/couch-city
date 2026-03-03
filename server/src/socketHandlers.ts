@@ -13,6 +13,8 @@ import {
   spendMilitary,
   sendAttack,
   sendDonation,
+  sendDefend,
+  recallDefenders,
   endTurn,
   resetRoom,
   sanitizeState,
@@ -188,6 +190,26 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     const result = sendDonation(data.roomId, data.playerId, data.targetPlayerId, data.units, data.troopType);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     console.log(`Player ${data.playerId} donated ${data.units} ${data.troopType} to ${data.targetPlayerId} in room ${data.roomId}`);
+    broadcastRoom(io, data.roomId);
+  });
+
+  socket.on('player:send_defend', (data) => {
+    if (!data?.roomId || !data?.playerId || data?.units == null || !data?.troopType) {
+      socket.emit('room:error', { message: 'Missing required fields' });
+      return;
+    }
+    const result = sendDefend(data.roomId, data.playerId, data.units, data.troopType);
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
+    broadcastRoom(io, data.roomId);
+  });
+
+  socket.on('player:recall_defenders', (data) => {
+    if (!data?.roomId || !data?.playerId || data?.units == null || !data?.troopType) {
+      socket.emit('room:error', { message: 'Missing required fields' });
+      return;
+    }
+    const result = recallDefenders(data.roomId, data.playerId, data.units, data.troopType);
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     broadcastRoom(io, data.roomId);
   });
 

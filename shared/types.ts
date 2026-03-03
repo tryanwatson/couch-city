@@ -19,6 +19,7 @@ export interface CityPlayerInfo {
   merchants: number;  // worker allocation: gold producers
   growthMultiplier: number; // 1/2/3 — scales food cost and growth rate
   militaryAtHome: Record<TroopType, number>;
+  militaryDefending: Record<TroopType, number>; // troops deployed outside city for active defense
   population: number;
   culture: number;       // passive score from completed upgrades
   upgradeLevel: Record<UpgradeCategory, number>; // unlock count per category — gates how many upgrades can be built
@@ -89,6 +90,7 @@ export interface ServerCityPlayer {
   merchants: number;
   growthMultiplier: number;
   militaryAtHome: Record<TroopType, number>;
+  militaryDefending: Record<TroopType, number>;
   population: number;
   culture: number;
   upgradeLevel: Record<UpgradeCategory, number>;

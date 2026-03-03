@@ -251,6 +251,24 @@ export default function GameControls({
     });
   };
 
+  const handleSendDefend = (units: number, troopType: TroopType) => {
+    socket.emit("player:send_defend", {
+      roomId: roomState.roomId,
+      playerId,
+      units,
+      troopType,
+    });
+  };
+
+  const handleRecallDefenders = (units: number, troopType: TroopType) => {
+    socket.emit("player:recall_defenders", {
+      roomId: roomState.roomId,
+      playerId,
+      units,
+      troopType,
+    });
+  };
+
   const handleRecallTroops = (troopGroupId: string) => {
     socket.emit("player:recall_troops", {
       roomId: roomState.roomId,
@@ -1069,6 +1087,68 @@ export default function GameControls({
                   })}
                 </div>
               ))}
+            </div>
+
+            <hr className="section-divider" />
+
+            {/* Defend own city */}
+            <div className="target-list">
+              <div
+                style={{
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  color: "#3498db",
+                  marginBottom: 4,
+                }}
+              >
+                Defend City
+              </div>
+              {/* Deploy troops to defend */}
+              {TROOP_TYPES.map((type) => {
+                const atHome = me.militaryAtHome[type];
+                const defending = me.militaryDefending[type];
+                if (atHome === 0 && defending === 0) return null;
+                return (
+                  <div key={`defend-${type}`} className="attack-type-row">
+                    <span className="attack-type-label">
+                      {type.charAt(0).toUpperCase() + type.slice(1)} (
+                      {atHome} home, {defending} defending)
+                    </span>
+                    <div className="attack-amounts">
+                      {atHome > 0 &&
+                        (VALID_ATTACK_AMOUNTS as readonly number[]).map(
+                          (amount) => (
+                            <button
+                              key={`deploy-${amount}`}
+                              className="attack-amount-btn defend-amount-btn"
+                              onClick={() => handleSendDefend(amount, type)}
+                              disabled={atHome < amount || controlsDisabled}
+                            >
+                              +{amount}
+                            </button>
+                          ),
+                        )}
+                      {defending > 0 &&
+                        (VALID_ATTACK_AMOUNTS as readonly number[]).map(
+                          (amount) => (
+                            <button
+                              key={`recall-${amount}`}
+                              className="attack-amount-btn recall-amount-btn"
+                              onClick={() =>
+                                handleRecallDefenders(amount, type)
+                              }
+                              disabled={
+                                defending < amount || controlsDisabled
+                              }
+                            >
+                              -{amount}
+                            </button>
+                          ),
+                        )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <hr className="section-divider" />

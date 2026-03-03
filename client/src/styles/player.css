@@ -840,6 +840,24 @@
   background: rgba(46, 204, 113, 0.35) !important;
 }
 
+/* Defend troops (blue theme) */
+.defend-amount-btn {
+  background: rgba(52, 152, 219, 0.15) !important;
+  border-color: #3498db !important;
+}
+.defend-amount-btn:hover:not(:disabled) {
+  background: rgba(52, 152, 219, 0.35) !important;
+}
+
+/* Recall defenders (muted theme) */
+.recall-amount-btn {
+  background: rgba(149, 165, 166, 0.15) !important;
+  border-color: #95a5a6 !important;
+}
+.recall-amount-btn:hover:not(:disabled) {
+  background: rgba(149, 165, 166, 0.35) !important;
+}
+
 .section-divider {
   border: none;
   border-top: 1px solid rgba(255, 255, 255, 0.1);

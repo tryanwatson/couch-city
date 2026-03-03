@@ -363,7 +363,7 @@ function CityNode({
         const sw = 36;
         const sh = 44;
         const cp = TROOP_TYPES.reduce(
-          (s, t) => s + player.militaryAtHome[t] * COMBAT_POWER[t],
+          (s, t) => s + player.militaryDefending[t] * COMBAT_POWER[t],
           0,
         );
         const cpStr = String(cp);
@@ -1097,6 +1097,38 @@ export default function BattleMap({
             }
           />
         ))}
+
+      {/* Defending troops — stationed near own city */}
+      {players.map((player) => {
+        const defendingTypes = TROOP_TYPES.filter(
+          (t) => player.militaryDefending[t] > 0,
+        );
+        if (defendingTypes.length === 0 || !player.alive) return null;
+        return defendingTypes.map((type, i) => {
+          const angle = ((Math.PI * 2) / Math.max(defendingTypes.length, 1)) * i - Math.PI / 2;
+          const offset = 0.045;
+          const pos = {
+            x: player.x + Math.cos(angle) * offset,
+            y: player.y + Math.sin(angle) * offset,
+          };
+          return (
+            <TroopSprite
+              key={`defend-${player.playerId}-${type}`}
+              pos={pos}
+              units={player.militaryDefending[type]}
+              frameIndex={frameIndex}
+              animTime={animTime}
+              isAttacking={false}
+              isIdle={true}
+              facingLeft={false}
+              troopType={type}
+              playerColor={player.color}
+              statusIcon="🛡"
+              statusColor={player.color}
+            />
+          );
+        });
+      })}
 
       {/* Occupying siege troops — idle at standoff distance from target city, or on mine center */}
       {/* Filter out occupiers whose ID is still in troopsInTransit (they're animating arrival) */}
