@@ -985,38 +985,41 @@ export default function GameControls({
           className={`section-body${expandedSections.military ? "" : " collapsed"}`}
         >
           <div className="section-body-inner">
-            {/* Troop training — only unlocked types */}
-            <div className="upgrade-buttons">
+            {/* Troop training — all types, locked ones faded */}
+            <div className="troop-sections">
               {TROOP_TYPES.map((type) => {
                 const troopIndex = TROOP_TYPES.indexOf(type);
                 const isUnlocked =
                   troopIndex === 0 ||
                   me.upgradesCompleted.military >= troopIndex;
-                if (!isUnlocked) return null;
                 const config = TRAINING_CONFIG[type];
                 const count = me.militaryAtHome[type];
                 const canAfford =
                   me.materials >= config.materials && me.gold >= config.gold;
-                const canTrain = canAfford;
                 return (
-                  <button
+                  <div
                     key={type}
-                    className="upgrade-btn upgrade-military"
-                    onClick={() => handleSpendMilitary(type)}
-                    disabled={!canTrain || controlsDisabled}
-                    title={!canAfford ? "Not enough materials or gold" : ""}
+                    className={`troop-card${isUnlocked ? "" : " troop-card-locked"}`}
                   >
-                    <span className="upgrade-btn-title">
-                      Buy {type.charAt(0).toUpperCase() + type.slice(1)} (CP:
-                      {COMBAT_POWER[type]})
+                    <span className="troop-count">
+                      {isUnlocked ? count : "🔒"}
                     </span>
-                    <span className="upgrade-btn-cost">
-                      {config.materials} materials + {config.gold} gold
+                    <span className="troop-name">
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
                     </span>
-                    <span className="upgrade-btn-effect">
-                      +{config.troops} units | At home: {count}
-                    </span>
-                  </button>
+                    <span className="troop-cp">CP: {COMBAT_POWER[type]}</span>
+                    {isUnlocked && (
+                      <button
+                        className="troop-buy-btn"
+                        onClick={() => handleSpendMilitary(type)}
+                        disabled={!canAfford || controlsDisabled}
+                        title={!canAfford ? "Not enough materials or gold" : ""}
+                      >
+                        <span className="troop-buy-label">Buy +{config.troops}</span>
+                        <span className="troop-buy-cost">{config.materials}🪨 {config.gold}💰</span>
+                      </button>
+                    )}
+                  </div>
                 );
               })}
             </div>
