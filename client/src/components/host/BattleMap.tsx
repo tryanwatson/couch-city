@@ -1074,6 +1074,20 @@ export default function BattleMap({
         );
       })()}
 
+      {/* City images — rendered before troops so troops paint on top */}
+      {players.map((player) => {
+        const isUnderSiege = occupyingTroops.some(
+          (occ) => occ.targetPlayerId === player.playerId,
+        );
+        return (
+          <CityImageNode
+            key={player.playerId}
+            player={player}
+            isUnderSiege={isUnderSiege}
+          />
+        );
+      })}
+
       {/* Walking troops — sorted by Y for depth (lower on screen = closer to camera = rendered on top) */}
       {troopsInTransit
         .map((troop) => ({ troop, posData: troopPositions.get(troop.id) }))
@@ -1214,20 +1228,6 @@ export default function BattleMap({
             />
           );
         })}
-
-      {/* City images — rendered before troops so troops paint on top */}
-      {players.map((player) => {
-        const isUnderSiege = occupyingTroops.some(
-          (occ) => occ.targetPlayerId === player.playerId,
-        );
-        return (
-          <CityImageNode
-            key={player.playerId}
-            player={player}
-            isUnderSiege={isUnderSiege}
-          />
-        );
-      })}
 
       {/* Defending troops — rendered after city images but before info boxes */}
       {players.map((player) => {

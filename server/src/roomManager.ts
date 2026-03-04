@@ -40,6 +40,10 @@ import {
   PROMISED_LAND_Y,
   PROMISED_LAND_TRAVEL_TURNS,
   PROMISED_LAND_HOLD_TURNS,
+  PLAYER_POSITION_SLOTS,
+  PLAYER_SLOT_FILL_ORDER,
+  PLAYER_POSITION_RX,
+  PLAYER_POSITION_RY,
 } from '../../shared/constants';
 import { generateRoomCode } from './utils';
 
@@ -391,13 +395,15 @@ export function startGame(
 
   const playerList = Array.from(room.players.values());
 
-  // Assign colors and evenly-spaced positions around a circle
+  // Assign colors and positions around the Promised Land using fixed slots.
+  // First 4 players get cardinal directions (W/E/N/S), rest fill gaps as opposite pairs.
   playerList.forEach((player, index) => {
     player.color = PLAYER_COLORS[index % PLAYER_COLORS.length];
 
-    const angle = (2 * Math.PI * index) / playerList.length;
-    player.x = parseFloat((0.5 + 0.35 * Math.cos(angle)).toFixed(3));
-    player.y = parseFloat((0.5 + 0.35 * Math.sin(angle)).toFixed(3));
+    const slot = PLAYER_SLOT_FILL_ORDER[index % PLAYER_SLOT_FILL_ORDER.length];
+    const angle = (2 * Math.PI * slot) / PLAYER_POSITION_SLOTS;
+    player.x = parseFloat((PROMISED_LAND_X + PLAYER_POSITION_RX * Math.cos(angle)).toFixed(3));
+    player.y = parseFloat((PROMISED_LAND_Y + PLAYER_POSITION_RY * Math.sin(angle)).toFixed(3));
 
     player.food = INITIAL_FOOD;
     player.materials = INITIAL_MATERIALS;

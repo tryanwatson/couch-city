@@ -29,6 +29,8 @@ import {
   UPGRADE_PROGRESS,
 } from "../../../../shared/constants";
 import BuildProgressBlock from "./BuildProgressBlock";
+import TargetModal from "./TargetModal";
+import type { TargetInfo } from "./TargetModal";
 import { useHoldToRepeat } from "../../hooks/useHoldToRepeat";
 
 interface GameControlsProps {
@@ -61,6 +63,7 @@ export default function GameControls({
     Record<UpgradeCategory, number>
   >({ culture: 0, military: 0, farming: 0, mining: 0, trade: 0, defense: 0 });
   const [localGrowthMultiplier, setLocalGrowthMultiplier] = useState(1);
+  const [selectedTarget, setSelectedTarget] = useState<TargetInfo | null>(null);
   const [expandedSections, setExpandedSections] = useState<
     Record<SectionId, boolean>
   >({
@@ -1020,98 +1023,56 @@ export default function GameControls({
 
             <hr className="section-divider" />
 
-            {/* Attack targets */}
-            <div className="target-list">
-              {/* The Promised Land target */}
-              <div
-                className="target-row"
-                style={{ borderLeft: "3px solid #f4d03f" }}
+            {/* Compact target grid (Attack / Donate via modal) */}
+            <div className="target-grid">
+              {/* Promised Land */}
+              <button
+                className="target-card target-card-promised"
+                onClick={() =>
+                  setSelectedTarget({
+                    id: PROMISED_LAND_ID,
+                    name: "The Promised Land",
+                    color: "#f4d03f",
+                    isPromisedLand: true,
+                  })
+                }
+                disabled={controlsDisabled || totalMilitary === 0}
               >
-                <div className="target-info">
-                  <span
-                    className="target-color-dot"
-                    style={{ backgroundColor: "#f4d03f" }}
-                  />
-                  <span className="target-name">The Promised Land</span>
-                  <span className="target-hp-small">
-                    Hold {PROMISED_LAND_HOLD_TURNS} turns to win
-                  </span>
-                </div>
-                {TROOP_TYPES.map((type) => {
-                  const count = me.militaryAtHome[type];
-                  if (count === 0) return null;
-                  return (
-                    <div key={type} className="attack-type-row">
-                      <span className="attack-type-label">
-                        {type.charAt(0).toUpperCase() + type.slice(1)} ({count})
-                      </span>
-                      <div className="attack-amounts">
-                        {(VALID_ATTACK_AMOUNTS as readonly number[]).map(
-                          (amount) => (
-                            <button
-                              key={amount}
-                              className="attack-amount-btn"
-                              onClick={() =>
-                                handleSendAttack(PROMISED_LAND_ID, amount, type)
-                              }
-                              disabled={count < amount || controlsDisabled}
-                            >
-                              Send {amount}
-                            </button>
-                          ),
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                <span
+                  className="target-color-dot"
+                  style={{ backgroundColor: "#f4d03f" }}
+                />
+                <span className="target-card-name">The Promised Land</span>
+                <span className="target-card-detail">
+                  Hold {PROMISED_LAND_HOLD_TURNS} turns to win
+                </span>
+              </button>
 
               {/* Player targets */}
               {targets.map((target) => (
-                <div key={target.playerId} className="target-row">
-                  <div className="target-info">
-                    <span
-                      className="target-color-dot"
-                      style={{ backgroundColor: target.color }}
-                    />
-                    <span className="target-name">{target.name}</span>
-                    <span className="target-hp-small">
-                      {Math.ceil(target.hp)} HP
-                    </span>
-                  </div>
-                  {TROOP_TYPES.map((type) => {
-                    const count = me.militaryAtHome[type];
-                    if (count === 0) return null;
-                    return (
-                      <div key={type} className="attack-type-row">
-                        <span className="attack-type-label">
-                          {type.charAt(0).toUpperCase() + type.slice(1)} (
-                          {count})
-                        </span>
-                        <div className="attack-amounts">
-                          {(VALID_ATTACK_AMOUNTS as readonly number[]).map(
-                            (amount) => (
-                              <button
-                                key={amount}
-                                className="attack-amount-btn"
-                                onClick={() =>
-                                  handleSendAttack(
-                                    target.playerId,
-                                    amount,
-                                    type,
-                                  )
-                                }
-                                disabled={count < amount || controlsDisabled}
-                              >
-                                Send {amount}
-                              </button>
-                            ),
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <button
+                  key={target.playerId}
+                  className="target-card"
+                  onClick={() =>
+                    setSelectedTarget({
+                      id: target.playerId,
+                      name: target.name,
+                      color: target.color,
+                      hp: target.hp,
+                      isPromisedLand: false,
+                    })
+                  }
+                  disabled={controlsDisabled || totalMilitary === 0}
+                >
+                  <span
+                    className="target-color-dot"
+                    style={{ backgroundColor: target.color }}
+                  />
+                  <span className="target-card-name">{target.name}</span>
+                  <span className="target-card-detail">
+                    {Math.ceil(target.hp)} HP
+                  </span>
+                </button>
               ))}
             </div>
 
@@ -1178,71 +1139,6 @@ export default function GameControls({
             </div>
 
             <hr className="section-divider" />
-
-            {/* Donate troops */}
-            {targets.length > 0 && (
-              <div className="target-list">
-                <div
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    color: "#2ecc71",
-                    marginBottom: 4,
-                  }}
-                >
-                  Donate Troops
-                </div>
-                {targets.map((target) => (
-                  <div
-                    key={`donate-${target.playerId}`}
-                    className="target-row donate-target-row"
-                  >
-                    <div className="target-info">
-                      <span
-                        className="target-color-dot"
-                        style={{ backgroundColor: target.color }}
-                      />
-                      <span className="target-name">{target.name}</span>
-                      <span className="target-hp-small">
-                        {Math.ceil(target.hp)} HP
-                      </span>
-                    </div>
-                    {TROOP_TYPES.map((type) => {
-                      const count = me.militaryAtHome[type];
-                      if (count === 0) return null;
-                      return (
-                        <div key={type} className="attack-type-row">
-                          <span className="attack-type-label">
-                            {type.charAt(0).toUpperCase() + type.slice(1)} (
-                            {count})
-                          </span>
-                          <div className="attack-amounts">
-                            {(VALID_ATTACK_AMOUNTS as readonly number[]).map(
-                              (amount) => (
-                                <button
-                                  key={amount}
-                                  className="attack-amount-btn donate-amount-btn"
-                                  onClick={() =>
-                                    handleSendDonation(
-                                      target.playerId,
-                                      amount,
-                                      type,
-                                    )
-                                  }
-                                  disabled={count < amount || controlsDisabled}
-                                >
-                                  Give {amount}
-                                </button>
-                              ),
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-            )}
 
             <hr className="section-divider" />
 
@@ -1524,6 +1420,18 @@ export default function GameControls({
                 : "End Turn"}
         </button>
       </div>
+
+      {/* Target action modal (Attack / Donate) */}
+      {selectedTarget && (
+        <TargetModal
+          target={selectedTarget}
+          me={me}
+          controlsDisabled={controlsDisabled}
+          onAttack={handleSendAttack}
+          onDonate={handleSendDonation}
+          onClose={() => setSelectedTarget(null)}
+        />
+      )}
     </div>
   );
 }

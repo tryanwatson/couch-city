@@ -1650,7 +1650,204 @@
   flex-shrink: 0;
 }
 
+/* Compact Target Grid */
+.target-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.target-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--color-military-row);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-main);
+  color: var(--color-text);
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.target-card:hover:not(:disabled) {
+  background: rgba(200, 69, 85, 0.25);
+  border-color: var(--color-military-accent);
+}
+
+.target-card:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.target-card:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.target-card-promised {
+  grid-column: 1 / -1;
+  border-left: 3px solid #f4d03f;
+  background: rgba(244, 208, 63, 0.08);
+}
+
+.target-card-promised:hover:not(:disabled) {
+  background: rgba(244, 208, 63, 0.18);
+  border-color: #f4d03f;
+}
+
+.target-card-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.target-card-detail {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+/* Target Action Modal (bottom sheet) */
+.target-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.target-modal {
+  width: 100%;
+  max-width: 480px;
+  background: var(--color-surface);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.target-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.target-modal-name {
+  font-weight: 700;
+  font-size: 1.1rem;
+  flex: 1;
+}
+
+.target-modal-hp {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.target-modal-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-surface-light);
+  color: var(--color-text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.target-modal-close:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.target-modal-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--color-surface-light);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+}
+
+.target-modal-tab {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: var(--font-main);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.target-modal-tab.active {
+  background: var(--color-military-accent);
+  color: white;
+}
+
+.target-modal-tab:last-child.active {
+  background: #2ecc71;
+}
+
+.target-modal-troops {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.target-modal-troop-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--color-surface-light);
+  border-radius: var(--radius-sm);
+}
+
+.target-modal-troop-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.target-modal-troop-name {
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.target-modal-troop-count {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+.target-modal-amounts {
+  display: flex;
+  gap: 6px;
+}
+
+.target-modal-empty {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  padding: 16px 0;
+}
+
 @media (max-width: 380px) {
+  .target-grid {
+    grid-template-columns: 1fr;
+  }
+
   .stats-row {
     flex-wrap: wrap;
   }
