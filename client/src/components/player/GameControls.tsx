@@ -21,7 +21,6 @@ import {
   TROOP_TYPES,
   TRAINING_CONFIG,
   COMBAT_POWER,
-  VALID_ATTACK_AMOUNTS,
   PROMISED_LAND_ID,
   PROMISED_LAND_HOLD_TURNS,
   HP_REGEN_PERCENT,
@@ -1026,8 +1025,32 @@ export default function GameControls({
 
             <hr className="section-divider" />
 
-            {/* Compact target grid (Attack / Donate via modal) */}
+            {/* Compact target grid */}
             <div className="target-grid">
+              {/* Defend City */}
+              <button
+                className="target-card target-card-defend"
+                onClick={() =>
+                  setSelectedTarget({
+                    id: me.playerId,
+                    name: "Defend City",
+                    color: "#3498db",
+                    isPromisedLand: false,
+                    isDefend: true,
+                  })
+                }
+                disabled={controlsDisabled || totalMilitary === 0}
+              >
+                <span
+                  className="target-color-dot"
+                  style={{ backgroundColor: "#3498db" }}
+                />
+                <span className="target-card-name">Defend City</span>
+                <span className="target-card-detail">
+                  {Object.values(me.militaryDefending).reduce((s, n) => s + n, 0)} defending
+                </span>
+              </button>
+
               {/* Promised Land */}
               <button
                 className="target-card target-card-promised"
@@ -1077,68 +1100,6 @@ export default function GameControls({
                   </span>
                 </button>
               ))}
-            </div>
-
-            <hr className="section-divider" />
-
-            {/* Defend own city */}
-            <div className="target-list">
-              <div
-                style={{
-                  fontSize: "0.75rem",
-                  fontWeight: 600,
-                  color: "#3498db",
-                  marginBottom: 4,
-                }}
-              >
-                Defend City
-              </div>
-              {/* Deploy troops to defend */}
-              {TROOP_TYPES.map((type) => {
-                const atHome = me.militaryAtHome[type];
-                const defending = me.militaryDefending[type];
-                if (atHome === 0 && defending === 0) return null;
-                return (
-                  <div key={`defend-${type}`} className="attack-type-row">
-                    <span className="attack-type-label">
-                      {type.charAt(0).toUpperCase() + type.slice(1)} (
-                      {atHome} home, {defending} defending)
-                    </span>
-                    <div className="attack-amounts">
-                      {atHome > 0 &&
-                        (VALID_ATTACK_AMOUNTS as readonly number[]).map(
-                          (amount) => (
-                            <button
-                              key={`deploy-${amount}`}
-                              className="attack-amount-btn defend-amount-btn"
-                              onClick={() => handleSendDefend(amount, type)}
-                              disabled={atHome < amount || controlsDisabled}
-                            >
-                              +{amount}
-                            </button>
-                          ),
-                        )}
-                      {defending > 0 &&
-                        (VALID_ATTACK_AMOUNTS as readonly number[]).map(
-                          (amount) => (
-                            <button
-                              key={`recall-${amount}`}
-                              className="attack-amount-btn recall-amount-btn"
-                              onClick={() =>
-                                handleRecallDefenders(amount, type)
-                              }
-                              disabled={
-                                defending < amount || controlsDisabled
-                              }
-                            >
-                              -{amount}
-                            </button>
-                          ),
-                        )}
-                    </div>
-                  </div>
-                );
-              })}
             </div>
 
             <hr className="section-divider" />
@@ -1424,7 +1385,7 @@ export default function GameControls({
         </button>
       </div>
 
-      {/* Target action modal (Attack / Donate) */}
+      {/* Target action modal (Attack / Donate / Defend) */}
       {selectedTarget && (
         <TargetModal
           target={selectedTarget}
@@ -1432,6 +1393,8 @@ export default function GameControls({
           controlsDisabled={controlsDisabled}
           onAttack={handleSendAttack}
           onDonate={handleSendDonation}
+          onDefend={handleSendDefend}
+          onRecall={handleRecallDefenders}
           onClose={() => setSelectedTarget(null)}
         />
       )}
