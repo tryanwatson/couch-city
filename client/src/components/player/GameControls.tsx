@@ -1506,7 +1506,7 @@ export default function GameControls({
             if (unassigned > 0) {
               if (
                 !window.confirm(
-                  `You have ${unassigned} unallocated population. Are you sure you want to end your turn?`,
+                  `You have ${unassigned} unallocated population. They will be assigned to farming. End turn?`,
                 )
               )
                 return;

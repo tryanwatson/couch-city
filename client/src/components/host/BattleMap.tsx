@@ -439,17 +439,46 @@ function CityInfoNode({ player }: { player: CityPlayerInfo }) {
       >
         {Math.ceil(player.hp)}/{player.maxHp}
       </text>
-      {/* Combat power */}
-      <text
-        x={cx + BAR_W / 2 + 16}
-        y={BOX_Y + 34}
-        textAnchor="middle"
-        fontSize={12}
-        fontWeight="800"
-        fill="#f0c040"
-      >
-        ⚔{cp}
-      </text>
+      {/* Combat power shield */}
+      {(() => {
+        const shieldCx = BOX_X + BOX_W + 30;
+        const shieldCy = BOX_Y + 30;
+        const sw = 36;
+        const sh = 44;
+        const cpStr = String(cp);
+        const fs =
+          cpStr.length <= 2
+            ? 18
+            : cpStr.length <= 3
+              ? 15
+              : cpStr.length <= 4
+                ? 12
+                : 10;
+        return (
+          <>
+            <path
+              d={`M${shieldCx},${shieldCy - sh / 2}
+                  l${sw / 2},0 l${sw * 0.08},${sh * 0.15}
+                  l0,${sh * 0.45} l-${sw / 2 + sw * 0.08},${sh * 0.4}
+                  l-${sw / 2 + sw * 0.08},-${sh * 0.4}
+                  l0,-${sh * 0.45} l${sw * 0.08},-${sh * 0.15} z`}
+              fill="#3a3a3a"
+              stroke="black"
+              strokeWidth={2}
+            />
+            <text
+              x={shieldCx}
+              y={shieldCy + fs * 0.2}
+              textAnchor="middle"
+              fontSize={fs}
+              fontWeight="800"
+              fill="#f0c040"
+            >
+              {cp}
+            </text>
+          </>
+        );
+      })()}
       {/* Population */}
       <text
         x={cx}

@@ -360,6 +360,13 @@ export function disconnectSocket(socketId: string): { roomId: string; wasHost: b
         // Auto-end turn for disconnected player during planning
         if (room.phase === 'playing' && room.subPhase === 'planning' && player.alive && !player.endedTurn) {
           player.endedTurn = true;
+          // Auto-allocate idle civilians to farming
+          const civilians = Math.max(0, Math.floor(player.population));
+          const allocated = player.farmers + player.miners + player.merchants + totalBuilders(player.builders);
+          const idle = civilians - allocated;
+          if (idle > 0) {
+            player.farmers += idle;
+          }
           const alivePlayers = Array.from(room.players.values()).filter(p => p.alive);
           const allEnded = alivePlayers.every(p => p.endedTurn);
           if (allEnded) {
@@ -445,6 +452,14 @@ export function endTurn(
   if (player.endedTurn) return { error: 'Already ended turn' };
 
   player.endedTurn = true;
+
+  // Auto-allocate idle civilians to farming
+  const civilians = Math.max(0, Math.floor(player.population));
+  const allocated = player.farmers + player.miners + player.merchants + totalBuilders(player.builders);
+  const idle = civilians - allocated;
+  if (idle > 0) {
+    player.farmers += idle;
+  }
 
   // Check if all alive players have ended their turn
   const alivePlayers = Array.from(room.players.values()).filter(p => p.alive);
