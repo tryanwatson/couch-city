@@ -1213,11 +1213,9 @@ export function unlockUpgrade(
   const maxLevel = UPGRADE_PROGRESS[category].length;
   if (player.upgradeLevel[category] >= maxLevel) return { error: `Maximum ${category} level reached` };
   const cost = getUpgradeUnlockCost(category, player.upgradeLevel[category]);
-  if (player.materials < cost.materials) return { error: 'Not enough materials' };
-  if (player.gold < cost.gold) return { error: 'Not enough gold' };
+  if (player.materials < cost) return { error: 'Not enough materials' };
 
-  player.materials -= cost.materials;
-  player.gold -= cost.gold;
+  player.materials -= cost;
   player.upgradeLevel[category] += 1;
 
   return { room };
@@ -1244,11 +1242,10 @@ export function spendMilitary(
     return { error: `${troopType} not yet unlocked` };
   }
 
-  if (player.materials < config.materials || player.gold < config.gold) {
-    return { error: 'Not enough materials or gold' };
+  if (player.gold < config.gold) {
+    return { error: 'Not enough gold' };
   }
 
-  player.materials -= config.materials;
   player.gold -= config.gold;
   player.militaryAtHome[troopType] += config.troops;
 

@@ -625,7 +625,7 @@ export default function GameControls({
               unlockLabel="📜 Unlock Farming Upgrade"
               effectText={
                 <>
-                  Yield: {farmingMult}x → {farmingMult + 1}x
+                  🌾 Yield: {farmingMult}x → {farmingMult + 1}x
                 </>
               }
               explainerText={
@@ -690,7 +690,7 @@ export default function GameControls({
             <div className="resource-row">
               <span className="resource-label">Per miner</span>
               <span className="resource-rate">
-                +{MATERIALS_PER_MINER * miningMult} materials/turn
+                +{MATERIALS_PER_MINER * miningMult}🪨/turn
               </span>
             </div>
 
@@ -708,7 +708,7 @@ export default function GameControls({
               unlockLabel="📜 Unlock Mining Upgrade"
               effectText={
                 <>
-                  Yield: {miningMult}x → {miningMult + 1}x
+                  🪨 Yield: {miningMult}x → {miningMult + 1}x
                 </>
               }
               explainerText={
@@ -769,7 +769,7 @@ export default function GameControls({
             <div className="resource-row">
               <span className="resource-label">Per merchant</span>
               <span className="resource-rate">
-                +{GOLD_PER_MERCHANT * tradeMult} gold/turn
+                +{GOLD_PER_MERCHANT * tradeMult}💰/turn
               </span>
             </div>
 
@@ -787,7 +787,7 @@ export default function GameControls({
               unlockLabel="📜 Unlock Trade Upgrade"
               effectText={
                 <>
-                  Yield: {tradeMult}x → {tradeMult + 1}x
+                  💰 Yield: {tradeMult}x → {tradeMult + 1}x
                 </>
               }
               explainerText={
@@ -982,8 +982,7 @@ export default function GameControls({
                   troopIndex === me.upgradesCompleted.military + 1;
                 const config = TRAINING_CONFIG[type];
                 const count = me.militaryAtHome[type];
-                const canAfford =
-                  me.materials >= config.materials && me.gold >= config.gold;
+                const canAfford = me.gold >= config.gold;
 
                 // Build slot state for the next-to-unlock card
                 const hasBuildSlot =
@@ -1011,13 +1010,13 @@ export default function GameControls({
                         className="troop-buy-btn"
                         onClick={() => handleSpendMilitary(type)}
                         disabled={!canAfford || controlsDisabled}
-                        title={!canAfford ? "Not enough materials or gold" : ""}
+                        title={!canAfford ? "Not enough 💰" : ""}
                       >
                         <span className="troop-buy-label">
-                          Buy +{config.troops}
+                          Buy {config.troops}
                         </span>
                         <span className="troop-buy-cost">
-                          {config.materials}🪨 {config.gold}💰
+                          {config.gold}💰
                         </span>
                       </button>
                     )}
@@ -1027,12 +1026,11 @@ export default function GameControls({
                         <button
                           className="troop-buy-btn troop-unlock-btn"
                           onClick={() => handleUnlockUpgrade("military")}
-                          disabled={me.materials < milCost.materials || me.gold < milCost.gold || controlsDisabled}
+                          disabled={me.materials < milCost || controlsDisabled}
                         >
                           <span className="troop-buy-label">Unlock</span>
                           <span className="troop-buy-cost">
-                            {milCost.materials}🪨{" "}
-                            {milCost.gold}💰
+                            {milCost}🪨
                           </span>
                         </button>
                       );

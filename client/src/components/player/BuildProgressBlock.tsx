@@ -11,7 +11,7 @@ interface BuildProgressBlockProps {
   onUnlockUpgrade: (category: UpgradeCategory) => void;
   unassigned: number;
   controlsDisabled: boolean;
-  unlockCost: { materials: number; gold: number };
+  unlockCost: number;
   progressBarClass?: string;
   unlockBtnClass?: string;
   buildingLabel?: string;
@@ -41,7 +41,7 @@ export default function BuildProgressBlock({
   const completed = me.upgradesCompleted[category];
   const hasBuildSlot = completed < me.upgradeLevel[category];
   const atMax = completed >= UPGRADE_PROGRESS[category].length;
-  const canAfford = !atMax && me.upgradeLevel[category] < UPGRADE_PROGRESS[category].length && me.materials >= unlockCost.materials && me.gold >= unlockCost.gold;
+  const canAfford = !atMax && me.upgradeLevel[category] < UPGRADE_PROGRESS[category].length && me.materials >= unlockCost;
 
   const required = hasBuildSlot ? UPGRADE_PROGRESS[category][completed] : 0;
   const remaining = required - me.upgradeProgress[category];
@@ -110,11 +110,11 @@ export default function BuildProgressBlock({
         className={`upgrade-btn ${unlockBtnClass}`}
         onClick={() => onUnlockUpgrade(category)}
         disabled={!canAfford || controlsDisabled}
-        title={`Costs ${unlockCost.materials} materials + ${unlockCost.gold} gold`}
+        title={`${unlockCost}🪨`}
       >
         <span className="upgrade-btn-title">{unlockLabel}</span>
-        <span className="upgrade-btn-cost">{unlockCost.materials} materials + {unlockCost.gold} gold</span>
         <span className="upgrade-btn-effect">{effectText}</span>
+        <span className="upgrade-btn-cost">{unlockCost}🪨</span>
       </button>
     </div>
   );

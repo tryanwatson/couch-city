@@ -23,13 +23,10 @@ import type { UpgradeCategory } from "./types";
 export function getUpgradeUnlockCost(
   category: UpgradeCategory,
   level: number,
-): { materials: number; gold: number } {
+): number {
   const progressArr = UPGRADE_PROGRESS[category];
   const ratio = progressArr[Math.min(level, progressArr.length - 1)] / progressArr[0];
-  return {
-    materials: Math.round(10 * ratio),
-    gold: Math.round(15 * ratio),
-  };
+  return Math.round(25 * ratio);
 }
 
 export const UPGRADE_PROGRESS: Record<UpgradeCategory, readonly number[]> = {
@@ -75,12 +72,12 @@ export const COMBAT_POWER: Record<TroopType, number> = {
 
 export const TRAINING_CONFIG: Record<
   TroopType,
-  { materials: number; gold: number; troops: number }
+  { gold: number; troops: number }
 > = {
-  warrior:  { materials: 10,  gold: 10,  troops: 10 },
-  cavalry:  { materials: 25,  gold: 25,  troops: 5 },
-  rifleman: { materials: 50,  gold: 75,  troops: 3 },
-  truck:    { materials: 100, gold: 200, troops: 1 },
+  warrior:  { gold: 20,  troops: 10 },
+  cavalry:  { gold: 50,  troops: 5 },
+  rifleman: { gold: 125, troops: 3 },
+  truck:    { gold: 300, troops: 1 },
 };
 
 export const ZERO_MILITARY: Record<TroopType, number> = {
