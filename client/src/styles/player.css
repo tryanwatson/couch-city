@@ -1916,8 +1916,8 @@
   gap: 10px;
   width: 100%;
   padding: 12px 14px;
-  background: var(--color-surface);
-  border: 1px solid transparent;
+  background: var(--color-surface-light);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-family: var(--font-main);
@@ -2091,6 +2091,49 @@
 }
 .unstage-amount-btn:hover:not(:disabled) {
   background: rgba(149, 165, 166, 0.35) !important;
+}
+
+/* Ensure modal stage buttons have visible borders */
+.target-modal .attack-amount-btn {
+  background: rgba(200, 69, 85, 0.15);
+  border: 1px solid rgba(200, 69, 85, 0.6);
+}
+.target-modal .attack-amount-btn:hover:not(:disabled) {
+  background: rgba(200, 69, 85, 0.35);
+  border-color: #c84555;
+}
+.target-modal .donate-amount-btn {
+  background: rgba(46, 204, 113, 0.15) !important;
+  border-color: rgba(46, 204, 113, 0.6) !important;
+}
+.target-modal .donate-amount-btn:hover:not(:disabled) {
+  background: rgba(46, 204, 113, 0.35) !important;
+  border-color: #2ecc71 !important;
+}
+.target-modal .defend-amount-btn {
+  background: rgba(52, 152, 219, 0.15) !important;
+  border-color: rgba(52, 152, 219, 0.6) !important;
+}
+.target-modal .defend-amount-btn:hover:not(:disabled) {
+  background: rgba(52, 152, 219, 0.35) !important;
+  border-color: #3498db !important;
+}
+.target-modal .recall-amount-btn {
+  background: rgba(149, 165, 166, 0.15) !important;
+  border-color: rgba(149, 165, 166, 0.6) !important;
+}
+.target-modal .recall-amount-btn:hover:not(:disabled) {
+  background: rgba(149, 165, 166, 0.35) !important;
+  border-color: #95a5a6 !important;
+}
+
+/* Defend confirm button (blue theme) */
+.defend-send-btn {
+  background: #3498db;
+  border-color: #3498db;
+}
+.defend-send-btn:hover:not(:disabled) {
+  background: #2980b9;
 }
 
 .target-modal-footer {

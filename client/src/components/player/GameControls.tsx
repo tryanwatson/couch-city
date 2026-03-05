@@ -1161,7 +1161,7 @@ export default function GameControls({
                 }
                 disabled={controlsDisabled || totalMilitary === 0}
               >
-                <span className="military-action-icon">⭐</span>
+                <span className="military-action-icon">👑</span>
                 <span className="military-action-label">Promised Land</span>
               </button>
             </div>

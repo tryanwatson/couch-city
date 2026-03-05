@@ -56,6 +56,10 @@ export default function TargetModal({
   const [staged, setStaged] = useState<Record<TroopType, number>>({
     ...ZERO_MILITARY,
   });
+  // Defend delta: positive = deploy from home, negative = recall from defending
+  const [defendDelta, setDefendDelta] = useState<Record<TroopType, number>>({
+    ...ZERO_MILITARY,
+  });
 
   // Clamp staged if server state changes (e.g. troops killed mid-planning)
   useEffect(() => {
@@ -71,6 +75,25 @@ export default function TargetModal({
       return changed ? next : prev;
     });
   }, [me.militaryAtHome]);
+
+  // Clamp defend delta if server state changes
+  useEffect(() => {
+    setDefendDelta((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const t of TROOP_TYPES) {
+        if (next[t] > 0 && next[t] > me.militaryAtHome[t]) {
+          next[t] = me.militaryAtHome[t];
+          changed = true;
+        }
+        if (next[t] < 0 && Math.abs(next[t]) > me.militaryDefending[t]) {
+          next[t] = -me.militaryDefending[t];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [me.militaryAtHome, me.militaryDefending]);
 
   // Derived values
   const effectiveAvailable = (type: TroopType) =>
@@ -124,8 +147,58 @@ export default function TargetModal({
       (t) => me.militaryAtHome[t] > 0 || me.militaryDefending[t] > 0,
     );
 
+    const currentDefendingCP = TROOP_TYPES.reduce(
+      (sum, t) => sum + me.militaryDefending[t] * COMBAT_POWER[t],
+      0,
+    );
+
+    const handleDefendStage = (amount: number, troopType: TroopType) => {
+      const maxDeploy = me.militaryAtHome[troopType] - Math.max(0, defendDelta[troopType]);
+      const clamped = Math.min(amount, maxDeploy);
+      if (clamped <= 0) return;
+      setDefendDelta((prev) => ({ ...prev, [troopType]: prev[troopType] + clamped }));
+    };
+
+    const handleDefendUnstage = (amount: number, troopType: TroopType) => {
+      const effectiveDef = me.militaryDefending[troopType] + defendDelta[troopType];
+      const clamped = Math.min(amount, effectiveDef);
+      if (clamped <= 0) return;
+      setDefendDelta((prev) => ({ ...prev, [troopType]: prev[troopType] - clamped }));
+    };
+
+    const totalDeploying = TROOP_TYPES.reduce(
+      (sum, t) => sum + Math.max(0, defendDelta[t]),
+      0,
+    );
+    const totalRecalling = TROOP_TYPES.reduce(
+      (sum, t) => sum + Math.abs(Math.min(0, defendDelta[t])),
+      0,
+    );
+    const netDeltaCP = TROOP_TYPES.reduce(
+      (sum, t) => sum + defendDelta[t] * COMBAT_POWER[t],
+      0,
+    );
+    const hasDefendChanges = totalDeploying > 0 || totalRecalling > 0;
+
+    const handleDefendCommit = () => {
+      for (const troopType of TROOP_TYPES) {
+        if (defendDelta[troopType] > 0) {
+          onDefend(defendDelta[troopType], troopType);
+        } else if (defendDelta[troopType] < 0) {
+          onRecall(Math.abs(defendDelta[troopType]), troopType);
+        }
+      }
+      setDefendDelta({ ...ZERO_MILITARY });
+      onClose();
+    };
+
+    const handleDefendCancel = () => {
+      setDefendDelta({ ...ZERO_MILITARY });
+      onClose();
+    };
+
     return (
-      <div className="target-modal-backdrop" onClick={onClose}>
+      <div className="target-modal-backdrop" onClick={handleDefendCancel}>
         <div className="target-modal" onClick={(e) => e.stopPropagation()}>
           <div className="target-modal-header">
             <span
@@ -133,7 +206,10 @@ export default function TargetModal({
               style={{ backgroundColor: target.color }}
             />
             <span className="target-modal-name">{target.name}</span>
-            <button className="target-modal-close" onClick={onClose}>
+            <span className="target-modal-hp">
+              Defending: {currentDefendingCP} CP
+            </span>
+            <button className="target-modal-close" onClick={handleDefendCancel}>
               ✕
             </button>
           </div>
@@ -143,8 +219,9 @@ export default function TargetModal({
               <div className="target-modal-empty">No troops available</div>
             )}
             {defendTypes.map((type) => {
-              const atHome = me.militaryAtHome[type];
-              const defending = me.militaryDefending[type];
+              const delta = defendDelta[type];
+              const effectiveHome = me.militaryAtHome[type] - Math.max(0, delta);
+              const effectiveDefending = me.militaryDefending[type] + delta;
               return (
                 <div key={type} className="target-modal-troop-row">
                   <div className="target-modal-troop-info">
@@ -152,31 +229,36 @@ export default function TargetModal({
                       {type.charAt(0).toUpperCase() + type.slice(1)}
                     </span>
                     <span className="target-modal-troop-count">
-                      {atHome} home, {defending} defending
+                      {effectiveHome} home, {effectiveDefending} defending
+                      {delta !== 0 && (
+                        <span className="staged-count">
+                          {" "}· {delta > 0 ? `+${delta}` : delta} staged
+                        </span>
+                      )}
                     </span>
                   </div>
                   <div className="target-modal-amounts">
                     {(VALID_ATTACK_AMOUNTS as readonly number[]).map((amount) =>
-                      amount <= atHome ? (
+                      amount <= effectiveDefending ? (
                         <button
-                          key={`deploy-${amount}`}
-                          className="attack-amount-btn defend-amount-btn"
-                          onClick={() => onDefend(amount, type)}
+                          key={`recall-${amount}`}
+                          className="attack-amount-btn recall-amount-btn"
+                          onClick={() => handleDefendUnstage(amount, type)}
                           disabled={controlsDisabled}
                         >
-                          +{amount}
+                          -{amount}
                         </button>
                       ) : null,
                     )}
                     {(VALID_ATTACK_AMOUNTS as readonly number[]).map((amount) =>
-                      amount <= defending ? (
+                      amount <= effectiveHome ? (
                         <button
-                          key={`recall-${amount}`}
-                          className="attack-amount-btn recall-amount-btn"
-                          onClick={() => onRecall(amount, type)}
+                          key={`deploy-${amount}`}
+                          className="attack-amount-btn defend-amount-btn"
+                          onClick={() => handleDefendStage(amount, type)}
                           disabled={controlsDisabled}
                         >
-                          -{amount}
+                          +{amount}
                         </button>
                       ) : null,
                     )}
@@ -184,6 +266,35 @@ export default function TargetModal({
                 </div>
               );
             })}
+          </div>
+
+          <div className="target-modal-footer">
+            <div className="target-modal-staging-summary">
+              <span className="staging-total-label">
+                {totalDeploying > 0 && `Deploy ${totalDeploying}`}
+                {totalDeploying > 0 && totalRecalling > 0 && ", "}
+                {totalRecalling > 0 && `Recall ${totalRecalling}`}
+                {!hasDefendChanges && "No changes"}
+              </span>
+              <span className="staging-total-value">
+                {netDeltaCP >= 0 ? "+" : ""}{netDeltaCP} CP
+              </span>
+            </div>
+            <div className="target-modal-footer-actions">
+              <button
+                className="target-modal-cancel-btn"
+                onClick={handleDefendCancel}
+              >
+                Cancel
+              </button>
+              <button
+                className="target-modal-send-btn defend-send-btn"
+                onClick={handleDefendCommit}
+                disabled={!hasDefendChanges || controlsDisabled}
+              >
+                Confirm
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -236,9 +347,7 @@ export default function TargetModal({
   return (
     <div
       className="target-modal-backdrop"
-      onClick={() => {
-        if (!hasStagedTroops) onClose();
-      }}
+      onClick={handleCancel}
     >
       <div className="target-modal" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
@@ -314,33 +423,31 @@ export default function TargetModal({
         </div>
 
         {/* Staging footer */}
-        {hasStagedTroops && (
-          <div className="target-modal-footer">
-            <div className="target-modal-staging-summary">
-              <span className="staging-total-label">
-                {actionLabel} total:
-              </span>
-              <span className="staging-total-value">
-                {totalStagedUnits} units · {totalStagedCP} CP
-              </span>
-            </div>
-            <div className="target-modal-footer-actions">
-              <button
-                className="target-modal-cancel-btn"
-                onClick={handleCancel}
-              >
-                Cancel
-              </button>
-              <button
-                className={`target-modal-send-btn${isAllianceMode ? " donate-send-btn" : ""}`}
-                onClick={handleCommit}
-                disabled={controlsDisabled}
-              >
-                {sendLabel}
-              </button>
-            </div>
+        <div className="target-modal-footer">
+          <div className="target-modal-staging-summary">
+            <span className="staging-total-label">
+              {actionLabel} total:
+            </span>
+            <span className="staging-total-value">
+              {totalStagedUnits} units · {totalStagedCP} CP
+            </span>
           </div>
-        )}
+          <div className="target-modal-footer-actions">
+            <button
+              className="target-modal-cancel-btn"
+              onClick={handleCancel}
+            >
+              Cancel
+            </button>
+            <button
+              className={`target-modal-send-btn${isAllianceMode ? " donate-send-btn" : ""}`}
+              onClick={handleCommit}
+              disabled={!hasStagedTroops || controlsDisabled}
+            >
+              {sendLabel}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
