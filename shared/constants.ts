@@ -73,13 +73,6 @@ export const TRAINING_CONFIG: Record<
   truck:    { materials: 100, gold: 200, troops: 1 },
 };
 
-export const INITIAL_MILITARY: Record<TroopType, number> = {
-  warrior: 0,
-  cavalry: 0,
-  rifleman: 0,
-  truck: 0,
-};
-
 export const ZERO_MILITARY: Record<TroopType, number> = {
   warrior: 0,
   cavalry: 0,
@@ -106,9 +99,6 @@ export function troopGroupRadius(units: number): number {
   const cluster = units <= 1 ? 0 : 15 + Math.sqrt(units) * 8;
   return (cluster + 32) / 1000; // 32 = half of 64px sprite display size
 }
-
-// Field combat (opposing troops collide mid-map) — resolved instantly per turn
-export const FIELD_COMBAT_INSTANT_RATIO = 0.2; // power ratio below this → instant resolve
 
 // Field combat animation phase fractions (of RESOLVING_PHASE_DURATION_MS)
 export const FIELD_COMBAT_WALK_FRAC = 0.3; // 1500ms — walk to collision point
@@ -235,3 +225,6 @@ export const PLAYER_SLOT_FILL_ORDER: readonly number[] = [
 // Oval radii for player placement (equal = circle, different = oval)
 export const PLAYER_POSITION_RX = 0.35;
 export const PLAYER_POSITION_RY = 0.35;
+
+/** Diameter of the player placement circle — used to normalize distance-based travel time. */
+export const PLAYER_PLACEMENT_DIAMETER = PLAYER_POSITION_RX + PLAYER_POSITION_RY;

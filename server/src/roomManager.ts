@@ -20,7 +20,7 @@ import {
   yieldMultiplier,
   PROGRESS_PER_BUILDER,
   CULTURE_WIN_THRESHOLD,
-  INITIAL_MILITARY,
+
   ZERO_MILITARY,
   TROOP_TYPES,
   COMBAT_POWER,
@@ -43,6 +43,7 @@ import {
   PLAYER_SLOT_FILL_ORDER,
   PLAYER_POSITION_RX,
   PLAYER_POSITION_RY,
+  PLAYER_PLACEMENT_DIAMETER,
 } from '../../shared/constants';
 import { generateRoomCode } from './utils';
 
@@ -128,6 +129,39 @@ function resolveMultiTypeCombat(
   return { survivorsA: { ...ZERO_MILITARY }, survivorsB: { ...ZERO_MILITARY } };
 }
 
+/** Distribute defender survivors proportionally between militaryDefending and near-home transit troops. */
+function applyDefenderSurvivors(
+  defender: ServerCityPlayer,
+  defenderForce: Record<TroopType, number>,
+  survivors: Record<TroopType, number>,
+  nearHomeTroops: TroopGroup[]
+): void {
+  for (const type of TROOP_TYPES) {
+    const totalOfType = defenderForce[type];
+    if (totalOfType === 0) continue;
+    const survivalRatio = survivors[type] / totalOfType;
+    defender.militaryDefending[type] = Math.floor(defender.militaryDefending[type] * survivalRatio);
+    for (const tg of nearHomeTroops) {
+      if (tg.troopType === type) {
+        tg.units = Math.floor(tg.units * survivalRatio);
+      }
+    }
+  }
+}
+
+/** Distribute attacker/occupier survivors proportionally across TroopGroups. */
+function applyAttackerSurvivors(
+  groups: TroopGroup[],
+  pooledForce: Record<TroopType, number>,
+  survivors: Record<TroopType, number>
+): void {
+  for (const tg of groups) {
+    const totalOfType = pooledForce[tg.troopType];
+    if (totalOfType === 0) { tg.units = 0; continue; }
+    tg.units = Math.floor(survivors[tg.troopType] * (tg.units / totalOfType));
+  }
+}
+
 /** Collect transit troops owned by defender within 1 turn of their home city. */
 function gatherNearHomeTroops(room: ServerRoom, defenderId: string): TroopGroup[] {
   const nearHome: TroopGroup[] = [];
@@ -149,8 +183,69 @@ function gatherNearHomeTroops(room: ServerRoom, defenderId: string): TroopGroup[
   return nearHome;
 }
 
-/** Add surviving attackers to the occupying troops pool at a city. */
-function mergeIntoCityOccupiers(room: ServerRoom, tg: TroopGroup): void {
+/** Handle all cleanup when a city dies: wipe military, remove dead player's
+ *  transit/occupying troops, send occupiers at the dead city home. */
+function handleCityDeath(
+  room: ServerRoom,
+  defender: ServerCityPlayer,
+  extraReturnGroups?: TroopGroup[]
+): void {
+  defender.hp = 0;
+  defender.alive = false;
+  for (const type of TROOP_TYPES) {
+    defender.militaryAtHome[type] = 0;
+    defender.militaryDefending[type] = 0;
+  }
+  // Remove transit troops owned by dead player
+  room.troopsInTransit = room.troopsInTransit.filter(
+    t => t.attackerPlayerId !== defender.playerId
+  );
+  // Remove occupying troops owned by dead player at other cities
+  room.occupyingTroops = room.occupyingTroops.filter(
+    occ => occ.attackerPlayerId !== defender.playerId
+  );
+  // Surviving occupiers at this city travel home
+  const occupiersHere = room.occupyingTroops.filter(
+    occ => occ.targetPlayerId === defender.playerId && occ.units > 0
+  );
+  for (const occ of occupiersHere) {
+    room.troopsInTransit.push({
+      id: occ.id + '-return',
+      attackerPlayerId: occ.attackerPlayerId,
+      targetPlayerId: occ.attackerPlayerId,
+      troopType: occ.troopType,
+      units: occ.units,
+      turnsRemaining: TROOP_TRAVEL_TURNS,
+      totalTurns: TROOP_TRAVEL_TURNS,
+      startX: defender.x,
+      startY: defender.y,
+    });
+  }
+  room.occupyingTroops = room.occupyingTroops.filter(
+    occ => occ.targetPlayerId !== defender.playerId
+  );
+  // Send extra groups home (e.g. arriving attackers when city dies on arrival)
+  if (extraReturnGroups) {
+    for (const tg of extraReturnGroups) {
+      if (tg.units > 0) {
+        room.troopsInTransit.push({
+          id: tg.id + '-return',
+          attackerPlayerId: tg.attackerPlayerId,
+          targetPlayerId: tg.attackerPlayerId,
+          troopType: tg.troopType,
+          units: tg.units,
+          turnsRemaining: TROOP_TRAVEL_TURNS,
+          totalTurns: TROOP_TRAVEL_TURNS,
+          startX: defender.x,
+          startY: defender.y,
+        });
+      }
+    }
+  }
+}
+
+/** Add surviving attackers to the occupying troops pool. */
+function mergeIntoOccupiers(room: ServerRoom, tg: TroopGroup): void {
   const existing = room.occupyingTroops.find(
     occ => occ.attackerPlayerId === tg.attackerPlayerId
       && occ.targetPlayerId === tg.targetPlayerId
@@ -341,7 +436,7 @@ export function startGame(
     player.miners = 0;
     player.merchants = 0;
     player.growthMultiplier = 1;
-    player.militaryAtHome = { ...INITIAL_MILITARY };
+    player.militaryAtHome = { ...ZERO_MILITARY };
     player.militaryDefending = { ...ZERO_MILITARY };
     player.population = INITIAL_POPULATION;
     player.culture = 0;
@@ -742,27 +837,6 @@ function detectFieldCollisions(room: ServerRoom): void {
 // Combat resolution
 // ============================================================
 
-function mergeIntoOccupiers(room: ServerRoom, tg: TroopGroup): void {
-  const existing = room.occupyingTroops.find(
-    occ => occ.attackerPlayerId === tg.attackerPlayerId
-      && occ.targetPlayerId === PROMISED_LAND_ID
-      && occ.troopType === tg.troopType
-  );
-  if (existing) {
-    existing.units += tg.units;
-  } else {
-    room.occupyingTroops.push({
-      id: tg.id,
-      attackerPlayerId: tg.attackerPlayerId,
-      targetPlayerId: PROMISED_LAND_ID,
-      troopType: tg.troopType,
-      units: tg.units,
-      turnsRemaining: 0,
-      totalTurns: 0,
-    });
-  }
-}
-
 function resolveMineCombat(room: ServerRoom, arrivingMineGroups: TroopGroup[]): void {
   // Pool all troops at the mine per player (existing occupiers + new arrivals)
   const playerGroups = new Map<string, {
@@ -907,56 +981,7 @@ function resolveCombatBatched(room: ServerRoom, targetId: string, attackGroups: 
 
   // === STEP 2: Check if city dies from initial damage ===
   if (defender.hp <= 0) {
-    defender.hp = 0;
-    defender.alive = false;
-    for (const type of TROOP_TYPES) {
-      defender.militaryAtHome[type] = 0;
-      defender.militaryDefending[type] = 0;
-    }
-    // Remove transit troops owned by dead player
-    room.troopsInTransit = room.troopsInTransit.filter(
-      t => t.attackerPlayerId !== defender.playerId
-    );
-    // Remove occupying troops owned by dead player at other cities
-    room.occupyingTroops = room.occupyingTroops.filter(
-      occ => occ.attackerPlayerId !== defender.playerId
-    );
-    // Surviving occupiers at this city travel home
-    const occupiersHere = room.occupyingTroops.filter(
-      occ => occ.targetPlayerId === targetId && occ.units > 0
-    );
-    for (const occ of occupiersHere) {
-      room.troopsInTransit.push({
-        id: occ.id + '-return',
-        attackerPlayerId: occ.attackerPlayerId,
-        targetPlayerId: occ.attackerPlayerId,
-        troopType: occ.troopType,
-        units: occ.units,
-        turnsRemaining: TROOP_TRAVEL_TURNS,
-        totalTurns: TROOP_TRAVEL_TURNS,
-        startX: defender.x,
-        startY: defender.y,
-      });
-    }
-    room.occupyingTroops = room.occupyingTroops.filter(
-      occ => occ.targetPlayerId !== targetId
-    );
-    // Attackers also go home (city is dead, nothing to occupy)
-    for (const tg of attackGroups) {
-      if (tg.units > 0) {
-        room.troopsInTransit.push({
-          id: tg.id + '-return',
-          attackerPlayerId: tg.attackerPlayerId,
-          targetPlayerId: tg.attackerPlayerId,
-          troopType: tg.troopType,
-          units: tg.units,
-          turnsRemaining: TROOP_TRAVEL_TURNS,
-          totalTurns: TROOP_TRAVEL_TURNS,
-          startX: defender.x,
-          startY: defender.y,
-        });
-      }
-    }
+    handleCityDeath(room, defender, attackGroups);
     return;
   }
 
@@ -975,7 +1000,7 @@ function resolveCombatBatched(room: ServerRoom, targetId: string, attackGroups: 
   // === STEP 4: No defenders — attackers become occupying troops unopposed ===
   if (totalDefenderCP === 0) {
     for (const tg of attackGroups) {
-      mergeIntoCityOccupiers(room, tg);
+      mergeIntoOccupiers(room, tg);
     }
     return;
   }
@@ -989,35 +1014,13 @@ function resolveCombatBatched(room: ServerRoom, targetId: string, attackGroups: 
   const { survivorsA, survivorsB } = resolveMultiTypeCombat(attackerForce, defenderForce);
 
   // === STEP 6: Apply results to defenders ===
-  for (const type of TROOP_TYPES) {
-    // Distribute defender losses proportionally between militaryDefending and near-home transit
-    const totalOfType = defenderForce[type];
-    const survivingOfType = survivorsB[type];
-    if (totalOfType === 0) continue;
-
-    const survivalRatio = survivingOfType / totalOfType;
-
-    // Apply to militaryDefending
-    defender.militaryDefending[type] = Math.floor(defender.militaryDefending[type] * survivalRatio);
-
-    // Apply to near-home transit troops of this type
-    for (const tg of nearHomeTroops) {
-      if (tg.troopType === type) {
-        tg.units = Math.floor(tg.units * survivalRatio);
-      }
-    }
-  }
+  applyDefenderSurvivors(defender, defenderForce, survivorsB, nearHomeTroops);
 
   // === STEP 7: Apply results to attackers — surviving attackers become occupying troops ===
+  applyAttackerSurvivors(attackGroups, attackerForce, survivorsA);
   for (const tg of attackGroups) {
-    const totalOfType = attackerForce[tg.troopType];
-    if (totalOfType === 0) continue;
-    const survivingOfType = survivorsA[tg.troopType];
-    // Distribute survivors proportionally back to original TroopGroups
-    const share = Math.floor(survivingOfType * (tg.units / totalOfType));
-    tg.units = share;
     if (tg.units > 0) {
-      mergeIntoCityOccupiers(room, tg);
+      mergeIntoOccupiers(room, tg);
     }
   }
 
@@ -1067,25 +1070,8 @@ function resolveSiege(room: ServerRoom): void {
     if (defenderCP > 0 && attackerCP > 0) {
       const { survivorsA, survivorsB } = resolveMultiTypeCombat(attackerForce, defenderForce);
 
-      // Apply results to defenders
-      for (const type of TROOP_TYPES) {
-        const totalOfType = defenderForce[type];
-        if (totalOfType === 0) continue;
-        const survivalRatio = survivorsB[type] / totalOfType;
-        defender.militaryDefending[type] = Math.floor(defender.militaryDefending[type] * survivalRatio);
-        for (const tg of nearHomeTroops) {
-          if (tg.troopType === type) {
-            tg.units = Math.floor(tg.units * survivalRatio);
-          }
-        }
-      }
-
-      // Apply results to occupiers — distribute survivors proportionally
-      for (const occ of occupiers) {
-        const totalOfType = attackerForce[occ.troopType];
-        if (totalOfType === 0) { occ.units = 0; continue; }
-        occ.units = Math.floor(survivorsA[occ.troopType] * (occ.units / totalOfType));
-      }
+      applyDefenderSurvivors(defender, defenderForce, survivorsB, nearHomeTroops);
+      applyAttackerSurvivors(occupiers, attackerForce, survivorsA);
     }
 
     // Convert surviving near-home transit troops to militaryDefending
@@ -1112,41 +1098,7 @@ function resolveSiege(room: ServerRoom): void {
 
     // Check if city dies from siege
     if (defender.hp <= 0) {
-      defender.hp = 0;
-      defender.alive = false;
-      for (const type of TROOP_TYPES) {
-        defender.militaryAtHome[type] = 0;
-        defender.militaryDefending[type] = 0;
-      }
-      // Remove transit troops owned by dead player
-      room.troopsInTransit = room.troopsInTransit.filter(
-        t => t.attackerPlayerId !== defender.playerId
-      );
-      // Remove occupying troops owned by dead player at other cities
-      room.occupyingTroops = room.occupyingTroops.filter(
-        occ => occ.attackerPlayerId !== defender.playerId
-      );
-      // Surviving occupiers at this city travel home
-      const occupiersHere = room.occupyingTroops.filter(
-        occ => occ.targetPlayerId === targetId && occ.units > 0
-      );
-      for (const occ of occupiersHere) {
-        room.troopsInTransit.push({
-          id: occ.id + '-return',
-          attackerPlayerId: occ.attackerPlayerId,
-          targetPlayerId: occ.attackerPlayerId,
-          troopType: occ.troopType,
-          units: occ.units,
-          turnsRemaining: TROOP_TRAVEL_TURNS,
-          totalTurns: TROOP_TRAVEL_TURNS,
-          startX: defender.x,
-          startY: defender.y,
-        });
-      }
-      // Remove all occupying troops targeting dead city
-      room.occupyingTroops = room.occupyingTroops.filter(
-        occ => occ.targetPlayerId !== targetId
-      );
+      handleCityDeath(room, defender);
     }
   }
 
@@ -1481,6 +1433,20 @@ export function recallDefenders(
 // Troop management (recall, pause, resume, redirect)
 // ============================================================
 
+/** Resolve the map (x, y) position for a target (Promised Land or player city). */
+function resolveTargetPosition(
+  targetPlayerId: string,
+  players: Map<string, ServerCityPlayer>,
+  fallbackX = 0,
+  fallbackY = 0,
+): { x: number; y: number } {
+  if (targetPlayerId === PROMISED_LAND_ID) {
+    return { x: PROMISED_LAND_X, y: PROMISED_LAND_Y };
+  }
+  const target = players.get(targetPlayerId);
+  return { x: target?.x ?? fallbackX, y: target?.y ?? fallbackY };
+}
+
 /** Compute the current interpolated position of a troop group */
 function getTroopCurrentPosition(
   tg: TroopGroup,
@@ -1490,18 +1456,9 @@ function getTroopCurrentPosition(
   const originX = tg.startX ?? (attacker?.x ?? 0);
   const originY = tg.startY ?? (attacker?.y ?? 0);
 
-  let targetX: number, targetY: number;
-  if (tg.targetPlayerId === PROMISED_LAND_ID) {
-    targetX = PROMISED_LAND_X;
-    targetY = PROMISED_LAND_Y;
-  } else if (tg.targetPlayerId === tg.attackerPlayerId) {
-    targetX = attacker?.x ?? 0;
-    targetY = attacker?.y ?? 0;
-  } else {
-    const target = players.get(tg.targetPlayerId);
-    targetX = target?.x ?? 0;
-    targetY = target?.y ?? 0;
-  }
+  const { x: targetX, y: targetY } = resolveTargetPosition(
+    tg.targetPlayerId, players, attacker?.x ?? 0, attacker?.y ?? 0
+  );
 
   const progress = tg.totalTurns > 0
     ? (tg.totalTurns - tg.turnsRemaining) / tg.totalTurns
@@ -1619,31 +1576,11 @@ export function redirectTroops(
 
   const currentPos = getTroopCurrentPosition(tg, room.players);
 
-  // Resolve new target position
-  let newTargetX: number, newTargetY: number;
-  if (newTargetPlayerId === PROMISED_LAND_ID) {
-    newTargetX = PROMISED_LAND_X;
-    newTargetY = PROMISED_LAND_Y;
-  } else {
-    const newTarget = room.players.get(newTargetPlayerId)!;
-    newTargetX = newTarget.x;
-    newTargetY = newTarget.y;
-  }
+  const newTargetPos = resolveTargetPosition(newTargetPlayerId, room.players);
+  const newDist = Math.hypot(newTargetPos.x - currentPos.x, newTargetPos.y - currentPos.y);
 
-  // Calculate new travel time proportionally
-  const newDist = Math.hypot(newTargetX - currentPos.x, newTargetY - currentPos.y);
-
-  // Resolve old target position for ratio calculation
-  let oldTargetX: number, oldTargetY: number;
-  if (tg.targetPlayerId === PROMISED_LAND_ID) {
-    oldTargetX = PROMISED_LAND_X;
-    oldTargetY = PROMISED_LAND_Y;
-  } else {
-    const oldTarget = room.players.get(tg.targetPlayerId);
-    oldTargetX = oldTarget?.x ?? currentPos.x;
-    oldTargetY = oldTarget?.y ?? currentPos.y;
-  }
-  const oldRemainingDist = Math.hypot(oldTargetX - currentPos.x, oldTargetY - currentPos.y);
+  const oldTargetPos = resolveTargetPosition(tg.targetPlayerId, room.players, currentPos.x, currentPos.y);
+  const oldRemainingDist = Math.hypot(oldTargetPos.x - currentPos.x, oldTargetPos.y - currentPos.y);
 
   let newTurns: number;
   if (oldRemainingDist > 0.001) {
@@ -1652,7 +1589,7 @@ export function redirectTroops(
     const baseTurns = (newTargetPlayerId === PROMISED_LAND_ID || tg.targetPlayerId === PROMISED_LAND_ID)
       ? PROMISED_LAND_TRAVEL_TURNS
       : TROOP_TRAVEL_TURNS;
-    newTurns = Math.max(1, Math.round(baseTurns * (newDist / 0.7)));
+    newTurns = Math.max(1, Math.round(baseTurns * (newDist / PLAYER_PLACEMENT_DIAMETER)));
   }
 
   tg.startX = currentPos.x;
@@ -1684,15 +1621,9 @@ export function recallOccupyingTroops(
   const occ = room.occupyingTroops[occIndex];
 
   // Determine start position (where the troops currently are)
-  let startX: number, startY: number;
-  if (occ.targetPlayerId === PROMISED_LAND_ID) {
-    startX = PROMISED_LAND_X;
-    startY = PROMISED_LAND_Y;
-  } else {
-    const targetCity = room.players.get(occ.targetPlayerId);
-    startX = targetCity?.x ?? 0.5;
-    startY = targetCity?.y ?? 0.5;
-  }
+  const { x: startX, y: startY } = resolveTargetPosition(
+    occ.targetPlayerId, room.players, 0.5, 0.5
+  );
 
   // PL is closer than a city — use the appropriate travel time
   const returnTurns = occ.targetPlayerId === PROMISED_LAND_ID
