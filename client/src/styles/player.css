@@ -1694,6 +1694,13 @@
   z-index: 10;
 }
 
+.end-turn-resources {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
 .turn-status {
   display: flex;
   justify-content: space-between;

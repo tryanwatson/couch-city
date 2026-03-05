@@ -526,14 +526,12 @@ function CityInfoNode({ player }: { player: CityPlayerInfo }) {
   );
 }
 
-function PromisedLandNode({
+function PromisedLandSpot({
   ownerColor,
   isContested,
-  holdTurns,
 }: {
   ownerColor: string | null;
   isContested: boolean;
-  holdTurns: number;
 }) {
   const cx = PROMISED_LAND_X * 1000;
   const cy = PROMISED_LAND_Y * 1000;
@@ -608,6 +606,24 @@ function PromisedLandNode({
       <text x={cx} y={cy + 10} textAnchor="middle" fontSize={32}>
         👑
       </text>
+    </g>
+  );
+}
+
+function PromisedLandInfo({
+  ownerColor,
+  isContested,
+  holdTurns,
+}: {
+  ownerColor: string | null;
+  isContested: boolean;
+  holdTurns: number;
+}) {
+  const cx = PROMISED_LAND_X * 1000;
+  const cy = PROMISED_LAND_Y * 1000;
+
+  return (
+    <g>
       {/* Info box background */}
       <rect
         x={cx - 75}
@@ -1052,7 +1068,7 @@ export default function BattleMap({
         height="1000"
       />
 
-      {/* The Promised Land — rendered before troops so troops paint on top */}
+      {/* The Promised Land spot — rendered before troops so troops paint on top */}
       {(() => {
         const landPlayerIds = new Set(
           occupyingTroops
@@ -1066,10 +1082,9 @@ export default function BattleMap({
           ? (playerMap.get(promisedLandOwnerId)?.color ?? null)
           : null;
         return (
-          <PromisedLandNode
+          <PromisedLandSpot
             ownerColor={ownerColor}
             isContested={isContested}
-            holdTurns={promisedLandHoldTurns}
           />
         );
       })()}
@@ -1261,6 +1276,28 @@ export default function BattleMap({
           );
         });
       })}
+
+      {/* Promised Land info box — rendered after troops so it appears on top */}
+      {(() => {
+        const landPlayerIds = new Set(
+          occupyingTroops
+            .filter(
+              (occ) => occ.targetPlayerId === PROMISED_LAND_ID && occ.units > 0,
+            )
+            .map((occ) => occ.attackerPlayerId),
+        );
+        const isContested = landPlayerIds.size > 1;
+        const ownerColor = promisedLandOwnerId
+          ? (playerMap.get(promisedLandOwnerId)?.color ?? null)
+          : null;
+        return (
+          <PromisedLandInfo
+            ownerColor={ownerColor}
+            isContested={isContested}
+            holdTurns={promisedLandHoldTurns}
+          />
+        );
+      })()}
 
       {/* City info boxes — rendered last so they appear on top of troops */}
       {players.map((player) => (

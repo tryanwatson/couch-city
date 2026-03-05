@@ -483,7 +483,7 @@ export default function GameControls({
           </div>
           <div className="stats-col-cp">
             <span className="stats-col-value">⚔️ {totalCombatPower}</span>
-            <span className="stats-col-subtitle">Standing Army</span>
+            <span className="stats-col-subtitle">Combat Power at Home</span>
             <div className="stats-upgrade-levels">
               <div className="stats-upgrade-row">
                 <span className="stats-upgrade-item">
@@ -596,8 +596,8 @@ export default function GameControls({
 
             <p className="section-explainer">
               Each citizen eats {FOOD_PER_CITIZEN} food/turn at 1x. Higher
-              multipliers consume more food but grow population faster.
-              {" "}Starving cities lose {Math.round(POP_STARVATION_RATE * 100)}% pop/turn.
+              multipliers consume more food but grow population faster. Starving
+              cities lose {Math.round(POP_STARVATION_RATE * 100)}% pop/turn.
             </p>
 
             <BuildProgressBlock
@@ -1002,8 +1002,12 @@ export default function GameControls({
                         disabled={!canAfford || controlsDisabled}
                         title={!canAfford ? "Not enough materials or gold" : ""}
                       >
-                        <span className="troop-buy-label">Buy +{config.troops}</span>
-                        <span className="troop-buy-cost">{config.materials}🪨 {config.gold}💰</span>
+                        <span className="troop-buy-label">
+                          Buy +{config.troops}
+                        </span>
+                        <span className="troop-buy-cost">
+                          {config.materials}🪨 {config.gold}💰
+                        </span>
                       </button>
                     )}
                     {isNext && !hasBuildSlot && (
@@ -1014,7 +1018,8 @@ export default function GameControls({
                       >
                         <span className="troop-buy-label">Unlock</span>
                         <span className="troop-buy-cost">
-                          {UPGRADE_UNLOCK_COST.materials}🪨 {UPGRADE_UNLOCK_COST.gold}💰
+                          {UPGRADE_UNLOCK_COST.materials}🪨{" "}
+                          {UPGRADE_UNLOCK_COST.gold}💰
                         </span>
                       </button>
                     )}
@@ -1028,9 +1033,19 @@ export default function GameControls({
                             }}
                           />
                           <span className="build-progress-bar-text">
-                            <span>{me.upgradeProgress.military}/{required}</span>
+                            <span>
+                              {me.upgradeProgress.military}/{required}
+                            </span>
                             {localBuilders.military > 0 && (
-                              <span>~{Math.ceil(remaining / (localBuilders.military * PROGRESS_PER_BUILDER))} turns</span>
+                              <span>
+                                ~
+                                {Math.ceil(
+                                  remaining /
+                                    (localBuilders.military *
+                                      PROGRESS_PER_BUILDER),
+                                )}{" "}
+                                turns
+                              </span>
                             )}
                           </span>
                         </div>
@@ -1093,7 +1108,11 @@ export default function GameControls({
                 />
                 <span className="target-card-name">Defend City</span>
                 <span className="target-card-detail">
-                  {Object.values(me.militaryDefending).reduce((s, n) => s + n, 0)} defending
+                  {Object.values(me.militaryDefending).reduce(
+                    (s, n) => s + n,
+                    0,
+                  )}{" "}
+                  defending
                 </span>
               </button>
 
@@ -1366,6 +1385,22 @@ export default function GameControls({
           <span className="turn-number">Turn {roomState.turnNumber}</span>
           <span className="ended-count">
             {endedCount} / {alivePlayers.length} ready
+          </span>
+        </div>
+        <div className="end-turn-resources">
+          <span>
+            🌾 {Math.floor(me.food)}{" "}
+            <span className={netFood < 0 ? "rate-negative" : "rate-positive"}>
+              {netFood >= 0 ? "+" : ""}{netFood}/t
+            </span>
+          </span>
+          <span>
+            🪨 {Math.floor(me.materials)}{" "}
+            <span className="rate-positive">+{materialsPerTurn}/t</span>
+          </span>
+          <span>
+            💰 {Math.floor(me.gold)}{" "}
+            <span className="rate-positive">+{goldPerTurn}/t</span>
           </span>
         </div>
         <button
