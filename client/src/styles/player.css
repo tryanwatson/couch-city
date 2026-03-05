@@ -1853,6 +1853,95 @@
   color: var(--color-text-muted);
 }
 
+/* Military action buttons (Attack / Defend / Alliance / Promised Land) */
+.military-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.military-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--color-military-row);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-main);
+  color: var(--color-text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.military-action-btn:hover:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.military-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.military-action-icon {
+  font-size: 1.2rem;
+}
+
+.military-action-attack:hover:not(:disabled) {
+  background: rgba(200, 69, 85, 0.2);
+  border-color: #c84555;
+}
+
+.military-action-defend:hover:not(:disabled) {
+  background: rgba(52, 152, 219, 0.2);
+  border-color: #3498db;
+}
+
+.military-action-alliance:hover:not(:disabled) {
+  background: rgba(46, 204, 113, 0.2);
+  border-color: #2ecc71;
+}
+
+.military-action-promised:hover:not(:disabled) {
+  background: rgba(244, 208, 63, 0.2);
+  border-color: #f4d03f;
+}
+
+/* Target picker (player list inside modal) */
+.target-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--color-surface);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-main);
+  color: var(--color-text);
+  font-size: 0.9rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.target-picker-row:hover {
+  background: rgba(200, 69, 85, 0.15);
+  border-color: var(--color-military-accent);
+}
+
+.target-picker-name {
+  flex: 1;
+  font-weight: 600;
+  text-align: left;
+}
+
+.target-picker-hp {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
 /* Target Action Modal (bottom sheet) */
 .target-modal-backdrop {
   position: fixed;

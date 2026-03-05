@@ -7,6 +7,8 @@ import {
   ZERO_MILITARY,
 } from "../../../../shared/constants";
 
+type ModalAction = "attack" | "defend" | "alliance" | "promised-land";
+
 interface TargetInfo {
   id: string;
   name: string;
@@ -14,20 +16,28 @@ interface TargetInfo {
   hp?: number;
   isPromisedLand: boolean;
   isDefend?: boolean;
+  action?: ModalAction;
+}
+
+interface PlayerTarget {
+  playerId: string;
+  name: string;
+  color: string;
+  hp: number;
 }
 
 interface TargetModalProps {
   target: TargetInfo;
   me: CityPlayerInfo;
   controlsDisabled: boolean;
+  targets: PlayerTarget[];
   onAttack: (targetId: string, amount: number, troopType: TroopType) => void;
   onDonate: (targetId: string, amount: number, troopType: TroopType) => void;
   onDefend: (amount: number, troopType: TroopType) => void;
   onRecall: (amount: number, troopType: TroopType) => void;
+  onSelectTarget: (target: PlayerTarget) => void;
   onClose: () => void;
 }
-
-type ModalTab = "attack" | "donate";
 
 export type { TargetInfo };
 
@@ -35,13 +45,14 @@ export default function TargetModal({
   target,
   me,
   controlsDisabled,
+  targets,
   onAttack,
   onDonate,
   onDefend,
   onRecall,
+  onSelectTarget,
   onClose,
 }: TargetModalProps) {
-  const [activeTab, setActiveTab] = useState<ModalTab>("attack");
   const [staged, setStaged] = useState<Record<TroopType, number>>({
     ...ZERO_MILITARY,
   });
@@ -74,6 +85,10 @@ export default function TargetModal({
   );
   const hasStagedTroops = totalStagedUnits > 0;
 
+  const isAttackMode = target.action === "attack";
+  const isAllianceMode = target.action === "alliance";
+  const needsTargetSelection = (isAttackMode || isAllianceMode) && !target.id;
+
   const handleStage = (amount: number, troopType: TroopType) => {
     const maxCanAdd = me.militaryAtHome[troopType] - staged[troopType];
     const clamped = Math.min(amount, maxCanAdd);
@@ -88,7 +103,7 @@ export default function TargetModal({
   };
 
   const handleCommit = () => {
-    const action = activeTab === "attack" ? onAttack : onDonate;
+    const action = isAllianceMode ? onDonate : onAttack;
     for (const troopType of TROOP_TYPES) {
       if (staged[troopType] > 0) {
         action(target.id, staged[troopType], troopType);
@@ -103,12 +118,7 @@ export default function TargetModal({
     onClose();
   };
 
-  const handleTabChange = (tab: ModalTab) => {
-    setStaged({ ...ZERO_MILITARY });
-    setActiveTab(tab);
-  };
-
-  // Defend mode: show troop types with atHome > 0 OR defending > 0
+  // Defend mode
   if (target.isDefend) {
     const defendTypes = TROOP_TYPES.filter(
       (t) => me.militaryAtHome[t] > 0 || me.militaryDefending[t] > 0,
@@ -180,8 +190,48 @@ export default function TargetModal({
     );
   }
 
-  // Attack / Donate mode
+  // Target selection step (for attack/alliance when no target picked yet)
+  if (needsTargetSelection) {
+    const actionLabel = isAttackMode ? "⚔️ Attack" : "🤝 Alliance";
+    return (
+      <div className="target-modal-backdrop" onClick={onClose}>
+        <div className="target-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="target-modal-header">
+            <span className="target-modal-name">{actionLabel}</span>
+            <button className="target-modal-close" onClick={onClose}>
+              ✕
+            </button>
+          </div>
+          <div className="target-modal-troops">
+            {targets.length === 0 && (
+              <div className="target-modal-empty">No targets available</div>
+            )}
+            {targets.map((t) => (
+              <button
+                key={t.playerId}
+                className="target-picker-row"
+                onClick={() => onSelectTarget(t)}
+              >
+                <span
+                  className="target-color-dot"
+                  style={{ backgroundColor: t.color }}
+                />
+                <span className="target-picker-name">{t.name}</span>
+                <span className="target-picker-hp">
+                  {Math.ceil(t.hp)} HP
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Attack / Alliance / Promised Land — troop staging
   const availableTypes = TROOP_TYPES.filter((t) => me.militaryAtHome[t] > 0);
+  const actionLabel = isAllianceMode ? "Alliance" : "Attack";
+  const sendLabel = isAllianceMode ? "Send Alliance" : "Send Attack";
 
   return (
     <div
@@ -207,24 +257,6 @@ export default function TargetModal({
             ✕
           </button>
         </div>
-
-        {/* Tabs (hidden for Promised Land) */}
-        {!target.isPromisedLand && (
-          <div className="target-modal-tabs">
-            <button
-              className={`target-modal-tab${activeTab === "attack" ? " active" : ""}`}
-              onClick={() => handleTabChange("attack")}
-            >
-              Attack
-            </button>
-            <button
-              className={`target-modal-tab${activeTab === "donate" ? " active" : ""}`}
-              onClick={() => handleTabChange("donate")}
-            >
-              Donate
-            </button>
-          </div>
-        )}
 
         {/* Troop rows */}
         <div className="target-modal-troops">
@@ -267,7 +299,7 @@ export default function TargetModal({
                     amount <= available ? (
                       <button
                         key={`stage-${amount}`}
-                        className={`attack-amount-btn${activeTab === "donate" ? " donate-amount-btn" : ""}`}
+                        className={`attack-amount-btn${isAllianceMode ? " donate-amount-btn" : ""}`}
                         onClick={() => handleStage(amount, type)}
                         disabled={controlsDisabled}
                       >
@@ -286,7 +318,7 @@ export default function TargetModal({
           <div className="target-modal-footer">
             <div className="target-modal-staging-summary">
               <span className="staging-total-label">
-                {activeTab === "attack" ? "Attack" : "Donate"} total:
+                {actionLabel} total:
               </span>
               <span className="staging-total-value">
                 {totalStagedUnits} units · {totalStagedCP} CP
@@ -300,11 +332,11 @@ export default function TargetModal({
                 Cancel
               </button>
               <button
-                className={`target-modal-send-btn${activeTab === "donate" ? " donate-send-btn" : ""}`}
+                className={`target-modal-send-btn${isAllianceMode ? " donate-send-btn" : ""}`}
                 onClick={handleCommit}
                 disabled={controlsDisabled}
               >
-                Send {activeTab === "attack" ? "Attack" : "Donation"}
+                {sendLabel}
               </button>
             </div>
           </div>

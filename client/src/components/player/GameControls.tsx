@@ -21,7 +21,6 @@ import {
   TRAINING_CONFIG,
   COMBAT_POWER,
   PROMISED_LAND_ID,
-  PROMISED_LAND_HOLD_TURNS,
   HP_REGEN_PERCENT,
   DEFENSE_HP_PER_LEVEL,
   UPGRADE_PROGRESS,
@@ -1098,11 +1097,26 @@ export default function GameControls({
 
             <hr className="section-divider" />
 
-            {/* Compact target grid */}
-            <div className="target-grid">
-              {/* Defend City */}
+            {/* Military action buttons */}
+            <div className="military-actions">
               <button
-                className="target-card target-card-defend"
+                className="military-action-btn military-action-attack"
+                onClick={() =>
+                  setSelectedTarget({
+                    id: "",
+                    name: "Attack",
+                    color: "#c84555",
+                    isPromisedLand: false,
+                    action: "attack",
+                  })
+                }
+                disabled={controlsDisabled || totalMilitary === 0}
+              >
+                <span className="military-action-icon">⚔️</span>
+                <span className="military-action-label">Attack</span>
+              </button>
+              <button
+                className="military-action-btn military-action-defend"
                 onClick={() =>
                   setSelectedTarget({
                     id: me.playerId,
@@ -1110,73 +1124,46 @@ export default function GameControls({
                     color: "#3498db",
                     isPromisedLand: false,
                     isDefend: true,
+                    action: "defend",
                   })
                 }
                 disabled={controlsDisabled || totalMilitary === 0}
               >
-                <span
-                  className="target-color-dot"
-                  style={{ backgroundColor: "#3498db" }}
-                />
-                <span className="target-card-name">Defend City</span>
-                <span className="target-card-detail">
-                  {Object.values(me.militaryDefending).reduce(
-                    (s, n) => s + n,
-                    0,
-                  )}{" "}
-                  defending
-                </span>
+                <span className="military-action-icon">🛡️</span>
+                <span className="military-action-label">Defend</span>
               </button>
-
-              {/* Promised Land */}
               <button
-                className="target-card target-card-promised"
+                className="military-action-btn military-action-alliance"
+                onClick={() =>
+                  setSelectedTarget({
+                    id: "",
+                    name: "Alliance",
+                    color: "#2ecc71",
+                    isPromisedLand: false,
+                    action: "alliance",
+                  })
+                }
+                disabled={controlsDisabled || totalMilitary === 0}
+              >
+                <span className="military-action-icon">🤝</span>
+                <span className="military-action-label">Alliance</span>
+              </button>
+              <button
+                className="military-action-btn military-action-promised"
                 onClick={() =>
                   setSelectedTarget({
                     id: PROMISED_LAND_ID,
                     name: "The Promised Land",
                     color: "#f4d03f",
                     isPromisedLand: true,
+                    action: "promised-land",
                   })
                 }
                 disabled={controlsDisabled || totalMilitary === 0}
               >
-                <span
-                  className="target-color-dot"
-                  style={{ backgroundColor: "#f4d03f" }}
-                />
-                <span className="target-card-name">The Promised Land</span>
-                <span className="target-card-detail">
-                  Hold {PROMISED_LAND_HOLD_TURNS} turns to win
-                </span>
+                <span className="military-action-icon">⭐</span>
+                <span className="military-action-label">Promised Land</span>
               </button>
-
-              {/* Player targets */}
-              {targets.map((target) => (
-                <button
-                  key={target.playerId}
-                  className="target-card"
-                  onClick={() =>
-                    setSelectedTarget({
-                      id: target.playerId,
-                      name: target.name,
-                      color: target.color,
-                      hp: target.hp,
-                      isPromisedLand: false,
-                    })
-                  }
-                  disabled={controlsDisabled || totalMilitary === 0}
-                >
-                  <span
-                    className="target-color-dot"
-                    style={{ backgroundColor: target.color }}
-                  />
-                  <span className="target-card-name">{target.name}</span>
-                  <span className="target-card-detail">
-                    {Math.ceil(target.hp)} HP
-                  </span>
-                </button>
-              ))}
             </div>
 
             <hr className="section-divider" />
@@ -1480,10 +1467,24 @@ export default function GameControls({
           target={selectedTarget}
           me={me}
           controlsDisabled={controlsDisabled}
+          targets={targets}
           onAttack={handleSendAttack}
           onDonate={handleSendDonation}
           onDefend={handleSendDefend}
           onRecall={handleRecallDefenders}
+          onSelectTarget={(t) =>
+            setSelectedTarget((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    id: t.playerId,
+                    name: t.name,
+                    color: t.color,
+                    hp: t.hp,
+                  }
+                : null,
+            )
+          }
           onClose={() => setSelectedTarget(null)}
         />
       )}
