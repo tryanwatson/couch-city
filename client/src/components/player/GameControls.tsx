@@ -13,7 +13,7 @@ import {
   POP_GROWTH_RATE,
   POP_STARVATION_RATE,
   VALID_GROWTH_MULTIPLIERS,
-  UPGRADE_UNLOCK_COST,
+  getUpgradeUnlockCost,
   MONUMENT_CULTURE_PER_TURN,
   yieldMultiplier,
   CULTURE_WIN_THRESHOLD,
@@ -316,6 +316,18 @@ export default function GameControls({
     });
   };
 
+  const handleRedirectOccupyingTroops = (
+    troopGroupId: string,
+    newTargetPlayerId: string,
+  ) => {
+    socket.emit("player:redirect_occupying_troops", {
+      roomId: roomState.roomId,
+      playerId,
+      troopGroupId,
+      newTargetPlayerId,
+    });
+  };
+
   const handleEndTurn = () => {
     socket.emit("player:end_turn", { roomId: roomState.roomId, playerId });
   };
@@ -391,10 +403,9 @@ export default function GameControls({
   // Trade
   const goldPerTurn = localMerchants * GOLD_PER_MERCHANT * tradeMult;
 
-  // Generic upgrade affordability check
-  const canAffordUpgrade =
-    me.materials >= UPGRADE_UNLOCK_COST.materials &&
-    me.gold >= UPGRADE_UNLOCK_COST.gold;
+  // Per-category upgrade unlock cost (scales with level)
+  const getUnlockCost = (cat: UpgradeCategory) =>
+    getUpgradeUnlockCost(cat, me.upgradeLevel[cat]);
 
   const completedCulture = me.upgradesCompleted.culture;
 
@@ -608,7 +619,7 @@ export default function GameControls({
               onUnlockUpgrade={handleUnlockUpgrade}
               unassigned={unassigned}
               controlsDisabled={controlsDisabled}
-              canAffordUpgrade={canAffordUpgrade}
+              unlockCost={getUnlockCost("farming")}
               progressBarClass="farming-progress-fill"
               maxLabel={`All farming upgrades completed! (${farmingMult}x yield)`}
               unlockLabel="📜 Unlock Farming Upgrade"
@@ -691,7 +702,7 @@ export default function GameControls({
               onUnlockUpgrade={handleUnlockUpgrade}
               unassigned={unassigned}
               controlsDisabled={controlsDisabled}
-              canAffordUpgrade={canAffordUpgrade}
+              unlockCost={getUnlockCost("mining")}
               progressBarClass="mining-progress-fill"
               maxLabel={`All mining upgrades completed! (${miningMult}x yield)`}
               unlockLabel="📜 Unlock Mining Upgrade"
@@ -770,7 +781,7 @@ export default function GameControls({
               onUnlockUpgrade={handleUnlockUpgrade}
               unassigned={unassigned}
               controlsDisabled={controlsDisabled}
-              canAffordUpgrade={canAffordUpgrade}
+              unlockCost={getUnlockCost("trade")}
               progressBarClass="trade-progress-fill"
               maxLabel={`All trade upgrades completed! (${tradeMult}x yield)`}
               unlockLabel="📜 Unlock Trade Upgrade"
@@ -850,7 +861,7 @@ export default function GameControls({
               onUnlockUpgrade={handleUnlockUpgrade}
               unassigned={unassigned}
               controlsDisabled={controlsDisabled}
-              canAffordUpgrade={canAffordUpgrade}
+              unlockCost={getUnlockCost("culture")}
               maxLabel="All upgrades completed!"
               effectText={
                 <>
@@ -908,7 +919,7 @@ export default function GameControls({
               onUnlockUpgrade={handleUnlockUpgrade}
               unassigned={unassigned}
               controlsDisabled={controlsDisabled}
-              canAffordUpgrade={canAffordUpgrade}
+              unlockCost={getUnlockCost("defense")}
               progressBarClass="defense-progress-fill"
               unlockBtnClass="upgrade-defense"
               buildingLabel="Building Fortification"
@@ -1010,19 +1021,22 @@ export default function GameControls({
                         </span>
                       </button>
                     )}
-                    {isNext && !hasBuildSlot && (
-                      <button
-                        className="troop-buy-btn troop-unlock-btn"
-                        onClick={() => handleUnlockUpgrade("military")}
-                        disabled={!canAffordUpgrade || controlsDisabled}
-                      >
-                        <span className="troop-buy-label">Unlock</span>
-                        <span className="troop-buy-cost">
-                          {UPGRADE_UNLOCK_COST.materials}🪨{" "}
-                          {UPGRADE_UNLOCK_COST.gold}💰
-                        </span>
-                      </button>
-                    )}
+                    {isNext && !hasBuildSlot && (() => {
+                      const milCost = getUnlockCost("military");
+                      return (
+                        <button
+                          className="troop-buy-btn troop-unlock-btn"
+                          onClick={() => handleUnlockUpgrade("military")}
+                          disabled={me.materials < milCost.materials || me.gold < milCost.gold || controlsDisabled}
+                        >
+                          <span className="troop-buy-label">Unlock</span>
+                          <span className="troop-buy-cost">
+                            {milCost.materials}🪨{" "}
+                            {milCost.gold}💰
+                          </span>
+                        </button>
+                      );
+                    })()}
                     {hasBuildSlot && (
                       <div className="troop-build-progress">
                         <div className="build-progress-bar-wrapper">
@@ -1317,6 +1331,14 @@ export default function GameControls({
                     : (roomState.players.find(
                         (p) => p.playerId === occ.targetPlayerId,
                       )?.name ?? "?");
+                  const occRedirectTargets = roomState.players.filter(
+                    (p) =>
+                      p.alive &&
+                      p.playerId !== playerId &&
+                      p.playerId !== occ.targetPlayerId,
+                  );
+                  const canRedirectToLand =
+                    occ.targetPlayerId !== PROMISED_LAND_ID;
                   return (
                     <div
                       key={occ.id}
@@ -1333,14 +1355,40 @@ export default function GameControls({
                         {!isLand &&
                           ` (${occ.units * COMBAT_POWER[occ.troopType]} dmg/turn)`}
                       </span>
-                      <button
-                        className="troop-action-btn"
-                        onClick={() => handleRecallOccupyingTroops(occ.id)}
-                        disabled={controlsDisabled}
-                        style={{ marginLeft: 8, fontSize: 11 }}
-                      >
-                        Recall
-                      </button>
+                      <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                        <button
+                          className="troop-action-btn"
+                          onClick={() => handleRecallOccupyingTroops(occ.id)}
+                          disabled={controlsDisabled}
+                          style={{ fontSize: 11 }}
+                        >
+                          Recall
+                        </button>
+                        {(occRedirectTargets.length > 0 || canRedirectToLand) && (
+                          <select
+                            className="troop-redirect-select"
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value)
+                                handleRedirectOccupyingTroops(occ.id, e.target.value);
+                            }}
+                            disabled={controlsDisabled}
+                            style={{ fontSize: 11 }}
+                          >
+                            <option value="">Redirect...</option>
+                            {canRedirectToLand && (
+                              <option value={PROMISED_LAND_ID}>
+                                The Promised Land
+                              </option>
+                            )}
+                            {occRedirectTargets.map((t) => (
+                              <option key={t.playerId} value={t.playerId}>
+                                {t.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </span>
                     </div>
                   );
                 })}

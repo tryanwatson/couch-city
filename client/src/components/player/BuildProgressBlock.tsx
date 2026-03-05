@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { CityPlayerInfo, UpgradeCategory } from '../../../../shared/types';
-import { UPGRADE_PROGRESS, UPGRADE_UNLOCK_COST, PROGRESS_PER_BUILDER } from '../../../../shared/constants';
+import { UPGRADE_PROGRESS, PROGRESS_PER_BUILDER } from '../../../../shared/constants';
 import { useHoldToRepeat } from '../../hooks/useHoldToRepeat';
 
 interface BuildProgressBlockProps {
@@ -11,7 +11,7 @@ interface BuildProgressBlockProps {
   onUnlockUpgrade: (category: UpgradeCategory) => void;
   unassigned: number;
   controlsDisabled: boolean;
-  canAffordUpgrade: boolean;
+  unlockCost: { materials: number; gold: number };
   progressBarClass?: string;
   unlockBtnClass?: string;
   buildingLabel?: string;
@@ -29,7 +29,7 @@ export default function BuildProgressBlock({
   onUnlockUpgrade,
   unassigned,
   controlsDisabled,
-  canAffordUpgrade,
+  unlockCost,
   progressBarClass,
   unlockBtnClass = 'upgrade-science',
   buildingLabel = 'Building Upgrade',
@@ -41,7 +41,7 @@ export default function BuildProgressBlock({
   const completed = me.upgradesCompleted[category];
   const hasBuildSlot = completed < me.upgradeLevel[category];
   const atMax = completed >= UPGRADE_PROGRESS[category].length;
-  const canAfford = !atMax && me.upgradeLevel[category] < UPGRADE_PROGRESS[category].length && canAffordUpgrade;
+  const canAfford = !atMax && me.upgradeLevel[category] < UPGRADE_PROGRESS[category].length && me.materials >= unlockCost.materials && me.gold >= unlockCost.gold;
 
   const required = hasBuildSlot ? UPGRADE_PROGRESS[category][completed] : 0;
   const remaining = required - me.upgradeProgress[category];
@@ -110,10 +110,10 @@ export default function BuildProgressBlock({
         className={`upgrade-btn ${unlockBtnClass}`}
         onClick={() => onUnlockUpgrade(category)}
         disabled={!canAfford || controlsDisabled}
-        title={`Costs ${UPGRADE_UNLOCK_COST.materials} materials + ${UPGRADE_UNLOCK_COST.gold} gold`}
+        title={`Costs ${unlockCost.materials} materials + ${unlockCost.gold} gold`}
       >
         <span className="upgrade-btn-title">{unlockLabel}</span>
-        <span className="upgrade-btn-cost">{UPGRADE_UNLOCK_COST.materials} materials + {UPGRADE_UNLOCK_COST.gold} gold</span>
+        <span className="upgrade-btn-cost">{unlockCost.materials} materials + {unlockCost.gold} gold</span>
         <span className="upgrade-btn-effect">{effectText}</span>
       </button>
     </div>

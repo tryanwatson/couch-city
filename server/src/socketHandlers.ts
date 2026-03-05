@@ -24,6 +24,7 @@ import {
   resumeTroops,
   redirectTroops,
   recallOccupyingTroops,
+  redirectOccupyingTroops,
 } from './roomManager';
 import { generateCityName, ALL_UPGRADE_CATEGORIES } from '../../shared/constants';
 
@@ -259,6 +260,16 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
       return;
     }
     const result = recallOccupyingTroops(data.roomId, data.playerId, data.troopGroupId);
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
+    broadcastRoom(io, data.roomId);
+  });
+
+  socket.on('player:redirect_occupying_troops', (data) => {
+    if (!data?.roomId || !data?.playerId || !data?.troopGroupId || !data?.newTargetPlayerId) {
+      socket.emit('room:error', { message: 'Missing required fields' });
+      return;
+    }
+    const result = redirectOccupyingTroops(data.roomId, data.playerId, data.troopGroupId, data.newTargetPlayerId);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     broadcastRoom(io, data.roomId);
   });

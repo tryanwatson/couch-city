@@ -20,7 +20,17 @@ export const INITIAL_POPULATION = 10;
 // Upgrades — unlock costs & build progress system
 import type { UpgradeCategory } from "./types";
 
-export const UPGRADE_UNLOCK_COST = { materials: 10, gold: 15 } as const;
+export function getUpgradeUnlockCost(
+  category: UpgradeCategory,
+  level: number,
+): { materials: number; gold: number } {
+  const progressArr = UPGRADE_PROGRESS[category];
+  const ratio = progressArr[Math.min(level, progressArr.length - 1)] / progressArr[0];
+  return {
+    materials: Math.round(10 * ratio),
+    gold: Math.round(15 * ratio),
+  };
+}
 
 export const UPGRADE_PROGRESS: Record<UpgradeCategory, readonly number[]> = {
   culture: [3, 5, 8, 12, 16],

@@ -13,7 +13,7 @@ import {
   VALID_GROWTH_MULTIPLIERS,
   INITIAL_POPULATION,
   MONUMENT_CULTURE_PER_TURN,
-  UPGRADE_UNLOCK_COST,
+  getUpgradeUnlockCost,
   UPGRADE_PROGRESS,
   ALL_UPGRADE_CATEGORIES,
   zeroUpgradeRecord,
@@ -1212,11 +1212,12 @@ export function unlockUpgrade(
 
   const maxLevel = UPGRADE_PROGRESS[category].length;
   if (player.upgradeLevel[category] >= maxLevel) return { error: `Maximum ${category} level reached` };
-  if (player.materials < UPGRADE_UNLOCK_COST.materials) return { error: 'Not enough materials' };
-  if (player.gold < UPGRADE_UNLOCK_COST.gold) return { error: 'Not enough gold' };
+  const cost = getUpgradeUnlockCost(category, player.upgradeLevel[category]);
+  if (player.materials < cost.materials) return { error: 'Not enough materials' };
+  if (player.gold < cost.gold) return { error: 'Not enough gold' };
 
-  player.materials -= UPGRADE_UNLOCK_COST.materials;
-  player.gold -= UPGRADE_UNLOCK_COST.gold;
+  player.materials -= cost.materials;
+  player.gold -= cost.gold;
   player.upgradeLevel[category] += 1;
 
   return { room };
@@ -1640,6 +1641,64 @@ export function recallOccupyingTroops(
     units: occ.units,
     turnsRemaining: returnTurns,
     totalTurns: returnTurns,
+    startX,
+    startY,
+  });
+
+  return { room };
+}
+
+export function redirectOccupyingTroops(
+  roomId: string,
+  playerId: string,
+  troopGroupId: string,
+  newTargetPlayerId: string
+): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
+  const room = rooms.get(roomId);
+  if (!room) return { error: 'Room not found' };
+
+  const guard = guardAction(room, playerId);
+  if (typeof guard === 'string') return { error: guard };
+
+  const occIndex = room.occupyingTroops.findIndex(
+    occ => occ.id === troopGroupId && occ.attackerPlayerId === playerId
+  );
+  if (occIndex === -1) return { error: 'Occupying troop group not found' };
+
+  const occ = room.occupyingTroops[occIndex];
+
+  if (newTargetPlayerId === playerId) return { error: 'Use recall to send troops home' };
+  if (newTargetPlayerId === occ.targetPlayerId) return { error: 'Already occupying that target' };
+
+  if (newTargetPlayerId !== PROMISED_LAND_ID) {
+    const newTarget = room.players.get(newTargetPlayerId);
+    if (!newTarget) return { error: 'Target not found' };
+    if (!newTarget.alive) return { error: 'Target is eliminated' };
+  }
+
+  // Current position = where they're occupying
+  const { x: startX, y: startY } = resolveTargetPosition(
+    occ.targetPlayerId, room.players, 0.5, 0.5
+  );
+
+  // Calculate travel time based on distance
+  const newTargetPos = resolveTargetPosition(newTargetPlayerId, room.players);
+  const dist = Math.hypot(newTargetPos.x - startX, newTargetPos.y - startY);
+  const baseTurns = (newTargetPlayerId === PROMISED_LAND_ID || occ.targetPlayerId === PROMISED_LAND_ID)
+    ? PROMISED_LAND_TRAVEL_TURNS
+    : TROOP_TRAVEL_TURNS;
+  const travelTurns = Math.max(1, Math.round(baseTurns * (dist / PLAYER_PLACEMENT_DIAMETER)));
+
+  // Move from occupying to transit (heading to new target)
+  room.occupyingTroops.splice(occIndex, 1);
+  room.troopsInTransit.push({
+    id: occ.id + '-redirected',
+    attackerPlayerId: playerId,
+    targetPlayerId: newTargetPlayerId,
+    troopType: occ.troopType,
+    units: occ.units,
+    turnsRemaining: travelTurns,
+    totalTurns: travelTurns,
     startX,
     startY,
   });
