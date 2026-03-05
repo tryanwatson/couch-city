@@ -10,7 +10,6 @@ import {
   MATERIALS_PER_MINER,
   GOLD_PER_MERCHANT,
   FOOD_PER_CITIZEN,
-  FOOD_PER_TROOP,
   POP_GROWTH_RATE,
   POP_STARVATION_RATE,
   VALID_GROWTH_MULTIPLIERS,
@@ -378,25 +377,10 @@ export default function GameControls({
   const foodConsumed =
     Math.floor(me.population) * FOOD_PER_CITIZEN * localGrowthMultiplier;
 
-  // Count all troops belonging to this player (home + defending + in-transit + occupying)
-  let totalTroops = 0;
-  for (const type of TROOP_TYPES) {
-    totalTroops += me.militaryAtHome[type] + me.militaryDefending[type];
-  }
-  for (const tg of roomState.troopsInTransit) {
-    if (tg.attackerPlayerId === me.playerId) totalTroops += tg.units;
-  }
-  for (const tg of roomState.occupyingTroops) {
-    if (tg.attackerPlayerId === me.playerId) totalTroops += tg.units;
-  }
-  const troopFoodConsumed = totalTroops * FOOD_PER_TROOP;
-
-  const netFood = foodProduced - foodConsumed - troopFoodConsumed;
+  const netFood = foodProduced - foodConsumed;
   const effectiveGrowthRate = POP_GROWTH_RATE * localGrowthMultiplier;
   const pop = Math.floor(me.population);
-  // Population eats first; troops are last to be affected
-  const foodAfterTroops = me.food + foodProduced - troopFoodConsumed;
-  const isFed = foodAfterTroops >= foodConsumed;
+  const isFed = me.food + foodProduced >= foodConsumed;
   const projectedPop = isFed
     ? Math.floor(pop * (1 + effectiveGrowthRate))
     : Math.max(1, Math.floor(pop * (1 - POP_STARVATION_RATE)));
@@ -599,14 +583,6 @@ export default function GameControls({
                 </span>
                 <span className="rate-negative">-{foodConsumed}</span>
               </div>
-              {totalTroops > 0 && (
-                <div className="food-breakdown-line">
-                  <span>
-                    - Troops ({totalTroops} × {FOOD_PER_TROOP})
-                  </span>
-                  <span className="rate-negative">-{troopFoodConsumed}</span>
-                </div>
-              )}
               <div
                 className={`food-breakdown-line food-breakdown-net${netFood < 0 ? " rate-negative" : ""}`}
               >
@@ -621,7 +597,6 @@ export default function GameControls({
             <p className="section-explainer">
               Each citizen eats {FOOD_PER_CITIZEN} food/turn at 1x. Higher
               multipliers consume more food but grow population faster.
-              {totalTroops > 0 && ` Each troop eats ${FOOD_PER_TROOP} food/turn.`}
               {" "}Starving cities lose {Math.round(POP_STARVATION_RATE * 100)}% pop/turn.
             </p>
 
