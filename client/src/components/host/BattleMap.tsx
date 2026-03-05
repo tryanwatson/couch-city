@@ -937,13 +937,14 @@ export default function BattleMap({
         let displayX = originX + dx * clampedProgress;
         let displayY = originY + dy * clampedProgress;
 
-        // During resolving animation, lerp from previous position to new position
+        // During resolving animation, lerp from previous position to new position.
+        // For newly deployed troops with no previous position, animate from origin.
         if (isResolving && animProgress < 1) {
           const prevPos = prevPositionsRef.current.get(troop.id);
-          if (prevPos) {
-            displayX = prevPos.x + (displayX - prevPos.x) * animProgress;
-            displayY = prevPos.y + (displayY - prevPos.y) * animProgress;
-          }
+          const fromX = prevPos?.x ?? originX;
+          const fromY = prevPos?.y ?? originY;
+          displayX = fromX + (displayX - fromX) * animProgress;
+          displayY = fromY + (displayY - fromY) * animProgress;
         }
 
         // Returning troops and donations walk into their city — no lingering/attack animation

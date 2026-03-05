@@ -34,6 +34,24 @@ function broadcastRoom(io: Server, roomId: string): void {
   io.to(roomId).emit('room:state', sanitizeState(room));
 }
 
+/** Send state to only the acting player's socket (not the whole room). */
+function unicastPlayer(socket: Socket, roomId: string): void {
+  const room = getRoom(roomId);
+  if (!room) return;
+  socket.emit('room:state', sanitizeState(room));
+}
+
+/** During planning, unicast to the acting player only; otherwise broadcast to all. */
+function emitStateAfterAction(io: Server, socket: Socket, roomId: string): void {
+  const room = getRoom(roomId);
+  const isPlanning = room?.phase === 'playing' && room?.subPhase === 'planning';
+  if (isPlanning) {
+    unicastPlayer(socket, roomId);
+  } else {
+    broadcastRoom(io, roomId);
+  }
+}
+
 export function registerSocketHandlers(io: Server, socket: Socket): void {
   // Inject broadcast function into roomManager so the update phase can broadcast
   setBroadcastFn((roomId: string) => broadcastRoom(io, roomId));
@@ -125,7 +143,7 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     socket.join(data.roomId);
     console.log(`Player "${cityName}" (${playerId}) joined room ${data.roomId}`);
     callback({ ok: true, playerId, cityName });
-    broadcastRoom(io, data.roomId);
+    emitStateAfterAction(io, socket, data.roomId);
   });
 
   socket.on('player:allocate_workers', (data) => {
@@ -135,7 +153,7 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     }
     const result = allocateWorkers(data.roomId, data.playerId, data.farmers, data.miners, data.merchants, data.builders);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
-    broadcastRoom(io, data.roomId);
+    emitStateAfterAction(io, socket, data.roomId);
   });
 
   socket.on('player:set_growth_multiplier', (data) => {
@@ -145,7 +163,7 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     }
     const result = setGrowthMultiplier(data.roomId, data.playerId, data.multiplier);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
-    broadcastRoom(io, data.roomId);
+    emitStateAfterAction(io, socket, data.roomId);
   });
 
   socket.on('player:unlock_upgrade', (data) => {
@@ -159,7 +177,7 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     }
     const result = unlockUpgrade(data.roomId, data.playerId, data.category);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
-    broadcastRoom(io, data.roomId);
+    emitStateAfterAction(io, socket, data.roomId);
   });
 
   socket.on('player:spend_military', (data) => {
@@ -169,7 +187,7 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     }
     const result = spendMilitary(data.roomId, data.playerId, data.troopType);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
-    broadcastRoom(io, data.roomId);
+    emitStateAfterAction(io, socket, data.roomId);
   });
 
   socket.on('player:send_attack', (data) => {
@@ -180,7 +198,7 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     const result = sendAttack(data.roomId, data.playerId, data.targetPlayerId, data.units, data.troopType);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     console.log(`Player ${data.playerId} sent ${data.units} ${data.troopType} to ${data.targetPlayerId} in room ${data.roomId}`);
-    broadcastRoom(io, data.roomId);
+    emitStateAfterAction(io, socket, data.roomId);
   });
 
   socket.on('player:send_donation', (data) => {
@@ -191,7 +209,7 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     const result = sendDonation(data.roomId, data.playerId, data.targetPlayerId, data.units, data.troopType);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     console.log(`Player ${data.playerId} donated ${data.units} ${data.troopType} to ${data.targetPlayerId} in room ${data.roomId}`);
-    broadcastRoom(io, data.roomId);
+    emitStateAfterAction(io, socket, data.roomId);
   });
 
   socket.on('player:send_defend', (data) => {
@@ -201,7 +219,7 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     }
     const result = sendDefend(data.roomId, data.playerId, data.units, data.troopType);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
-    broadcastRoom(io, data.roomId);
+    emitStateAfterAction(io, socket, data.roomId);
   });
 
   socket.on('player:recall_defenders', (data) => {
@@ -211,7 +229,7 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     }
     const result = recallDefenders(data.roomId, data.playerId, data.units, data.troopType);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
-    broadcastRoom(io, data.roomId);
+    emitStateAfterAction(io, socket, data.roomId);
   });
 
   socket.on('player:recall_troops', (data) => {
@@ -221,7 +239,7 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     }
     const result = recallTroops(data.roomId, data.playerId, data.troopGroupId);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
-    broadcastRoom(io, data.roomId);
+    emitStateAfterAction(io, socket, data.roomId);
   });
 
   socket.on('player:pause_troops', (data) => {
@@ -231,7 +249,7 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     }
     const result = pauseTroops(data.roomId, data.playerId, data.troopGroupId);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
-    broadcastRoom(io, data.roomId);
+    emitStateAfterAction(io, socket, data.roomId);
   });
 
   socket.on('player:resume_troops', (data) => {
@@ -241,7 +259,7 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     }
     const result = resumeTroops(data.roomId, data.playerId, data.troopGroupId);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
-    broadcastRoom(io, data.roomId);
+    emitStateAfterAction(io, socket, data.roomId);
   });
 
   socket.on('player:redirect_troops', (data) => {
@@ -251,7 +269,7 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     }
     const result = redirectTroops(data.roomId, data.playerId, data.troopGroupId, data.newTargetPlayerId);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
-    broadcastRoom(io, data.roomId);
+    emitStateAfterAction(io, socket, data.roomId);
   });
 
   socket.on('player:recall_occupying_troops', (data) => {
@@ -261,7 +279,7 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     }
     const result = recallOccupyingTroops(data.roomId, data.playerId, data.troopGroupId);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
-    broadcastRoom(io, data.roomId);
+    emitStateAfterAction(io, socket, data.roomId);
   });
 
   socket.on('player:redirect_occupying_troops', (data) => {
@@ -271,7 +289,7 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     }
     const result = redirectOccupyingTroops(data.roomId, data.playerId, data.troopGroupId, data.newTargetPlayerId);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
-    broadcastRoom(io, data.roomId);
+    emitStateAfterAction(io, socket, data.roomId);
   });
 
   socket.on('player:end_turn', (data) => {
@@ -281,7 +299,12 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     }
     const result = endTurn(data.roomId, data.playerId);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
-    broadcastRoom(io, data.roomId);
+    // If all players ended, runUpdatePhase() already broadcast via broadcastFn.
+    // Otherwise, unicast so only this player sees their endedTurn status.
+    const room = getRoom(data.roomId);
+    if (room && room.subPhase === 'planning') {
+      unicastPlayer(socket, data.roomId);
+    }
   });
 
   // --- Disconnect ---
