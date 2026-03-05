@@ -680,6 +680,36 @@
   cursor: not-allowed;
 }
 
+.troop-unlock-btn {
+  background: rgba(150, 104, 196, 0.25);
+  border-color: var(--color-culture-accent);
+}
+
+.troop-unlock-btn:hover:not(:disabled) {
+  background: rgba(150, 104, 196, 0.45);
+}
+
+.troop-build-progress {
+  width: 100%;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.troop-build-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+.troop-build-eta {
+  font-size: 0.65rem;
+  color: var(--color-text-muted);
+}
+
 /* =========================================
    Section Color Themes
    ========================================= */
@@ -825,6 +855,20 @@
   background: linear-gradient(90deg, #9b59b6, #c88de8);
   transition: width 0.5s ease;
   border-radius: var(--radius-sm);
+}
+.build-progress-bar-text {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 100%;
+  padding: 0 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
 }
 .build-progress-bar-fill.military-progress-fill {
   background: linear-gradient(90deg, #c0392b, #e74c3c);
@@ -1809,7 +1853,7 @@
   z-index: 50;
   background: rgba(0, 0, 0, 0.6);
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
 }
 
@@ -1817,13 +1861,13 @@
   width: 100%;
   max-width: 480px;
   background: var(--color-surface);
-  border-radius: var(--radius) var(--radius) 0 0;
+  border-radius: var(--radius);
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   max-height: 70vh;
-  overflow-y: auto;
+  overflow-y: hidden;
 }
 
 .target-modal-header {
@@ -1898,6 +1942,9 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .target-modal-troop-row {
@@ -1937,7 +1984,109 @@
   padding: 16px 0;
 }
 
+.staged-count {
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+.unstage-amount-btn {
+  background: rgba(149, 165, 166, 0.15) !important;
+  border-color: #95a5a6 !important;
+}
+.unstage-amount-btn:hover:not(:disabled) {
+  background: rgba(149, 165, 166, 0.35) !important;
+}
+
+.target-modal-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-surface-light);
+  flex-shrink: 0;
+}
+
+.target-modal-staging-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.staging-total-label {
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.staging-total-value {
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.target-modal-footer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.target-modal-cancel-btn {
+  flex: 1;
+  padding: 12px;
+  border: 1px solid var(--color-surface-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-light);
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: var(--font-main);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.target-modal-cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.target-modal-send-btn {
+  flex: 2;
+  padding: 12px;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: white;
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: var(--font-main);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.target-modal-send-btn:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+.target-modal-send-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.target-modal-send-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.donate-send-btn {
+  background: #2ecc71;
+  border-color: #2ecc71;
+}
+.donate-send-btn:hover:not(:disabled) {
+  background: #27ae60;
+}
+
 @media (max-width: 380px) {
+  .target-modal-footer-actions {
+    flex-direction: column;
+  }
+
+  .target-modal-send-btn,
+  .target-modal-cancel-btn {
+    flex: unset;
+  }
+
   .target-grid {
     grid-template-columns: 1fr;
   }

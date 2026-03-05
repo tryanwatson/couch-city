@@ -26,6 +26,7 @@ import {
   HP_REGEN_PERCENT,
   DEFENSE_HP_PER_LEVEL,
   UPGRADE_PROGRESS,
+  PROGRESS_PER_BUILDER,
 } from "../../../../shared/constants";
 import BuildProgressBlock from "./BuildProgressBlock";
 import TargetModal from "./TargetModal";
@@ -986,19 +987,31 @@ export default function GameControls({
           <div className="section-body-inner">
             {/* Troop training — all types, locked ones faded */}
             <div className="troop-sections">
-              {TROOP_TYPES.map((type) => {
-                const troopIndex = TROOP_TYPES.indexOf(type);
+              {TROOP_TYPES.map((type, troopIndex) => {
                 const isUnlocked =
                   troopIndex === 0 ||
                   me.upgradesCompleted.military >= troopIndex;
+                const isNext =
+                  !isUnlocked &&
+                  troopIndex === me.upgradesCompleted.military + 1;
                 const config = TRAINING_CONFIG[type];
                 const count = me.militaryAtHome[type];
                 const canAfford =
                   me.materials >= config.materials && me.gold >= config.gold;
+
+                // Build slot state for the next-to-unlock card
+                const hasBuildSlot =
+                  isNext &&
+                  me.upgradeLevel.military > me.upgradesCompleted.military;
+                const required = hasBuildSlot
+                  ? UPGRADE_PROGRESS.military[me.upgradesCompleted.military]
+                  : 0;
+                const remaining = required - me.upgradeProgress.military;
+
                 return (
                   <div
                     key={type}
-                    className={`troop-card${isUnlocked ? "" : " troop-card-locked"}`}
+                    className={`troop-card${isUnlocked || isNext ? "" : " troop-card-locked"}`}
                   >
                     <span className="troop-count">
                       {isUnlocked ? count : "🔒"}
@@ -1017,6 +1030,64 @@ export default function GameControls({
                         <span className="troop-buy-label">Buy +{config.troops}</span>
                         <span className="troop-buy-cost">{config.materials}🪨 {config.gold}💰</span>
                       </button>
+                    )}
+                    {isNext && !hasBuildSlot && (
+                      <button
+                        className="troop-buy-btn troop-unlock-btn"
+                        onClick={() => handleUnlockUpgrade("military")}
+                        disabled={!canAffordUpgrade || controlsDisabled}
+                      >
+                        <span className="troop-buy-label">Unlock</span>
+                        <span className="troop-buy-cost">
+                          {UPGRADE_UNLOCK_COST.materials}🪨 {UPGRADE_UNLOCK_COST.gold}💰
+                        </span>
+                      </button>
+                    )}
+                    {hasBuildSlot && (
+                      <div className="troop-build-progress">
+                        <div className="build-progress-bar-wrapper">
+                          <div
+                            className="build-progress-bar-fill military-progress-fill"
+                            style={{
+                              width: `${Math.min(100, (me.upgradeProgress.military / required) * 100)}%`,
+                            }}
+                          />
+                          <span className="build-progress-bar-text">
+                            <span>{me.upgradeProgress.military}/{required}</span>
+                            {localBuilders.military > 0 && (
+                              <span>~{Math.ceil(remaining / (localBuilders.military * PROGRESS_PER_BUILDER))} turns</span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="troop-build-info">
+                          <span className="builder-label">Builders</span>
+                          <div className="section-header-workers">
+                            <button
+                              className="worker-btn"
+                              onClick={() => adjustBuilder("military", -1)}
+                              disabled={
+                                localBuilders.military <= 0 || controlsDisabled
+                              }
+                            >
+                              -
+                            </button>
+                            <span className="worker-count">
+                              {localBuilders.military}
+                            </span>
+                            <button
+                              className="worker-btn"
+                              onClick={() => adjustBuilder("military", 1)}
+                              disabled={
+                                unassigned <= 0 ||
+                                controlsDisabled ||
+                                localBuilders.military >= remaining
+                              }
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     )}
                   </div>
                 );
@@ -1103,44 +1174,6 @@ export default function GameControls({
             </div>
 
             <hr className="section-divider" />
-
-            <hr className="section-divider" />
-
-            <BuildProgressBlock
-              category="military"
-              me={me}
-              localBuilders={localBuilders}
-              onAdjustBuilder={adjustBuilder}
-              onUnlockUpgrade={handleUnlockUpgrade}
-              unassigned={unassigned}
-              controlsDisabled={controlsDisabled}
-              canAffordUpgrade={canAffordUpgrade}
-              progressBarClass="military-progress-fill"
-              unlockBtnClass="upgrade-military"
-              maxLabel="All troop types unlocked!"
-              effectText={
-                <>
-                  Unlocks:{" "}
-                  {TROOP_TYPES[me.upgradesCompleted.military + 1]
-                    ? TROOP_TYPES[me.upgradesCompleted.military + 1]
-                        .charAt(0)
-                        .toUpperCase() +
-                      TROOP_TYPES[me.upgradesCompleted.military + 1].slice(1)
-                    : "next troop"}
-                </>
-              }
-              explainerText={
-                <>
-                  Unlocks:{" "}
-                  {TROOP_TYPES[me.upgradesCompleted.military + 1]
-                    ? TROOP_TYPES[me.upgradesCompleted.military + 1]
-                        .charAt(0)
-                        .toUpperCase() +
-                      TROOP_TYPES[me.upgradesCompleted.military + 1].slice(1)
-                    : "?"}
-                </>
-              }
-            />
           </div>
         </div>
       </div>

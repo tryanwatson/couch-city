@@ -1407,7 +1407,7 @@ export function sendAttack(
     if (!target.alive) return { error: 'Target city is already eliminated' };
   }
 
-  if (!(VALID_ATTACK_AMOUNTS as readonly number[]).includes(units)) {
+  if (!Number.isInteger(units) || units < 1) {
     return { error: 'Invalid unit count' };
   }
   if (!COMBAT_POWER[troopType]) return { error: 'Invalid troop type' };
@@ -1466,7 +1466,7 @@ export function sendDonation(
   if (!target) return { error: 'Target not found' };
   if (!target.alive) return { error: 'Target city is already eliminated' };
 
-  if (!(VALID_ATTACK_AMOUNTS as readonly number[]).includes(units)) {
+  if (!Number.isInteger(units) || units < 1) {
     return { error: 'Invalid unit count' };
   }
   if (!COMBAT_POWER[troopType]) return { error: 'Invalid troop type' };
