@@ -94,6 +94,16 @@ export default function HostPage() {
             <span className="battle-alive-count">
               {roomState.players.filter((p) => p.alive).length} cities remaining
             </span>
+            <button
+              className="btn btn-end-game"
+              onClick={() => {
+                if (window.confirm('End the game and return everyone to the lobby?')) {
+                  handlePlayAgain();
+                }
+              }}
+            >
+              End Game
+            </button>
           </div>
           <div className="battle-map-container">
             <BattleMap

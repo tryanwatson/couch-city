@@ -302,6 +302,21 @@
   color: var(--color-text);
 }
 
+/* End Game button */
+.btn-end-game {
+  padding: 6px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: rgba(233, 69, 96, 0.2);
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  cursor: pointer;
+}
+
+.btn-end-game:hover {
+  background: rgba(233, 69, 96, 0.4);
+}
+
 /* Turn info */
 .battle-turn-info {
   font-size: 1rem;
