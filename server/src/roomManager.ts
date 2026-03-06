@@ -620,12 +620,6 @@ function runUpdatePhase(room: ServerRoom): void {
     }
   }
 
-  // HP regeneration (percentage-based, scales with walls upgrades)
-  for (const player of alivePlayers) {
-    const regen = Math.ceil(player.maxHp * HP_REGEN_PERCENT);
-    player.hp = Math.min(player.maxHp, player.hp + regen);
-  }
-
   // Generate dice rolls per player for combat multipliers
   room.diceResults = {};
   for (const player of alivePlayers) {
@@ -841,6 +835,14 @@ function runUpdatePhase(room: ServerRoom): void {
     }
 
     room.subPhase = 'planning';
+
+    // HP regeneration at the start of planning phase (after combat resolved)
+    for (const [, player] of room.players) {
+      if (!player.alive) continue;
+      const regen = Math.ceil(player.maxHp * HP_REGEN_PERCENT);
+      player.hp = Math.min(player.maxHp, player.hp + regen);
+    }
+
     room.turnNumber += 1;
     room.diceResults = {};
     room.resolvingDurationMs = null;
