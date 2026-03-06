@@ -155,6 +155,7 @@ export const PROMISED_LAND_HOLD_TURNS = 3; // consecutive uncontested turns to w
 // Turn-based timing
 export const RESOLVING_PHASE_DURATION_MS = 5000; // full duration (visual events)
 export const RESOLVING_PHASE_DURATION_SHORT_MS = 1500; // short duration (no visual events)
+export const DICE_LINGER_MS = 3000; // extra time to show dice results after combat
 
 // City name generation
 export const CITY_SUFFIXES = [

@@ -35,6 +35,7 @@ import {
   VALID_ATTACK_AMOUNTS,
   RESOLVING_PHASE_DURATION_MS,
   RESOLVING_PHASE_DURATION_SHORT_MS,
+  DICE_LINGER_MS,
   troopGroupRadius,
   PROMISED_LAND_ID,
   PROMISED_LAND_X,
@@ -727,8 +728,11 @@ function runUpdatePhase(room: ServerRoom): void {
   const hasVisualEvents =
     room.troopsInTransit.some(tg => !tg.paused) ||
     room.combatHitPlayerIds.length > 0;
+  const hasCombat =
+    room.troopsInTransit.some(tg => tg.inFieldCombat) ||
+    room.occupyingTroops.length > 0;
   const resolvingDuration = hasVisualEvents
-    ? RESOLVING_PHASE_DURATION_MS
+    ? RESOLVING_PHASE_DURATION_MS + (hasCombat ? DICE_LINGER_MS : 0)
     : RESOLVING_PHASE_DURATION_SHORT_MS;
   room.resolvingDurationMs = resolvingDuration;
 

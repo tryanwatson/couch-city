@@ -842,7 +842,7 @@
 }
 .build-progress-bar-wrapper {
   position: relative;
-  background: var(--color-culture-row, #1a1a2e);
+  background: var(--color-bg);
   height: 20px;
   overflow: hidden;
   border-radius: var(--radius-sm);

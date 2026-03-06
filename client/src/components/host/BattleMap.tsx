@@ -27,6 +27,7 @@ interface SpriteSheetConfig {
   frameWidth: number;
   sheetWidth: number;
   sheetHeight: number;
+  displaySize: number;
 }
 
 const SPRITE_SHEETS: Record<TroopType, SpriteSheetConfig> = {
@@ -38,6 +39,7 @@ const SPRITE_SHEETS: Record<TroopType, SpriteSheetConfig> = {
     frameWidth: 32,
     sheetWidth: 512,
     sheetHeight: 32,
+    displaySize: 45,
   },
   cavalry: {
     image: "/blue-horse-ss.png",
@@ -47,6 +49,7 @@ const SPRITE_SHEETS: Record<TroopType, SpriteSheetConfig> = {
     frameWidth: 32,
     sheetWidth: 512,
     sheetHeight: 32,
+    displaySize: 64,
   },
   rifleman: {
     image: "/blue-soldier-rifle.png",
@@ -56,6 +59,7 @@ const SPRITE_SHEETS: Record<TroopType, SpriteSheetConfig> = {
     frameWidth: 32,
     sheetWidth: 544,
     sheetHeight: 32,
+    displaySize: 45,
   },
   truck: {
     image: "/blue-truck.png",
@@ -65,6 +69,7 @@ const SPRITE_SHEETS: Record<TroopType, SpriteSheetConfig> = {
     frameWidth: 32,
     sheetWidth: 512,
     sheetHeight: 32,
+    displaySize: 64,
   },
 };
 
@@ -117,7 +122,6 @@ function pureHueRgb(hex: string): { r: number; g: number; b: number } {
   return { r, g, b };
 }
 
-const TROOP_DISPLAY_SIZE = 64;
 const ATTACK_STANDOFF = 0.09;
 const ATTACK_LINGER_MS = 5000;
 
@@ -166,9 +170,6 @@ function TroopSprite({
   playerColor,
   statusIcon,
   statusColor,
-  diceResult,
-  diceCombatStartMs,
-  diceSide,
 }: {
   pos: { x: number; y: number };
   units: number;
@@ -182,14 +183,12 @@ function TroopSprite({
   playerColor?: string;
   statusIcon?: string;
   statusColor?: string;
-  diceResult?: number;
-  diceCombatStartMs?: number;
-  diceSide?: "left" | "right";
 }) {
   const sheet = SPRITE_SHEETS[troopType];
   const cx = pos.x * 1000;
   const cy = pos.y * 1000;
-  const scale = TROOP_DISPLAY_SIZE / sheet.frameWidth;
+  const displaySize = sheet.displaySize;
+  const scale = displaySize / sheet.frameWidth;
   const clusterRadius = units <= 1 ? 0 : 15 + Math.sqrt(units) * 8;
 
   // Compute sprite positions first, then sort by Y for depth ordering
@@ -229,15 +228,15 @@ function TroopSprite({
         <g
           transform={
             breathScale !== 1
-              ? `translate(${sx}, ${sy + TROOP_DISPLAY_SIZE / 2}) scale(1, ${breathScale}) translate(${-sx}, ${-(sy + TROOP_DISPLAY_SIZE / 2)})`
+              ? `translate(${sx}, ${sy + displaySize / 2}) scale(1, ${breathScale}) translate(${-sx}, ${-(sy + displaySize / 2)})`
               : undefined
           }
         >
           <svg
-            x={sx - TROOP_DISPLAY_SIZE / 2}
-            y={sy - TROOP_DISPLAY_SIZE / 2}
-            width={TROOP_DISPLAY_SIZE}
-            height={TROOP_DISPLAY_SIZE}
+            x={sx - displaySize / 2}
+            y={sy - displaySize / 2}
+            width={displaySize}
+            height={displaySize}
             overflow="hidden"
           >
             <image
@@ -269,7 +268,7 @@ function TroopSprite({
         const cpTextWidth = 3 * 11; // fixed width for up to 3 digits at font 18
         const boxW = boxPad + circleR * 2 + 6 + cpTextWidth + boxPad;
         const boxH = circleR * 2 + boxPad * 2;
-        const boxY = cy + clusterRadius + TROOP_DISPLAY_SIZE / 2 - 20;
+        const boxY = cy + clusterRadius + displaySize / 2 - 20;
         const boxX = cx - boxW / 2;
         const circleCx = boxX + boxPad + circleR;
         const circleCy = boxY + boxPad + circleR;
@@ -326,57 +325,6 @@ function TroopSprite({
             >
               {cp}
             </text>
-          </g>
-        );
-      })()}
-      {diceResult != null && diceCombatStartMs != null && (() => {
-        const elapsed = animTime - diceCombatStartMs;
-        if (elapsed < 0) return null;
-        const diceScale = DICE_DISPLAY_SIZE / DICE_FRAME_WIDTH;
-        let diceFrame: number;
-        if (elapsed < DICE_ROLL_DURATION_MS) {
-          diceFrame = Math.floor(elapsed / DICE_FRAME_INTERVAL_MS) % 16;
-        } else {
-          diceFrame = (diceResult - 1) * 3;
-        }
-        const boxSize = DICE_DISPLAY_SIZE + DICE_BOX_PAD * 2;
-        const diceY = cy - clusterRadius - TROOP_DISPLAY_SIZE / 2 - boxSize - 4;
-        let boxX: number;
-        if (diceSide === "left") {
-          boxX = cx - boxSize - DICE_PAIR_GAP / 2;
-        } else if (diceSide === "right") {
-          boxX = cx + DICE_PAIR_GAP / 2;
-        } else {
-          boxX = cx - boxSize / 2;
-        }
-        return (
-          <g>
-            <rect
-              x={boxX}
-              y={diceY}
-              width={boxSize}
-              height={boxSize}
-              rx={6}
-              ry={6}
-              fill={playerColor ?? "#555"}
-              stroke="black"
-              strokeWidth={1.5}
-            />
-            <svg
-              x={boxX + DICE_BOX_PAD}
-              y={diceY + DICE_BOX_PAD}
-              width={DICE_DISPLAY_SIZE}
-              height={DICE_DISPLAY_SIZE}
-              overflow="hidden"
-            >
-              <image
-                href="/dice_animation.png"
-                x={-diceFrame * DICE_FRAME_WIDTH * diceScale}
-                y={0}
-                width={DICE_SHEET_WIDTH * diceScale}
-                height={DICE_DISPLAY_SIZE}
-              />
-            </svg>
           </g>
         );
       })()}
@@ -838,7 +786,8 @@ export default function BattleMap({
       }
       prevPositionsRef.current = prev;
       resolvingStartRef.current = Date.now();
-      resolvingDurationRef.current = resolvingDurationMs ?? RESOLVING_PHASE_DURATION_MS;
+      resolvingDurationRef.current =
+        resolvingDurationMs ?? RESOLVING_PHASE_DURATION_MS;
       // Read dice results from server state
       const dice = new Map<string, number>();
       if (diceResults) {
@@ -1228,11 +1177,6 @@ export default function BattleMap({
               playerColor={playerMap.get(troop.attackerPlayerId)?.color}
               statusIcon={sIcon}
               statusColor={sColor}
-              diceResult={posData.isAttacking ? diceResultsRef.current.get(troop.attackerPlayerId) : undefined}
-              diceCombatStartMs={posData.isAttacking && resolvingStartRef.current != null
-                ? resolvingStartRef.current + FIELD_COMBAT_WALK_FRAC * resolvingDurationRef.current
-                : undefined}
-              diceSide={posData.isAttacking ? (posData.facingLeft ? "right" : "left") : undefined}
             />
           );
         })}
@@ -1256,9 +1200,6 @@ export default function BattleMap({
             statusColor={
               playerMap.get(lingering.troop.targetPlayerId)?.color ?? "white"
             }
-            diceResult={diceResultsRef.current.get(lingering.troop.attackerPlayerId)}
-            diceCombatStartMs={resolvingStartRef.current ?? undefined}
-            diceSide={lingering.facingLeft ? "right" : "left"}
           />
         ))}
 
@@ -1296,7 +1237,8 @@ export default function BattleMap({
         .sort((a, b) => a.pos.y - b.pos.y)
         .map((entry) => {
           // Promised land occupiers: only attack-animate when contested (multiple players at promised land)
-          const isPromisedLandOccupier = entry.occ.targetPlayerId === PROMISED_LAND_ID;
+          const isPromisedLandOccupier =
+            entry.occ.targetPlayerId === PROMISED_LAND_ID;
           const promisedLandPlayerIds = new Set(
             occupyingTroops
               .filter(
@@ -1327,9 +1269,6 @@ export default function BattleMap({
               playerColor={entry.playerColor}
               statusIcon={sIcon}
               statusColor={sColor}
-              diceResult={isAttacking ? diceResultsRef.current.get(entry.occ.attackerPlayerId) : undefined}
-              diceCombatStartMs={isAttacking ? (resolvingStartRef.current ?? undefined) : undefined}
-              diceSide={isAttacking ? (entry.facingLeft ? "right" : "left") : undefined}
             />
           );
         })}
@@ -1394,6 +1333,168 @@ export default function BattleMap({
       {players.map((player) => (
         <CityInfoNode key={player.playerId} player={player} />
       ))}
+
+      {/* Dice overlays — rendered after everything so they are always on top */}
+      {(() => {
+        const diceEntries: {
+          key: string;
+          cx: number;
+          cy: number;
+          clusterRadius: number;
+          displaySize: number;
+          playerColor: string;
+          diceSide: "left" | "right";
+          diceResult: number;
+          diceCombatStartMs: number;
+        }[] = [];
+
+        // Walking troops (field combat)
+        for (const troop of troopsInTransit) {
+          const posData = troopPositions.get(troop.id);
+          if (!posData?.isAttacking) continue;
+          const result = diceResultsRef.current.get(troop.attackerPlayerId);
+          if (result == null || resolvingStartRef.current == null) continue;
+          const sheet = SPRITE_SHEETS[troop.troopType];
+          const units = posData.displayUnits;
+          diceEntries.push({
+            key: `walk-${troop.id}`,
+            cx: posData.x * 1000,
+            cy: posData.y * 1000,
+            clusterRadius: units <= 1 ? 0 : 15 + Math.sqrt(units) * 8,
+            displaySize: sheet.displaySize,
+            playerColor: playerMap.get(troop.attackerPlayerId)?.color ?? "#555",
+            diceSide: posData.facingLeft ? "right" : "left",
+            diceResult: result,
+            diceCombatStartMs:
+              resolvingStartRef.current +
+              FIELD_COMBAT_WALK_FRAC * resolvingDurationRef.current,
+          });
+        }
+
+        // Attacking troops (linger at castle)
+        for (const lingering of attackingTroops.values()) {
+          const result = diceResultsRef.current.get(
+            lingering.troop.attackerPlayerId,
+          );
+          if (result == null || resolvingStartRef.current == null) continue;
+          const sheet = SPRITE_SHEETS[lingering.troop.troopType];
+          const units = lingering.troop.units;
+          diceEntries.push({
+            key: `attack-${lingering.troop.id}`,
+            cx: lingering.pos.x * 1000,
+            cy: lingering.pos.y * 1000,
+            clusterRadius: units <= 1 ? 0 : 15 + Math.sqrt(units) * 8,
+            displaySize: sheet.displaySize,
+            playerColor:
+              playerMap.get(lingering.troop.attackerPlayerId)?.color ?? "#555",
+            diceSide: lingering.facingLeft ? "right" : "left",
+            diceResult: result,
+            diceCombatStartMs: resolvingStartRef.current,
+          });
+        }
+
+        // Occupying siege troops
+        for (const occ of occupyingTroops) {
+          if (troopsInTransit.some((tg) => tg.id === occ.id)) continue;
+          const attacker = playerMap.get(occ.attackerPlayerId);
+          const targetPos = resolveTargetPos(occ.targetPlayerId, playerMap);
+          if (!attacker || !targetPos) continue;
+          const isPromisedLandOccupier =
+            occ.targetPlayerId === PROMISED_LAND_ID;
+          const promisedLandPlayerIds = new Set(
+            occupyingTroops
+              .filter(
+                (o) => o.targetPlayerId === PROMISED_LAND_ID && o.units > 0,
+              )
+              .map((o) => o.attackerPlayerId),
+          );
+          const isAttacking = isPromisedLandOccupier
+            ? subPhase === "resolving" && promisedLandPlayerIds.size > 1
+            : subPhase === "resolving";
+          if (!isAttacking) continue;
+          const result = diceResultsRef.current.get(occ.attackerPlayerId);
+          if (result == null || resolvingStartRef.current == null) continue;
+          const dx = targetPos.x - attacker.x;
+          const dy = targetPos.y - attacker.y;
+          let pos: { x: number; y: number };
+          if (occ.targetPlayerId === PROMISED_LAND_ID) {
+            pos = { x: PROMISED_LAND_X, y: PROMISED_LAND_Y };
+          } else {
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const nx = dist > 0 ? dx / dist : 0;
+            const ny = dist > 0 ? dy / dist : 0;
+            pos = {
+              x: targetPos.x - nx * ATTACK_STANDOFF,
+              y: targetPos.y - ny * ATTACK_STANDOFF,
+            };
+          }
+          const facingLeft = dx < 0;
+          const sheet = SPRITE_SHEETS[occ.troopType];
+          diceEntries.push({
+            key: `siege-${occ.id}`,
+            cx: pos.x * 1000,
+            cy: pos.y * 1000,
+            clusterRadius: occ.units <= 1 ? 0 : 15 + Math.sqrt(occ.units) * 8,
+            displaySize: sheet.displaySize,
+            playerColor: attacker.color,
+            diceSide: facingLeft ? "right" : "left",
+            diceResult: result,
+            diceCombatStartMs: resolvingStartRef.current,
+          });
+        }
+
+        const diceScale = DICE_DISPLAY_SIZE / DICE_FRAME_WIDTH;
+        const boxSize = DICE_DISPLAY_SIZE + DICE_BOX_PAD * 2;
+
+        return diceEntries.map((d) => {
+          const elapsed = animTime - d.diceCombatStartMs;
+          if (elapsed < 0) return null;
+          let diceFrame: number;
+          if (elapsed < DICE_ROLL_DURATION_MS) {
+            diceFrame = Math.floor(elapsed / DICE_FRAME_INTERVAL_MS) % 16;
+          } else {
+            diceFrame = (d.diceResult - 1) * 3;
+          }
+          const diceY =
+            d.cy - d.clusterRadius - d.displaySize / 2 - boxSize - 4;
+          let boxX: number;
+          if (d.diceSide === "left") {
+            boxX = d.cx - boxSize - DICE_PAIR_GAP / 2;
+          } else {
+            boxX = d.cx + DICE_PAIR_GAP / 2;
+          }
+          return (
+            <g key={d.key}>
+              <rect
+                x={boxX}
+                y={diceY}
+                width={boxSize}
+                height={boxSize}
+                rx={6}
+                ry={6}
+                fill={d.playerColor}
+                stroke="black"
+                strokeWidth={1.5}
+              />
+              <svg
+                x={boxX + DICE_BOX_PAD}
+                y={diceY + DICE_BOX_PAD}
+                width={DICE_DISPLAY_SIZE}
+                height={DICE_DISPLAY_SIZE}
+                overflow="hidden"
+              >
+                <image
+                  href="/dice_animation.png"
+                  x={-diceFrame * DICE_FRAME_WIDTH * diceScale}
+                  y={0}
+                  width={DICE_SHEET_WIDTH * diceScale}
+                  height={DICE_DISPLAY_SIZE}
+                />
+              </svg>
+            </g>
+          );
+        });
+      })()}
     </svg>
   );
 }
