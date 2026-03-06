@@ -247,62 +247,73 @@ function TroopSprite({
   return (
     <g opacity={opacity}>
       <g filter={filterUrl}>{sprites}</g>
-      <text
-        x={cx}
-        y={cy - clusterRadius - TROOP_DISPLAY_SIZE / 2 - 4}
-        textAnchor="middle"
-        fontSize={18}
-        fontWeight="700"
-        fill="white"
-        stroke="black"
-        strokeWidth={3}
-        paintOrder="stroke"
-      >
-        {units * COMBAT_POWER[troopType]}
-      </text>
-      {statusIcon &&
-        (() => {
-          const iconY = cy - clusterRadius - TROOP_DISPLAY_SIZE / 2 - 24;
-          if (statusIcon === "⚔") {
-            return (
-              <>
-                <circle
-                  cx={cx}
-                  cy={iconY - 5}
-                  r={14}
-                  fill={statusColor ?? "white"}
-                  stroke="black"
-                  strokeWidth={2}
-                />
-                <text
-                  x={cx}
-                  y={iconY}
-                  textAnchor="middle"
-                  fontSize={16}
-                  fontWeight="700"
-                  fill="white"
-                >
-                  {statusIcon}
-                </text>
-              </>
-            );
-          }
-          return (
-            <text
-              x={cx}
-              y={iconY}
-              textAnchor="middle"
-              fontSize={16}
-              fontWeight="700"
+      {(() => {
+        const cp = units * COMBAT_POWER[troopType];
+        const circleR = 14;
+        const boxPad = 5;
+        const cpTextWidth = 3 * 11; // fixed width for up to 3 digits at font 18
+        const boxW = boxPad + circleR * 2 + 6 + cpTextWidth + boxPad;
+        const boxH = circleR * 2 + boxPad * 2;
+        const boxY = cy + clusterRadius + TROOP_DISPLAY_SIZE / 2 - 20;
+        const boxX = cx - boxW / 2;
+        const circleCx = boxX + boxPad + circleR;
+        const circleCy = boxY + boxPad + circleR;
+
+        return (
+          <g>
+            <rect
+              x={boxX}
+              y={boxY}
+              width={boxW}
+              height={boxH}
+              rx={10}
+              ry={10}
+              fill={playerColor ?? "#555"}
+              stroke="black"
+              strokeWidth={2}
+            />
+            <circle
+              cx={circleCx}
+              cy={circleCy}
+              r={circleR}
               fill={statusColor ?? "white"}
               stroke="black"
-              strokeWidth={3}
+              strokeWidth={1.5}
+            />
+            {statusIcon && (
+              <text
+                x={circleCx}
+                y={circleCy}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={statusIcon === "zzz" ? 9 : 15}
+                fontWeight="700"
+                fill="white"
+              >
+                {statusIcon}
+              </text>
+            )}
+            <text
+              x={
+                circleCx +
+                circleR +
+                (boxW - (boxPad + circleR * 2) - boxPad) / 2
+              }
+              y={circleCy}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize={18}
+              fontWeight="700"
+              fill="white"
+              stroke="black"
+              strokeWidth={2}
               paintOrder="stroke"
             >
-              {statusIcon}
+              {cp}
             </text>
-          );
-        })()}
+          </g>
+        );
+      })()}
     </g>
   );
 }
@@ -504,8 +515,7 @@ function CityInfoNode({ player }: { player: CityPlayerInfo }) {
             x={BOX_X + 6}
             y={BOX_Y + 60}
             width={
-              (BOX_W - 12) *
-              Math.min(1, player.culture / CULTURE_WIN_THRESHOLD)
+              (BOX_W - 12) * Math.min(1, player.culture / CULTURE_WIN_THRESHOLD)
             }
             height={6}
             rx={3}
@@ -1071,10 +1081,7 @@ export default function BattleMap({
           ? (playerMap.get(promisedLandOwnerId)?.color ?? null)
           : null;
         return (
-          <PromisedLandSpot
-            ownerColor={ownerColor}
-            isContested={isContested}
-          />
+          <PromisedLandSpot ownerColor={ownerColor} isContested={isContested} />
         );
       })()}
 
@@ -1121,7 +1128,7 @@ export default function BattleMap({
               : troop.isDonation
                 ? "#2ecc71"
                 : troop.targetPlayerId === PROMISED_LAND_ID
-                  ? "#f1c40f"
+                  ? "#ffffff"
                   : (playerMap.get(troop.targetPlayerId)?.color ?? "white");
           return (
             <TroopSprite
@@ -1213,7 +1220,7 @@ export default function BattleMap({
             : subPhase === "resolving";
           const sIcon = isMineOccupier ? "👑" : "⚔";
           const sColor = isMineOccupier
-            ? "#f1c40f"
+            ? "#ffffff"
             : (playerMap.get(entry.occ.targetPlayerId)?.color ?? "white");
           return (
             <TroopSprite
@@ -1240,9 +1247,10 @@ export default function BattleMap({
         );
         if (defendingTypes.length === 0 || !player.alive) return null;
         return defendingTypes.map((type, i) => {
-          const spread = defendingTypes.length > 1
-            ? (i - (defendingTypes.length - 1) / 2) * 0.03
-            : 0;
+          const spread =
+            defendingTypes.length > 1
+              ? (i - (defendingTypes.length - 1) / 2) * 0.06
+              : 0;
           const pos = {
             x: player.x + spread,
             y: player.y + 0.04,
