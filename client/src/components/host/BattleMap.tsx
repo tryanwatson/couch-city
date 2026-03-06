@@ -1315,9 +1315,10 @@ export default function BattleMap({
             playerColor: playerMap.get(troop.attackerPlayerId)?.color ?? "#555",
             diceSide: posData.facingLeft ? "right" : "left",
             diceResult: result,
-            diceCombatStartMs:
-              resolvingStartRef.current +
-              FIELD_COMBAT_WALK_FRAC * resolvingDurationRef.current,
+            diceCombatStartMs: troop.inFieldCombat
+              ? resolvingStartRef.current +
+                FIELD_COMBAT_WALK_FRAC * resolvingDurationRef.current
+              : resolvingStartRef.current,
           });
         }
 
