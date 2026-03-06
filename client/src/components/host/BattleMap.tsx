@@ -526,9 +526,11 @@ function CityInfoNode({ player }: { player: CityPlayerInfo }) {
 function PromisedLandSpot({
   ownerColor,
   isContested,
+  animTime,
 }: {
   ownerColor: string | null;
   isContested: boolean;
+  animTime: number;
 }) {
   const cx = PROMISED_LAND_X * 1000;
   const cy = PROMISED_LAND_Y * 1000;
@@ -581,14 +583,32 @@ function PromisedLandSpot({
           />
         </circle>
       )}
-      {/* Promised land image */}
-      <image
-        href="/promised_land.png"
-        x={cx - 100}
-        y={cy - 100}
-        width={200}
-        height={200}
-      />
+      {/* Animated promised land sprite */}
+      {(() => {
+        const frameCount = 5;
+        const frameW = 128;
+        const sheetW = 640;
+        const displaySize = 200;
+        const scale = displaySize / frameW;
+        const frame = Math.floor((animTime % (frameCount * 400)) / 400);
+        return (
+          <svg
+            x={cx - displaySize / 2}
+            y={cy - displaySize / 2}
+            width={displaySize}
+            height={displaySize}
+            overflow="hidden"
+          >
+            <image
+              href="/waterfall.png"
+              x={-frame * frameW * scale}
+              y={0}
+              width={sheetW * scale}
+              height={displaySize}
+            />
+          </svg>
+        );
+      })()}
     </g>
   );
 }
@@ -1059,7 +1079,7 @@ export default function BattleMap({
           ? (playerMap.get(promisedLandOwnerId)?.color ?? null)
           : null;
         return (
-          <PromisedLandSpot ownerColor={ownerColor} isContested={isContested} />
+          <PromisedLandSpot ownerColor={ownerColor} isContested={isContested} animTime={animTime} />
         );
       })()}
 
