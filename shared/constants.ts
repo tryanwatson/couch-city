@@ -1,7 +1,7 @@
 // Economy — initial amounts
-export const INITIAL_FOOD = 50;
-export const INITIAL_MATERIALS = 50;
-export const INITIAL_GOLD = 50;
+export const INITIAL_FOOD = 0;
+export const INITIAL_MATERIALS = 0;
+export const INITIAL_GOLD = 0;
 
 // Worker yields (per turn per worker)
 export const FOOD_PER_FARMER = 3;

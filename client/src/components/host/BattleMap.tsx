@@ -143,6 +143,11 @@ function resolveTargetPos(
 }
 
 const GOLDEN_ANGLE = 2.399963;
+const DICE_ROLL_DURATION_MS = 800;
+const DICE_DISPLAY_SIZE = 40;
+const DICE_FRAME_INTERVAL_MS = 50;
+const DICE_FRAME_WIDTH = 64;
+const DICE_SHEET_WIDTH = 1024;
 
 function TroopSprite({
   pos,
@@ -157,6 +162,8 @@ function TroopSprite({
   playerColor,
   statusIcon,
   statusColor,
+  diceResult,
+  diceCombatStartMs,
 }: {
   pos: { x: number; y: number };
   units: number;
@@ -170,6 +177,8 @@ function TroopSprite({
   playerColor?: string;
   statusIcon?: string;
   statusColor?: string;
+  diceResult?: number;
+  diceCombatStartMs?: number;
 }) {
   const sheet = SPRITE_SHEETS[troopType];
   const cx = pos.x * 1000;
@@ -312,6 +321,38 @@ function TroopSprite({
               {cp}
             </text>
           </g>
+        );
+      })()}
+      {diceResult != null && diceCombatStartMs != null && (() => {
+        const elapsed = animTime - diceCombatStartMs;
+        if (elapsed < 0) return null;
+        const diceScale = DICE_DISPLAY_SIZE / DICE_FRAME_WIDTH;
+        let diceFrame: number;
+        if (elapsed < DICE_ROLL_DURATION_MS) {
+          // Rolling: cycle through all 16 frames rapidly
+          diceFrame = Math.floor(elapsed / DICE_FRAME_INTERVAL_MS) % 16;
+        } else {
+          // Settled: show result frame
+          diceFrame = (diceResult - 1) * 3;
+        }
+        const diceX = cx - DICE_DISPLAY_SIZE / 2;
+        const diceY = cy - clusterRadius - TROOP_DISPLAY_SIZE / 2 - DICE_DISPLAY_SIZE - 4;
+        return (
+          <svg
+            x={diceX}
+            y={diceY}
+            width={DICE_DISPLAY_SIZE}
+            height={DICE_DISPLAY_SIZE}
+            overflow="hidden"
+          >
+            <image
+              href="/dice_animation.png"
+              x={-diceFrame * DICE_FRAME_WIDTH * diceScale}
+              y={0}
+              width={DICE_SHEET_WIDTH * diceScale}
+              height={DICE_DISPLAY_SIZE}
+            />
+          </svg>
         );
       })()}
     </g>
@@ -757,6 +798,7 @@ export default function BattleMap({
   );
   const resolvingStartRef = useRef<number | null>(null);
   const prevSubPhaseRef = useRef<PlayingSubPhase | null | undefined>(null);
+  const diceResultsRef = useRef<Map<string, number>>(new Map());
 
   // Detect transition to resolving phase
   useEffect(() => {
@@ -768,6 +810,14 @@ export default function BattleMap({
       }
       prevPositionsRef.current = prev;
       resolvingStartRef.current = Date.now();
+      // Generate random dice results per player
+      const dice = new Map<string, number>();
+      for (const p of players) {
+        dice.set(p.playerId, Math.floor(Math.random() * 6) + 1);
+      }
+      diceResultsRef.current = dice;
+    } else if (subPhase !== "resolving") {
+      diceResultsRef.current = new Map();
     }
     prevSubPhaseRef.current = subPhase;
   }, [subPhase, troopPositions]);
@@ -1145,6 +1195,10 @@ export default function BattleMap({
               playerColor={playerMap.get(troop.attackerPlayerId)?.color}
               statusIcon={sIcon}
               statusColor={sColor}
+              diceResult={posData.isAttacking ? diceResultsRef.current.get(troop.attackerPlayerId) : undefined}
+              diceCombatStartMs={posData.isAttacking && resolvingStartRef.current != null
+                ? resolvingStartRef.current + FIELD_COMBAT_WALK_FRAC * RESOLVING_PHASE_DURATION_MS
+                : undefined}
             />
           );
         })}
@@ -1168,6 +1222,8 @@ export default function BattleMap({
             statusColor={
               playerMap.get(lingering.troop.targetPlayerId)?.color ?? "white"
             }
+            diceResult={diceResultsRef.current.get(lingering.troop.attackerPlayerId)}
+            diceCombatStartMs={resolvingStartRef.current ?? undefined}
           />
         ))}
 
@@ -1236,6 +1292,8 @@ export default function BattleMap({
               playerColor={entry.playerColor}
               statusIcon={sIcon}
               statusColor={sColor}
+              diceResult={isAttacking ? diceResultsRef.current.get(entry.occ.attackerPlayerId) : undefined}
+              diceCombatStartMs={isAttacking ? (resolvingStartRef.current ?? undefined) : undefined}
             />
           );
         })}
