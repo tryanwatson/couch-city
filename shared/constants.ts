@@ -1,7 +1,7 @@
 // Economy — initial amounts
-export const INITIAL_FOOD = 40;
-export const INITIAL_MATERIALS = 40;
-export const INITIAL_GOLD = 40;
+export const INITIAL_FOOD = 0;
+export const INITIAL_MATERIALS = 0;
+export const INITIAL_GOLD = 0;
 
 // Worker yields (per turn per worker)
 export const FOOD_PER_FARMER = 3;
@@ -25,7 +25,8 @@ export function getUpgradeUnlockCost(
   level: number,
 ): number {
   const progressArr = UPGRADE_PROGRESS[category];
-  const ratio = progressArr[Math.min(level, progressArr.length - 1)] / progressArr[0];
+  const ratio =
+    progressArr[Math.min(level, progressArr.length - 1)] / progressArr[0];
   return Math.round(25 * ratio);
 }
 
@@ -39,11 +40,23 @@ export const UPGRADE_PROGRESS: Record<UpgradeCategory, readonly number[]> = {
 };
 
 export const ALL_UPGRADE_CATEGORIES: readonly UpgradeCategory[] = [
-  'culture', 'military', 'farming', 'mining', 'trade', 'defense',
+  "culture",
+  "military",
+  "farming",
+  "mining",
+  "trade",
+  "defense",
 ] as const;
 
 export function zeroUpgradeRecord(): Record<UpgradeCategory, number> {
-  return { culture: 0, military: 0, farming: 0, mining: 0, trade: 0, defense: 0 };
+  return {
+    culture: 0,
+    military: 0,
+    farming: 0,
+    mining: 0,
+    trade: 0,
+    defense: 0,
+  };
 }
 
 export function yieldMultiplier(upgradesCompleted: number): number {
@@ -74,10 +87,10 @@ export const TRAINING_CONFIG: Record<
   TroopType,
   { gold: number; troops: number }
 > = {
-  warrior:  { gold: 20,  troops: 10 },
-  cavalry:  { gold: 50,  troops: 5 },
+  warrior: { gold: 20, troops: 10 },
+  cavalry: { gold: 50, troops: 5 },
   rifleman: { gold: 125, troops: 3 },
-  truck:    { gold: 300, troops: 1 },
+  truck: { gold: 300, troops: 1 },
 };
 
 export const ZERO_MILITARY: Record<TroopType, number> = {
@@ -113,7 +126,7 @@ export const FIELD_COMBAT_FIGHT_FRAC = 0.5; // 2500ms — fight at collision poi
 export const FIELD_COMBAT_ADVANCE_FRAC = 0.2; // 1000ms — winner advances to destination / loser fades
 
 // The Promised Land (center-of-map objective — hold to win)
-export const PROMISED_LAND_ID = '__PROMISED_LAND__';
+export const PROMISED_LAND_ID = "__PROMISED_LAND__";
 export const PROMISED_LAND_X = 0.5;
 export const PROMISED_LAND_Y = 0.5;
 export const PROMISED_LAND_TRAVEL_TURNS = 2; // turns for troops to reach it (arrive the turn after sending)
@@ -215,17 +228,17 @@ export const PLAYER_POSITION_SLOTS = 12;
 // Fill order: player join index → slot index
 // Cardinals first (W/E/N/S), then opposite pairs filling largest gaps
 export const PLAYER_SLOT_FILL_ORDER: readonly number[] = [
-  6,  // 1st: 180° (West)
-  0,  // 2nd: 0°   (East)
-  9,  // 3rd: 270° (North)
-  3,  // 4th: 90°  (South)
-  2,  // 5th: 60°
-  8,  // 6th: 240°
-  5,  // 7th: 150°
+  6, // 1st: 180° (West)
+  0, // 2nd: 0°   (East)
+  9, // 3rd: 270° (North)
+  3, // 4th: 90°  (South)
+  2, // 5th: 60°
+  8, // 6th: 240°
+  5, // 7th: 150°
   11, // 8th: 330°
-  1,  // 9th: 30°
-  7,  // 10th: 210°
-  4,  // 11th: 120°
+  1, // 9th: 30°
+  7, // 10th: 210°
+  4, // 11th: 120°
   10, // 12th: 300°
 ] as const;
 
@@ -234,4 +247,5 @@ export const PLAYER_POSITION_RX = 0.35;
 export const PLAYER_POSITION_RY = 0.35;
 
 /** Diameter of the player placement circle — used to normalize distance-based travel time. */
-export const PLAYER_PLACEMENT_DIAMETER = PLAYER_POSITION_RX + PLAYER_POSITION_RY;
+export const PLAYER_PLACEMENT_DIAMETER =
+  PLAYER_POSITION_RX + PLAYER_POSITION_RY;
