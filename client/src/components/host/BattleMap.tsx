@@ -148,6 +148,8 @@ const DICE_DISPLAY_SIZE = 40;
 const DICE_FRAME_INTERVAL_MS = 50;
 const DICE_FRAME_WIDTH = 64;
 const DICE_SHEET_WIDTH = 1024;
+const DICE_BOX_PAD = 4;
+const DICE_PAIR_GAP = 4;
 
 function TroopSprite({
   pos,
@@ -164,6 +166,7 @@ function TroopSprite({
   statusColor,
   diceResult,
   diceCombatStartMs,
+  diceSide,
 }: {
   pos: { x: number; y: number };
   units: number;
@@ -179,6 +182,7 @@ function TroopSprite({
   statusColor?: string;
   diceResult?: number;
   diceCombatStartMs?: number;
+  diceSide?: "left" | "right";
 }) {
   const sheet = SPRITE_SHEETS[troopType];
   const cx = pos.x * 1000;
@@ -329,30 +333,49 @@ function TroopSprite({
         const diceScale = DICE_DISPLAY_SIZE / DICE_FRAME_WIDTH;
         let diceFrame: number;
         if (elapsed < DICE_ROLL_DURATION_MS) {
-          // Rolling: cycle through all 16 frames rapidly
           diceFrame = Math.floor(elapsed / DICE_FRAME_INTERVAL_MS) % 16;
         } else {
-          // Settled: show result frame
           diceFrame = (diceResult - 1) * 3;
         }
-        const diceX = cx - DICE_DISPLAY_SIZE / 2;
-        const diceY = cy - clusterRadius - TROOP_DISPLAY_SIZE / 2 - DICE_DISPLAY_SIZE - 4;
+        const boxSize = DICE_DISPLAY_SIZE + DICE_BOX_PAD * 2;
+        const diceY = cy - clusterRadius - TROOP_DISPLAY_SIZE / 2 - boxSize - 4;
+        let boxX: number;
+        if (diceSide === "left") {
+          boxX = cx - boxSize - DICE_PAIR_GAP / 2;
+        } else if (diceSide === "right") {
+          boxX = cx + DICE_PAIR_GAP / 2;
+        } else {
+          boxX = cx - boxSize / 2;
+        }
         return (
-          <svg
-            x={diceX}
-            y={diceY}
-            width={DICE_DISPLAY_SIZE}
-            height={DICE_DISPLAY_SIZE}
-            overflow="hidden"
-          >
-            <image
-              href="/dice_animation.png"
-              x={-diceFrame * DICE_FRAME_WIDTH * diceScale}
-              y={0}
-              width={DICE_SHEET_WIDTH * diceScale}
-              height={DICE_DISPLAY_SIZE}
+          <g>
+            <rect
+              x={boxX}
+              y={diceY}
+              width={boxSize}
+              height={boxSize}
+              rx={6}
+              ry={6}
+              fill={playerColor ?? "#555"}
+              stroke="black"
+              strokeWidth={1.5}
             />
-          </svg>
+            <svg
+              x={boxX + DICE_BOX_PAD}
+              y={diceY + DICE_BOX_PAD}
+              width={DICE_DISPLAY_SIZE}
+              height={DICE_DISPLAY_SIZE}
+              overflow="hidden"
+            >
+              <image
+                href="/dice_animation.png"
+                x={-diceFrame * DICE_FRAME_WIDTH * diceScale}
+                y={0}
+                width={DICE_SHEET_WIDTH * diceScale}
+                height={DICE_DISPLAY_SIZE}
+              />
+            </svg>
+          </g>
         );
       })()}
     </g>
@@ -1199,6 +1222,7 @@ export default function BattleMap({
               diceCombatStartMs={posData.isAttacking && resolvingStartRef.current != null
                 ? resolvingStartRef.current + FIELD_COMBAT_WALK_FRAC * RESOLVING_PHASE_DURATION_MS
                 : undefined}
+              diceSide={posData.isAttacking ? (posData.facingLeft ? "right" : "left") : undefined}
             />
           );
         })}
@@ -1224,6 +1248,7 @@ export default function BattleMap({
             }
             diceResult={diceResultsRef.current.get(lingering.troop.attackerPlayerId)}
             diceCombatStartMs={resolvingStartRef.current ?? undefined}
+            diceSide={lingering.facingLeft ? "right" : "left"}
           />
         ))}
 
@@ -1294,6 +1319,7 @@ export default function BattleMap({
               statusColor={sColor}
               diceResult={isAttacking ? diceResultsRef.current.get(entry.occ.attackerPlayerId) : undefined}
               diceCombatStartMs={isAttacking ? (resolvingStartRef.current ?? undefined) : undefined}
+              diceSide={isAttacking ? (entry.facingLeft ? "right" : "left") : undefined}
             />
           );
         })}
