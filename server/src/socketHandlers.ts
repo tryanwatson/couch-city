@@ -300,10 +300,12 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     const result = endTurn(data.roomId, data.playerId);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     // If all players ended, runUpdatePhase() already broadcast via broadcastFn.
-    // Otherwise, unicast so only this player sees their endedTurn status.
+    // Otherwise, unicast so only this player sees their endedTurn status,
+    // and notify the room (host) that this player ended their turn.
     const room = getRoom(data.roomId);
     if (room && room.subPhase === 'planning') {
       unicastPlayer(socket, data.roomId);
+      io.to(data.roomId).emit('room:turn_ended', { playerId: data.playerId });
     }
   });
 
