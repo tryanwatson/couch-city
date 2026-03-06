@@ -584,28 +584,14 @@ function PromisedLandSpot({
           />
         </circle>
       )}
-      {/* Radial gradient glow */}
-      <defs>
-        <radialGradient id="promised-land-glow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#fffbe6" stopOpacity={0.9} />
-          <stop offset="70%" stopColor="#f4d03f" stopOpacity={0.4} />
-          <stop offset="100%" stopColor="#f39c12" stopOpacity={0} />
-        </radialGradient>
-      </defs>
-      <circle cx={cx} cy={cy} r={50} fill="url(#promised-land-glow)" />
-      {/* Inner circle */}
-      <circle
-        cx={cx}
-        cy={cy}
-        r={35}
-        fill="#1a1a2e"
-        stroke="#f4d03f"
-        strokeWidth={3}
+      {/* Promised land image */}
+      <image
+        href="/promised_land.png"
+        x={cx - 50}
+        y={cy - 50}
+        width={100}
+        height={100}
       />
-      {/* Crown icon */}
-      <text x={cx} y={cy + 10} textAnchor="middle" fontSize={32}>
-        👑
-      </text>
     </g>
   );
 }
@@ -621,15 +607,17 @@ function PromisedLandInfo({
 }) {
   const cx = PROMISED_LAND_X * 1000;
   const cy = PROMISED_LAND_Y * 1000;
+  const BOX_H = ownerColor && !isContested && holdTurns > 0 ? 52 : 36;
+  const BOX_Y = cy - 55 - BOX_H;
 
   return (
     <g>
       {/* Info box background */}
       <rect
         x={cx - 75}
-        y={cy + 44}
+        y={BOX_Y}
         width={150}
-        height={ownerColor && !isContested && holdTurns > 0 ? 52 : 36}
+        height={BOX_H}
         rx={5}
         fill="#3a3a3a"
         stroke="black"
@@ -638,7 +626,7 @@ function PromisedLandInfo({
       {/* Label */}
       <text
         x={cx}
-        y={cy + 58}
+        y={BOX_Y + 14}
         textAnchor="middle"
         fontSize={12}
         fontWeight="700"
@@ -649,7 +637,7 @@ function PromisedLandInfo({
       {/* Status text */}
       <text
         x={cx}
-        y={cy + 73}
+        y={BOX_Y + 29}
         textAnchor="middle"
         fontSize={11}
         fill={isContested ? "#e74c3c" : ownerColor ? ownerColor : "#888"}
@@ -667,7 +655,7 @@ function PromisedLandInfo({
             <circle
               key={i}
               cx={cx - ((PROMISED_LAND_HOLD_TURNS - 1) * 12) / 2 + i * 12}
-              cy={cy + 85}
+              cy={BOX_Y + 41}
               r={5}
               fill={i < holdTurns ? ownerColor : "#333"}
               stroke={i < holdTurns ? ownerColor : "#666"}
