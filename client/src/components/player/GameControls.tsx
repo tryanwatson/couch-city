@@ -241,6 +241,7 @@ export default function GameControls({
     targetPlayerId: string,
     units: number,
     troopType: TroopType,
+    fromDefending?: boolean,
   ) => {
     socket.emit("player:send_attack", {
       roomId: roomState.roomId,
@@ -248,6 +249,7 @@ export default function GameControls({
       targetPlayerId,
       units,
       troopType,
+      fromDefending,
     });
   };
 
@@ -468,6 +470,10 @@ export default function GameControls({
   const myTransit = roomState.troopsInTransit.filter(
     (tg) => tg.attackerPlayerId === playerId,
   );
+  const defendingTypes = TROOP_TYPES.filter(
+    (t) => me.militaryDefending[t] > 0,
+  );
+  const hasDefendingTroops = defendingTypes.length > 0;
 
   const alivePlayers = roomState.players.filter((p) => p.alive);
   const endedCount = alivePlayers.filter((p) => p.endedTurn).length;
@@ -1291,8 +1297,8 @@ export default function GameControls({
         </div>
       </div>
 
-      {/* TROOPS IN TRANSIT — interactive management */}
-      {myTransit.length > 0 && (
+      {/* TROOPS IN TRANSIT + DEFENDING — interactive management */}
+      {(myTransit.length > 0 || hasDefendingTroops) && (
         <div className="upgrades-section section-troops">
           <button
             className="section-header"
@@ -1302,10 +1308,14 @@ export default function GameControls({
               className={`section-chevron${expandedSections.troops ? " section-chevron-open" : ""}`}
             >
             </span>
-            <span className="section-header-title">🚶 Troops In Transit</span>
+            <span className="section-header-title">🚶 Troop Management</span>
             <span className="section-header-summary">
               <span className="summary-detail">
-                {myTransit.length} group{myTransit.length !== 1 ? "s" : ""}
+                {myTransit.length > 0 &&
+                  `${myTransit.length} in transit`}
+                {myTransit.length > 0 && hasDefendingTroops && " · "}
+                {hasDefendingTroops &&
+                  `${defendingTypes.length} defending`}
               </span>
             </span>
           </button>
@@ -1384,7 +1394,7 @@ export default function GameControls({
                             Recall
                           </button>
                           <button
-                            className="troop-action-btn troop-action-btn-defend"
+                            className="troop-action-btn"
                             onClick={() => handleRecallTroopsToDefend(tg.id)}
                             disabled={controlsDisabled}
                           >
@@ -1394,7 +1404,7 @@ export default function GameControls({
                       )}
                       {isReturning && (
                         <button
-                          className={`troop-action-btn${tg.defendOnArrival ? " troop-action-btn-defend-active" : " troop-action-btn-defend"}`}
+                          className="troop-action-btn"
                           onClick={() =>
                             handleToggleDefendOnArrival(
                               tg.id,
@@ -1434,6 +1444,79 @@ export default function GameControls({
                 );
               })}
             </div>
+
+              {/* Defending troops — shown as manageable rows */}
+              {hasDefendingTroops && (
+                <div className="troop-manage-list">
+                  <div
+                    className="transit-row"
+                    style={{ fontWeight: 700, marginTop: myTransit.length > 0 ? 8 : 0 }}
+                  >
+                    Defending
+                  </div>
+                  {defendingTypes.map((type) => {
+                    const units = me.militaryDefending[type];
+                    const defendRedirectTargets = roomState.players.filter(
+                      (p) => p.alive && p.playerId !== playerId,
+                    );
+                    return (
+                      <div key={type} className="troop-manage-row">
+                        <div className="troop-manage-info">
+                          <span className="troop-manage-units">
+                            {units} {type}
+                          </span>
+                          <span className="troop-manage-target">
+                            Defending
+                          </span>
+                          <span className="troop-manage-eta">
+                            {units * COMBAT_POWER[type]} CP
+                          </span>
+                        </div>
+                        <div className="troop-manage-actions">
+                          <button
+                            className="troop-action-btn"
+                            onClick={() =>
+                              handleRecallDefenders(units, type)
+                            }
+                            disabled={controlsDisabled}
+                          >
+                            Recall
+                          </button>
+                          {(defendRedirectTargets.length > 0) && (
+                            <select
+                              className="troop-redirect-select"
+                              value=""
+                              onChange={(e) => {
+                                if (e.target.value)
+                                  handleSendAttack(
+                                    e.target.value,
+                                    units,
+                                    type,
+                                    true,
+                                  );
+                              }}
+                              disabled={controlsDisabled}
+                            >
+                              <option value="">Send to...</option>
+                              <option value={PROMISED_LAND_ID}>
+                                The Promised Land
+                              </option>
+                              {defendRedirectTargets.map((t) => (
+                                <option
+                                  key={t.playerId}
+                                  value={t.playerId}
+                                >
+                                  {t.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
           </div>
         </div>
       )}
@@ -1500,7 +1583,7 @@ export default function GameControls({
                           Recall
                         </button>
                         <button
-                          className="troop-action-btn troop-action-btn-defend"
+                          className="troop-action-btn"
                           onClick={() =>
                             handleRecallOccupyingTroopsToDefend(occ.id)
                           }

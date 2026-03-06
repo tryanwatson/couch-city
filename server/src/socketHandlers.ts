@@ -214,7 +214,7 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
       socket.emit('room:error', { message: 'Missing required fields' });
       return;
     }
-    const result = sendAttack(data.roomId, data.playerId, data.targetPlayerId, data.units, data.troopType);
+    const result = sendAttack(data.roomId, data.playerId, data.targetPlayerId, data.units, data.troopType, data.fromDefending);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     console.log(`Player ${data.playerId} sent ${data.units} ${data.troopType} to ${data.targetPlayerId} in room ${data.roomId}`);
     emitStateAfterAction(io, socket, data.roomId);

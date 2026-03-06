@@ -1413,7 +1413,8 @@ export function sendAttack(
   attackerPlayerId: string,
   targetPlayerId: string,
   units: number,
-  troopType: TroopType
+  troopType: TroopType,
+  fromDefending?: boolean
 ): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
   const room = rooms.get(roomId);
   if (!room) return { error: 'Room not found' };
@@ -1435,9 +1436,10 @@ export function sendAttack(
     return { error: 'Invalid unit count' };
   }
   if (!COMBAT_POWER[troopType]) return { error: 'Invalid troop type' };
-  if (attacker.militaryAtHome[troopType] < units) return { error: 'Not enough troops' };
+  const source = fromDefending ? attacker.militaryDefending : attacker.militaryAtHome;
+  if (source[troopType] < units) return { error: 'Not enough troops' };
 
-  attacker.militaryAtHome[troopType] -= units;
+  source[troopType] -= units;
 
   const travelTurns = targetPlayerId === PROMISED_LAND_ID ? PROMISED_LAND_TRAVEL_TURNS : TROOP_TRAVEL_TURNS;
 

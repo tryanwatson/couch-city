@@ -2139,6 +2139,33 @@
   background: #2ecc71;
 }
 
+.source-toggle {
+  display: flex;
+  gap: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--color-c);
+}
+.source-toggle-btn {
+  flex: 1;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: var(--font-main);
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.source-toggle-btn:hover {
+  background: rgba(241, 196, 15, 0.1);
+}
+.source-toggle-active {
+  background: rgba(241, 196, 15, 0.2);
+  color: var(--color-text);
+}
+
 .target-modal-troops {
   display: flex;
   flex-direction: column;

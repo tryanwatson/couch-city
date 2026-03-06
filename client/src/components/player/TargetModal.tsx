@@ -31,7 +31,7 @@ interface TargetModalProps {
   me: CityPlayerInfo;
   controlsDisabled: boolean;
   targets: PlayerTarget[];
-  onAttack: (targetId: string, amount: number, troopType: TroopType) => void;
+  onAttack: (targetId: string, amount: number, troopType: TroopType, fromDefending?: boolean) => void;
   onDonate: (targetId: string, amount: number, troopType: TroopType) => void;
   onDefend: (amount: number, troopType: TroopType) => void;
   onRecall: (amount: number, troopType: TroopType) => void;
@@ -60,21 +60,29 @@ export default function TargetModal({
   const [defendDelta, setDefendDelta] = useState<Record<TroopType, number>>({
     ...ZERO_MILITARY,
   });
+  // Source toggle for attack staging: send from home or defending garrison
+  const [source, setSource] = useState<"home" | "defending">("home");
+
+  // Reset staged when source changes
+  useEffect(() => {
+    setStaged({ ...ZERO_MILITARY });
+  }, [source]);
 
   // Clamp staged if server state changes (e.g. troops killed mid-planning)
   useEffect(() => {
     setStaged((prev) => {
       let changed = false;
       const next = { ...prev };
+      const pool = source === "defending" ? me.militaryDefending : me.militaryAtHome;
       for (const t of TROOP_TYPES) {
-        if (next[t] > me.militaryAtHome[t]) {
-          next[t] = me.militaryAtHome[t];
+        if (next[t] > pool[t]) {
+          next[t] = pool[t];
           changed = true;
         }
       }
       return changed ? next : prev;
     });
-  }, [me.militaryAtHome]);
+  }, [me.militaryAtHome, me.militaryDefending, source]);
 
   // Clamp defend delta if server state changes
   useEffect(() => {
@@ -96,8 +104,9 @@ export default function TargetModal({
   }, [me.militaryAtHome, me.militaryDefending]);
 
   // Derived values
+  const sourcePool = source === "defending" ? me.militaryDefending : me.militaryAtHome;
   const effectiveAvailable = (type: TroopType) =>
-    me.militaryAtHome[type] - staged[type];
+    sourcePool[type] - staged[type];
   const totalStagedUnits = TROOP_TYPES.reduce(
     (sum, t) => sum + staged[t],
     0,
@@ -113,7 +122,7 @@ export default function TargetModal({
   const needsTargetSelection = (isAttackMode || isAllianceMode) && !target.id;
 
   const handleStage = (amount: number, troopType: TroopType) => {
-    const maxCanAdd = me.militaryAtHome[troopType] - staged[troopType];
+    const maxCanAdd = sourcePool[troopType] - staged[troopType];
     const clamped = Math.min(amount, maxCanAdd);
     if (clamped <= 0) return;
     setStaged((prev) => ({ ...prev, [troopType]: prev[troopType] + clamped }));
@@ -126,10 +135,13 @@ export default function TargetModal({
   };
 
   const handleCommit = () => {
-    const action = isAllianceMode ? onDonate : onAttack;
     for (const troopType of TROOP_TYPES) {
       if (staged[troopType] > 0) {
-        action(target.id, staged[troopType], troopType);
+        if (isAllianceMode) {
+          onDonate(target.id, staged[troopType], troopType);
+        } else {
+          onAttack(target.id, staged[troopType], troopType, source === "defending");
+        }
       }
     }
     setStaged({ ...ZERO_MILITARY });
@@ -340,7 +352,8 @@ export default function TargetModal({
   }
 
   // Attack / Alliance / Promised Land — troop staging
-  const availableTypes = TROOP_TYPES.filter((t) => me.militaryAtHome[t] > 0);
+  const availableTypes = TROOP_TYPES.filter((t) => sourcePool[t] > 0);
+  const hasDefendingTroops = TROOP_TYPES.some((t) => me.militaryDefending[t] > 0);
   const actionLabel = isAllianceMode ? "Alliance" : "Attack";
   const sendLabel = isAllianceMode ? "Send Alliance" : "Send Attack";
 
@@ -367,10 +380,30 @@ export default function TargetModal({
           </button>
         </div>
 
+        {/* Source toggle — only show for attack/PL modes when defending troops exist */}
+        {!isAllianceMode && hasDefendingTroops && (
+          <div className="source-toggle">
+            <button
+              className={`source-toggle-btn${source === "home" ? " source-toggle-active" : ""}`}
+              onClick={() => setSource("home")}
+            >
+              Home
+            </button>
+            <button
+              className={`source-toggle-btn${source === "defending" ? " source-toggle-active" : ""}`}
+              onClick={() => setSource("defending")}
+            >
+              Defending
+            </button>
+          </div>
+        )}
+
         {/* Troop rows */}
         <div className="target-modal-troops">
           {availableTypes.length === 0 && (
-            <div className="target-modal-empty">No troops at home</div>
+            <div className="target-modal-empty">
+              No troops {source === "defending" ? "defending" : "at home"}
+            </div>
           )}
           {availableTypes.map((type) => {
             const available = effectiveAvailable(type);
