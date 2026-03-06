@@ -17,6 +17,13 @@ export const VALID_GROWTH_MULTIPLIERS = [1, 2, 3] as const; // 1x/2x/3x food cos
 // Population
 export const INITIAL_POPULATION = 10;
 
+// Housing — population caps per level (indexed by housingLevel - 1)
+export const HOUSING_POP_CAPS = [50, 150, 300, 500] as const;
+export const HOUSING_UPGRADE_COSTS = [50, 100, 200] as const; // material cost to go from level N to N+1
+export function getHousingCap(housingLevel: number): number {
+  return HOUSING_POP_CAPS[Math.min(housingLevel - 1, HOUSING_POP_CAPS.length - 1)];
+}
+
 // Upgrades — unlock costs & build progress system
 import type { UpgradeCategory } from "./types";
 

@@ -25,6 +25,9 @@ import {
   DEFENSE_HP_PER_LEVEL,
   UPGRADE_PROGRESS,
   PROGRESS_PER_BUILDER,
+  HOUSING_POP_CAPS,
+  HOUSING_UPGRADE_COSTS,
+  getHousingCap,
 } from "../../../../shared/constants";
 import BuildProgressBlock from "./BuildProgressBlock";
 import TargetModal from "./TargetModal";
@@ -217,6 +220,13 @@ export default function GameControls({
     });
   };
 
+  const handleUpgradeHousing = () => {
+    socket.emit("player:upgrade_housing", {
+      roomId: roomState.roomId,
+      playerId,
+    });
+  };
+
   const handleSpendMilitary = (troopType: TroopType) => {
     socket.emit("player:spend_military", {
       roomId: roomState.roomId,
@@ -392,9 +402,11 @@ export default function GameControls({
   const effectiveGrowthRate = POP_GROWTH_RATE * localGrowthMultiplier;
   const pop = Math.floor(me.population);
   const isFed = me.food + foodProduced >= foodConsumed;
-  const projectedPop = isFed
+  const housingCap = getHousingCap(me.housingLevel);
+  const projectedPopRaw = isFed
     ? Math.floor(pop * (1 + effectiveGrowthRate))
     : Math.max(1, Math.floor(pop * (1 - POP_STARVATION_RATE)));
+  const projectedPop = Math.min(projectedPopRaw, housingCap);
 
   // Mining
   const materialsPerTurn = localMiners * MATERIALS_PER_MINER * miningMult;
@@ -461,7 +473,7 @@ export default function GameControls({
         <div className="stats-columns">
           <div className="stats-col-pop">
             <span className="stats-col-value">
-              👥 {pop} <span className="stats-idle">({unassigned} idle)</span>
+              👥 {pop}/{housingCap} <span className="stats-idle">({unassigned} idle)</span>
             </span>
             <div className="stats-row-growth">
               <span
@@ -718,6 +730,32 @@ export default function GameControls({
                 </>
               }
             />
+
+            {/* Housing upgrade */}
+            {me.housingLevel < HOUSING_POP_CAPS.length ? (() => {
+              const cost = HOUSING_UPGRADE_COSTS[me.housingLevel - 1];
+              const nextCap = HOUSING_POP_CAPS[me.housingLevel];
+              return (
+                <div className="upgrade-buttons">
+                  <button
+                    className="upgrade-btn upgrade-science"
+                    onClick={handleUpgradeHousing}
+                    disabled={me.materials < cost || controlsDisabled}
+                    title={`${cost}🪨`}
+                  >
+                    <span className="upgrade-btn-title">🏠 Upgrade Housing</span>
+                    <span className="upgrade-btn-effect">
+                      Cap: {housingCap} → {nextCap}
+                    </span>
+                    <span className="upgrade-btn-cost">{cost}🪨</span>
+                  </button>
+                </div>
+              );
+            })() : (
+              <div className="resource-row">
+                <span className="resource-label">Max housing reached ({housingCap} cap)</span>
+              </div>
+            )}
           </div>
         </div>
       </div>

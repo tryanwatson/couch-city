@@ -26,6 +26,7 @@ export interface CityPlayerInfo {
   builders: Record<UpgradeCategory, number>; // workers assigned to building per category
   upgradesCompleted: Record<UpgradeCategory, number>;  // completed upgrades per category
   upgradeProgress: Record<UpgradeCategory, number>;    // current build progress per category
+  housingLevel: number;  // 1–4, gates population cap via HOUSING_POP_CAPS
   hp: number;
   maxHp: number;
   x: number; // 0–1 normalized map position
@@ -105,6 +106,7 @@ export interface ServerCityPlayer {
   builders: Record<UpgradeCategory, number>;
   upgradesCompleted: Record<UpgradeCategory, number>;
   upgradeProgress: Record<UpgradeCategory, number>;
+  housingLevel: number;
   hp: number;
   maxHp: number;
   x: number;

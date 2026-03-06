@@ -10,6 +10,7 @@ import {
   allocateWorkers,
   setGrowthMultiplier,
   unlockUpgrade,
+  upgradeHousing,
   spendMilitary,
   sendAttack,
   sendDonation,
@@ -183,6 +184,16 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
       return;
     }
     const result = unlockUpgrade(data.roomId, data.playerId, data.category);
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
+    emitStateAfterAction(io, socket, data.roomId);
+  });
+
+  socket.on('player:upgrade_housing', (data) => {
+    if (!data?.roomId || !data?.playerId) {
+      socket.emit('room:error', { message: 'Missing required fields' });
+      return;
+    }
+    const result = upgradeHousing(data.roomId, data.playerId);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     emitStateAfterAction(io, socket, data.roomId);
   });
