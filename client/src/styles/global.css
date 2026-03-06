@@ -45,9 +45,9 @@
   --color-military-row: #381e26;
   --color-military-accent: #c84555;
 
-  --color-defense-bg: #152028;
-  --color-defense-row: #1c2b33;
-  --color-defense-accent: #4a90a8;
+  --color-walls-bg: #152028;
+  --color-walls-row: #1c2b33;
+  --color-walls-accent: #4a90a8;
 
   --font-main: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --radius: 12px;

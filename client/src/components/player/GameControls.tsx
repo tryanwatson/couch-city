@@ -22,7 +22,7 @@ import {
   COMBAT_POWER,
   PROMISED_LAND_ID,
   HP_REGEN_PERCENT,
-  DEFENSE_HP_PER_LEVEL,
+  WALLS_HP_PER_LEVEL,
   UPGRADE_PROGRESS,
   PROGRESS_PER_BUILDER,
   HOUSING_POP_CAPS,
@@ -44,7 +44,7 @@ type SectionId =
   | "mining"
   | "trade"
   | "culture"
-  | "defense"
+  | "walls"
   | "military"
   | "troops";
 
@@ -61,7 +61,15 @@ export default function GameControls({
   const [localMerchants, setLocalMerchants] = useState(0);
   const [localBuilders, setLocalBuilders] = useState<
     Record<UpgradeCategory, number>
-  >({ culture: 0, military: 0, farming: 0, mining: 0, trade: 0, defense: 0, housing: 0 });
+  >({
+    culture: 0,
+    military: 0,
+    farming: 0,
+    mining: 0,
+    trade: 0,
+    walls: 0,
+    housing: 0,
+  });
   const [localGrowthMultiplier, setLocalGrowthMultiplier] = useState(1);
   const [selectedTarget, setSelectedTarget] = useState<TargetInfo | null>(null);
   const [expandedSections, setExpandedSections] = useState<
@@ -71,7 +79,7 @@ export default function GameControls({
     mining: false,
     trade: false,
     culture: false,
-    defense: false,
+    walls: false,
     military: false,
     troops: false,
   });
@@ -465,9 +473,13 @@ export default function GameControls({
         <div className="stats-columns">
           <div className="stats-col-pop">
             <span className="stats-col-value">
-              👥 {pop}{housingCap < Infinity ? `/${housingCap}` : ""} <span className="stats-idle">({unassigned} idle)</span>
+              👥 {pop}
+              {housingCap < Infinity ? `/${housingCap}` : ""}{" "}
+              <span className="stats-idle">({unassigned} idle)</span>
             </span>
-            <div className={`stats-row-warning${pop >= housingCap ? "" : " hidden"}`}>
+            <div
+              className={`stats-row-warning${pop >= housingCap ? "" : " hidden"}`}
+            >
               ⚠ Max reached, upgrade housing
             </div>
             <div className="stats-row-growth">
@@ -522,8 +534,8 @@ export default function GameControls({
                   {UPGRADE_PROGRESS.culture.length}
                 </span>
                 <span className="stats-upgrade-item">
-                  🛡 {me.upgradesCompleted.defense}/
-                  {UPGRADE_PROGRESS.defense.length}
+                  🛡 {me.upgradesCompleted.walls}/
+                  {UPGRADE_PROGRESS.walls.length}
                 </span>
                 <span className="stats-upgrade-item">
                   ⚔ {me.upgradesCompleted.military}/
@@ -904,18 +916,18 @@ export default function GameControls({
         </div>
       </div>
 
-      {/* DEFENSE */}
-      <div className="upgrades-section section-defense">
+      {/* WALLS */}
+      <div className="upgrades-section section-walls">
         <button
           className="section-header"
-          onClick={() => toggleSection("defense")}
+          onClick={() => toggleSection("walls")}
         >
           <span
-            className={`section-chevron${expandedSections.defense ? " section-chevron-open" : ""}`}
+            className={`section-chevron${expandedSections.walls ? " section-chevron-open" : ""}`}
           >
             &#9656;
           </span>
-          <span className="section-header-title">🛡️ Defense</span>
+          <span className="section-header-title">🧱 Walls</span>
           <span className="section-header-summary">
             <span className="summary-detail">{me.maxHp} max HP</span>
             <span className="summary-rate rate-positive">
@@ -925,7 +937,7 @@ export default function GameControls({
         </button>
 
         <div
-          className={`section-body${expandedSections.defense ? "" : " collapsed"}`}
+          className={`section-body${expandedSections.walls ? "" : " collapsed"}`}
         >
           <div className="section-body-inner">
             <div className="resource-row">
@@ -942,31 +954,31 @@ export default function GameControls({
             </div>
 
             <BuildProgressBlock
-              category="defense"
+              category="walls"
               me={me}
               localBuilders={localBuilders}
               onAdjustBuilder={adjustBuilder}
               onUnlockUpgrade={handleUnlockUpgrade}
               unassigned={unassigned}
               controlsDisabled={controlsDisabled}
-              unlockCost={getUnlockCost("defense")}
-              progressBarClass="defense-progress-fill"
-              unlockBtnClass="upgrade-defense"
+              unlockCost={getUnlockCost("walls")}
+              progressBarClass="walls-progress-fill"
+              unlockBtnClass="upgrade-walls"
               buildingLabel="Building Fortification"
               maxLabel={`All fortifications completed! (${me.maxHp} max HP)`}
               unlockLabel="📜 Unlock Fortification"
               effectText={
                 <>
-                  +{DEFENSE_HP_PER_LEVEL[me.upgradesCompleted.defense] ?? "?"}{" "}
+                  +{WALLS_HP_PER_LEVEL[me.upgradesCompleted.walls] ?? "?"}{" "}
                   max HP
                 </>
               }
               explainerText={
                 <>
-                  Reward: +{DEFENSE_HP_PER_LEVEL[me.upgradesCompleted.defense]}{" "}
+                  Reward: +{WALLS_HP_PER_LEVEL[me.upgradesCompleted.walls]}{" "}
                   max HP (→{" "}
                   {me.maxHp +
-                    DEFENSE_HP_PER_LEVEL[me.upgradesCompleted.defense]}{" "}
+                    WALLS_HP_PER_LEVEL[me.upgradesCompleted.walls]}{" "}
                   total)
                 </>
               }
@@ -1045,26 +1057,26 @@ export default function GameControls({
                         <span className="troop-buy-label">
                           Buy {config.troops}
                         </span>
-                        <span className="troop-buy-cost">
-                          {config.gold}💰
-                        </span>
+                        <span className="troop-buy-cost">{config.gold}💰</span>
                       </button>
                     )}
-                    {isNext && !hasBuildSlot && (() => {
-                      const milCost = getUnlockCost("military");
-                      return (
-                        <button
-                          className="troop-buy-btn troop-unlock-btn"
-                          onClick={() => handleUnlockUpgrade("military")}
-                          disabled={me.materials < milCost || controlsDisabled}
-                        >
-                          <span className="troop-buy-label">Unlock</span>
-                          <span className="troop-buy-cost">
-                            {milCost}🪨
-                          </span>
-                        </button>
-                      );
-                    })()}
+                    {isNext &&
+                      !hasBuildSlot &&
+                      (() => {
+                        const milCost = getUnlockCost("military");
+                        return (
+                          <button
+                            className="troop-buy-btn troop-unlock-btn"
+                            onClick={() => handleUnlockUpgrade("military")}
+                            disabled={
+                              me.materials < milCost || controlsDisabled
+                            }
+                          >
+                            <span className="troop-buy-label">Unlock</span>
+                            <span className="troop-buy-cost">{milCost}🪨</span>
+                          </button>
+                        );
+                      })()}
                     {hasBuildSlot && (
                       <div className="troop-build-progress">
                         <div className="build-progress-bar-wrapper">
@@ -1371,7 +1383,13 @@ export default function GameControls({
                         {!isLand &&
                           ` (${occ.units * COMBAT_POWER[occ.troopType]} dmg/turn)`}
                       </span>
-                      <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                      <span
+                        style={{
+                          display: "flex",
+                          gap: 4,
+                          alignItems: "center",
+                        }}
+                      >
                         <button
                           className="troop-action-btn"
                           onClick={() => handleRecallOccupyingTroops(occ.id)}
@@ -1380,13 +1398,17 @@ export default function GameControls({
                         >
                           Recall
                         </button>
-                        {(occRedirectTargets.length > 0 || canRedirectToLand) && (
+                        {(occRedirectTargets.length > 0 ||
+                          canRedirectToLand) && (
                           <select
                             className="troop-redirect-select"
                             value=""
                             onChange={(e) => {
                               if (e.target.value)
-                                handleRedirectOccupyingTroops(occ.id, e.target.value);
+                                handleRedirectOccupyingTroops(
+                                  occ.id,
+                                  e.target.value,
+                                );
                             }}
                             disabled={controlsDisabled}
                             style={{ fontSize: 11 }}
@@ -1455,7 +1477,8 @@ export default function GameControls({
           <span>
             🌾 {Math.floor(me.food)}{" "}
             <span className={netFood < 0 ? "rate-negative" : "rate-positive"}>
-              {netFood >= 0 ? "+" : ""}{netFood}/t
+              {netFood >= 0 ? "+" : ""}
+              {netFood}/t
             </span>
           </span>
           <span>

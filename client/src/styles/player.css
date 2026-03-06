@@ -926,7 +926,7 @@
 .build-progress-bar-fill.trade-progress-fill {
   background: linear-gradient(90deg, #d4a017, #f1c40f);
 }
-.build-progress-bar-fill.defense-progress-fill {
+.build-progress-bar-fill.walls-progress-fill {
   background: linear-gradient(90deg, #2980b9, #5dade2);
 }
 .builder-assignment {
@@ -960,30 +960,30 @@
   background: rgba(200, 69, 85, 0.35);
 }
 
-/* --- Defense (Steel Blue) --- */
-.section-defense {
-  background: var(--color-defense-bg);
-  border-left: 3px solid var(--color-defense-accent);
+/* --- Walls (Steel Blue) --- */
+.section-walls {
+  background: var(--color-walls-bg);
+  border-left: 3px solid var(--color-walls-accent);
 }
-.section-defense .section-header-title {
-  color: var(--color-defense-accent);
+.section-walls .section-header-title {
+  color: var(--color-walls-accent);
 }
-.section-defense .resource-row {
-  background: var(--color-defense-row);
+.section-walls .resource-row {
+  background: var(--color-walls-row);
 }
-.section-defense .worker-btn {
-  border-color: var(--color-defense-accent);
+.section-walls .worker-btn {
+  border-color: var(--color-walls-accent);
   background: rgba(74, 144, 168, 0.15);
 }
-.section-defense .worker-btn:hover:not(:disabled) {
+.section-walls .worker-btn:hover:not(:disabled) {
   background: rgba(74, 144, 168, 0.35);
 }
-.section-defense .upgrade-defense {
+.section-walls .upgrade-walls {
   background: rgba(74, 144, 168, 0.2);
-  border-color: var(--color-defense-accent);
+  border-color: var(--color-walls-accent);
   color: white;
 }
-.section-defense .upgrade-defense:hover:not(:disabled) {
+.section-walls .upgrade-walls:hover:not(:disabled) {
   background: rgba(74, 144, 168, 0.35);
 }
 

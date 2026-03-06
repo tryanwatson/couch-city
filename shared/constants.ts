@@ -49,7 +49,7 @@ export const UPGRADE_PROGRESS: Record<UpgradeCategory, readonly number[]> = {
   farming: [10, 20],
   mining: [10, 20],
   trade: [10, 20],
-  defense: [5, 10, 16],
+  walls: [5, 10, 16],
   housing: [10, 25, 50, 100],
 };
 
@@ -59,7 +59,7 @@ export const ALL_UPGRADE_CATEGORIES: readonly UpgradeCategory[] = [
   "farming",
   "mining",
   "trade",
-  "defense",
+  "walls",
   "housing",
 ] as const;
 
@@ -70,7 +70,7 @@ export function zeroUpgradeRecord(): Record<UpgradeCategory, number> {
     farming: 0,
     mining: 0,
     trade: 0,
-    defense: 0,
+    walls: 0,
     housing: 0,
   };
 }
@@ -123,10 +123,10 @@ export const ZERO_MILITARY: Record<TroopType, number> = {
 // HP
 export const INITIAL_HP = 100;
 export const MAX_HP = 100;
-export const HP_REGEN_PERCENT = 0.03; // 3% of maxHp per turn (ceil'd) — scales with defense upgrades
+export const HP_REGEN_PERCENT = 0.03; // 3% of maxHp per turn (ceil'd) — scales with walls upgrades
 
-// Defense upgrades — max HP bonus per completed level
-export const DEFENSE_HP_PER_LEVEL: readonly number[] = [50, 75, 100];
+// Walls upgrades — max HP bonus per completed level
+export const WALLS_HP_PER_LEVEL: readonly number[] = [50, 75, 100];
 
 // Combat
 export const TROOP_TRAVEL_TURNS = 4; // turns for troops to reach target (5 positions: home,1,2,3,enemy)

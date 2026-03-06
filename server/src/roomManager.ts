@@ -30,7 +30,7 @@ import {
   INITIAL_HP,
   MAX_HP,
   HP_REGEN_PERCENT,
-  DEFENSE_HP_PER_LEVEL,
+  WALLS_HP_PER_LEVEL,
   TROOP_TRAVEL_TURNS,
   RESOLVING_PHASE_DURATION_MS,
   RESOLVING_PHASE_DURATION_SHORT_MS,
@@ -584,10 +584,10 @@ function runUpdatePhase(room: ServerRoom): void {
       }
     }
 
-    // Recalculate max HP from defense upgrades (grants bonus HP on completion)
+    // Recalculate max HP from walls upgrades (grants bonus HP on completion)
     let bonusHp = 0;
-    for (let i = 0; i < player.upgradesCompleted.defense; i++) {
-      bonusHp += DEFENSE_HP_PER_LEVEL[i] ?? 0;
+    for (let i = 0; i < player.upgradesCompleted.walls; i++) {
+      bonusHp += WALLS_HP_PER_LEVEL[i] ?? 0;
     }
     const newMaxHp = MAX_HP + bonusHp;
     if (newMaxHp > player.maxHp) {
@@ -620,7 +620,7 @@ function runUpdatePhase(room: ServerRoom): void {
     }
   }
 
-  // HP regeneration (percentage-based, scales with defense upgrades)
+  // HP regeneration (percentage-based, scales with walls upgrades)
   for (const player of alivePlayers) {
     const regen = Math.ceil(player.maxHp * HP_REGEN_PERCENT);
     player.hp = Math.min(player.maxHp, player.hp + regen);
@@ -1095,20 +1095,13 @@ function resolveCombatBatched(room: ServerRoom, targetId: string, attackGroups: 
   const defender = room.players.get(targetId);
   if (!defender || !defender.alive) return;
 
-  // === STEP 1: City takes full damage from ALL arriving attackers (dice-adjusted) ===
+  // === STEP 1: Calculate total attacker CP (dice-adjusted) ===
   let totalAttackerCP = 0;
   for (const tg of attackGroups) {
     totalAttackerCP += tg.units * COMBAT_POWER[tg.troopType] * DICE_CP_MULTIPLIER[room.diceResults[tg.attackerPlayerId] ?? 3];
   }
-  defender.hp -= totalAttackerCP * SIEGE_DAMAGE_PER_CP;
 
-  // === STEP 2: Check if city dies from initial damage ===
-  if (defender.hp <= 0) {
-    handleCityDeath(room, defender, attackGroups);
-    return;
-  }
-
-  // === STEP 3: Gather ALL defenders (militaryDefending + near-home transit) ===
+  // === STEP 2: Gather ALL defenders (militaryDefending + near-home transit) ===
   const defenderForce: Record<TroopType, number> = { ...defender.militaryDefending };
   const nearHomeTroops = gatherNearHomeTroops(room, targetId);
   for (const tg of nearHomeTroops) {
@@ -1120,15 +1113,20 @@ function resolveCombatBatched(room: ServerRoom, targetId: string, attackGroups: 
     totalDefenderCP += defenderForce[type] * COMBAT_POWER[type];
   }
 
-  // === STEP 4: No defenders — attackers become occupying troops unopposed ===
+  // === STEP 3: No defenders — full attacker CP overflows to city damage ===
   if (totalDefenderCP === 0) {
+    defender.hp -= totalAttackerCP * SIEGE_DAMAGE_PER_CP;
+    if (defender.hp <= 0) {
+      handleCityDeath(room, defender, attackGroups);
+      return;
+    }
     for (const tg of attackGroups) {
       mergeIntoOccupiers(room, tg);
     }
     return;
   }
 
-  // === STEP 5: Attacker vs Defender combat ===
+  // === STEP 4: Attacker vs Defender combat ===
   const attackerForce: Record<TroopType, number> = { ...ZERO_MILITARY };
   let attackerBaseCP = 0;
   for (const tg of attackGroups) {
@@ -1141,18 +1139,35 @@ function resolveCombatBatched(room: ServerRoom, targetId: string, attackGroups: 
 
   const { survivorsA, survivorsB } = resolveMultiTypeCombat(attackerForce, defenderForce, attackerMultiplier, defenderMultiplier);
 
-  // === STEP 6: Apply results to defenders ===
+  // === STEP 5: Apply results to defenders ===
   applyDefenderSurvivors(defender, defenderForce, survivorsB, nearHomeTroops);
 
-  // === STEP 7: Apply results to attackers — surviving attackers become occupying troops ===
+  // === STEP 6: Apply results to attackers ===
   applyAttackerSurvivors(attackGroups, attackerForce, survivorsA);
+
+  // === STEP 7: Overflow damage — surviving attacker CP damages the city ===
+  let survivingAttackerCP = 0;
+  for (const tg of attackGroups) {
+    if (tg.units > 0) {
+      survivingAttackerCP += tg.units * COMBAT_POWER[tg.troopType] * DICE_CP_MULTIPLIER[room.diceResults[tg.attackerPlayerId] ?? 3];
+    }
+  }
+  if (survivingAttackerCP > 0) {
+    defender.hp -= survivingAttackerCP * SIEGE_DAMAGE_PER_CP;
+  }
+  if (defender.hp <= 0) {
+    handleCityDeath(room, defender, attackGroups);
+    return;
+  }
+
+  // === STEP 8: Surviving attackers become occupying troops ===
   for (const tg of attackGroups) {
     if (tg.units > 0) {
       mergeIntoOccupiers(room, tg);
     }
   }
 
-  // === STEP 8: Convert surviving near-home transit troops to militaryDefending ===
+  // === STEP 9: Convert surviving near-home transit troops to militaryDefending ===
   for (const tg of nearHomeTroops) {
     if (tg.units > 0) {
       defender.militaryDefending[tg.troopType] += tg.units;
@@ -1205,6 +1220,11 @@ function resolveSiege(room: ServerRoom): void {
 
       applyDefenderSurvivors(defender, defenderForce, survivorsB, nearHomeTroops);
       applyAttackerSurvivors(occupiers, attackerForce, survivorsA);
+
+      // Mark as visual event whenever siege combat occurs (not just when damage is dealt)
+      if (!room.combatHitPlayerIds.includes(targetId)) {
+        room.combatHitPlayerIds.push(targetId);
+      }
     }
 
     // Convert surviving near-home transit troops to militaryDefending
@@ -1224,9 +1244,6 @@ function resolveSiege(room: ServerRoom): void {
     }
     if (survivingOccCP > 0) {
       defender.hp -= survivingOccCP * SIEGE_DAMAGE_PER_CP;
-      if (!room.combatHitPlayerIds.includes(targetId)) {
-        room.combatHitPlayerIds.push(targetId);
-      }
     }
 
     // Check if city dies from siege
