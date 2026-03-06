@@ -1,4 +1,4 @@
-import type { ServerRoom, ServerCityPlayer, RoomStatePayload, TroopGroup, TroopType, UpgradeCategory } from '../../shared/types';
+import type { ServerRoom, ServerCityPlayer, RoomStatePayload, TroopGroup, TroopType, UpgradeCategory, GameSettings } from '../../shared/types';
 import {
   PLAYER_COLORS,
   INITIAL_FOOD,
@@ -409,12 +409,19 @@ export function disconnectSocket(socketId: string): { roomId: string; wasHost: b
 }
 
 export function startGame(
-  roomId: string
+  roomId: string,
+  settings?: GameSettings
 ): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
   const room = rooms.get(roomId);
   if (!room) return { error: 'Room not found' };
   if (room.phase !== 'lobby') return { error: 'Game already started' };
   if (room.players.size === 0) return { error: 'Need at least 1 player' };
+
+  const clamp = (v: number | undefined, fallback: number) =>
+    v != null ? Math.min(999, Math.max(0, Math.floor(v))) : fallback;
+  const gold = clamp(settings?.initialGold, INITIAL_GOLD);
+  const materials = clamp(settings?.initialMaterials, INITIAL_MATERIALS);
+  const food = clamp(settings?.initialFood, INITIAL_FOOD);
 
   const playerList = Array.from(room.players.values());
 
@@ -428,9 +435,9 @@ export function startGame(
     player.x = parseFloat((PROMISED_LAND_X + PLAYER_POSITION_RX * Math.cos(angle)).toFixed(3));
     player.y = parseFloat((PROMISED_LAND_Y + PLAYER_POSITION_RY * Math.sin(angle)).toFixed(3));
 
-    player.food = INITIAL_FOOD;
-    player.materials = INITIAL_MATERIALS;
-    player.gold = INITIAL_GOLD;
+    player.food = food;
+    player.materials = materials;
+    player.gold = gold;
     player.goldIncome = 0;
     player.farmers = 0;
     player.miners = 0;

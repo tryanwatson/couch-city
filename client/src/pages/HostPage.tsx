@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRoomState } from '../hooks/useRoomState';
 import Lobby from '../components/host/Lobby';
 import BattleMap from '../components/host/BattleMap';
+import type { GameSettings } from '../../../shared/types';
 import '../styles/host.css';
 
 const STORAGE_KEY = 'party_game_host_room';
@@ -55,9 +56,9 @@ export default function HostPage() {
     }
   }, [roomState?.roomId]);
 
-  const handleStart = () => {
+  const handleStart = (settings: GameSettings) => {
     if (!roomState) return;
-    socket.emit('host:start_game', { roomId: roomState.roomId });
+    socket.emit('host:start_game', { roomId: roomState.roomId, settings });
   };
 
   const handlePlayAgain = () => {

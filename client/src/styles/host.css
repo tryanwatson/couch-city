@@ -86,6 +86,64 @@
   opacity: 0.5;
 }
 
+/* Game Settings */
+.game-settings-section {
+  width: 100%;
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.game-settings-title {
+  font-size: 1.1rem;
+  margin-bottom: 12px;
+}
+
+.settings-row {
+  display: flex;
+  gap: 16px;
+}
+
+.setting-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.setting-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--color-text-muted);
+}
+
+.setting-input {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm, 6px);
+  border: 2px solid var(--color-surface-light);
+  background: var(--color-surface-light);
+  color: var(--color-text);
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.15s;
+  width: 100%;
+  -moz-appearance: textfield;
+}
+
+.setting-input::-webkit-outer-spin-button,
+.setting-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.setting-input:focus {
+  border-color: var(--color-primary);
+}
+
 /* Question phase */
 .host-question {
   display: flex;

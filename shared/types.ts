@@ -69,6 +69,13 @@ export interface RoomStatePayload {
   promisedLandHoldTurns: number; // consecutive turns held by current owner
 }
 
+/** Host-configurable initial economy values, sent with host:start_game. */
+export interface GameSettings {
+  initialGold: number;
+  initialMaterials: number;
+  initialFood: number;
+}
+
 // ============================================================
 // Server-only types
 // ============================================================

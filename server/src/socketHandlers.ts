@@ -1,5 +1,5 @@
 import type { Server, Socket } from 'socket.io';
-import type { UpgradeCategory } from '../../shared/types';
+import type { UpgradeCategory, GameSettings } from '../../shared/types';
 import {
   createRoom,
   getRoom,
@@ -87,7 +87,14 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     const room = getRoom(data.roomId);
     if (!room) { socket.emit('room:error', { message: 'Room not found' }); return; }
     if (room.hostSocketId !== socket.id) { socket.emit('room:error', { message: 'Not the host' }); return; }
-    const result = startGame(data.roomId);
+    const settings: GameSettings | undefined = data.settings
+      ? {
+          initialGold: Number(data.settings.initialGold),
+          initialMaterials: Number(data.settings.initialMaterials),
+          initialFood: Number(data.settings.initialFood),
+        }
+      : undefined;
+    const result = startGame(data.roomId, settings);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     console.log(`Game started in room: ${data.roomId}`);
     broadcastRoom(io, data.roomId);
