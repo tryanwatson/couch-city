@@ -368,13 +368,13 @@ function CityImageNode({
       )}
       {/* City castle */}
       <image
-        href="/uncolored-castle.png"
-        x={cx - 64}
-        y={cy - 64}
-        width={128}
-        height={128}
+        href={player.color === "#e94560" ? "/red-castle.png" : "/uncolored-castle.png"}
+        x={cx - 96}
+        y={cy - 96}
+        width={192}
+        height={192}
         opacity={isDead ? 0.3 : 1}
-        filter={`url(#castle-${player.color.replace("#", "")})`}
+        filter={player.color === "#e94560" ? undefined : `url(#castle-${player.color.replace("#", "")})`}
       />
     </g>
   );

@@ -32,7 +32,6 @@ import {
   HP_REGEN_PERCENT,
   DEFENSE_HP_PER_LEVEL,
   TROOP_TRAVEL_TURNS,
-  VALID_ATTACK_AMOUNTS,
   RESOLVING_PHASE_DURATION_MS,
   RESOLVING_PHASE_DURATION_SHORT_MS,
   DICE_LINGER_MS,
@@ -1449,7 +1448,7 @@ export function sendDefend(
   if (typeof guard === 'string') return { error: guard };
   const player = guard;
 
-  if (!(VALID_ATTACK_AMOUNTS as readonly number[]).includes(units)) {
+  if (!Number.isInteger(units) || units < 1) {
     return { error: 'Invalid unit count' };
   }
   if (!COMBAT_POWER[troopType]) return { error: 'Invalid troop type' };
@@ -1474,7 +1473,7 @@ export function recallDefenders(
   if (typeof guard === 'string') return { error: guard };
   const player = guard;
 
-  if (!(VALID_ATTACK_AMOUNTS as readonly number[]).includes(units)) {
+  if (!Number.isInteger(units) || units < 1) {
     return { error: 'Invalid unit count' };
   }
   if (!COMBAT_POWER[troopType]) return { error: 'Invalid troop type' };
