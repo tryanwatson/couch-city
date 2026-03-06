@@ -319,11 +319,41 @@ export default function GameControls({
     });
   };
 
+  const handleRecallTroopsToDefend = (troopGroupId: string) => {
+    socket.emit("player:recall_troops", {
+      roomId: roomState.roomId,
+      playerId,
+      troopGroupId,
+      defendOnArrival: true,
+    });
+  };
+
+  const handleToggleDefendOnArrival = (
+    troopGroupId: string,
+    currentValue: boolean,
+  ) => {
+    socket.emit("player:set_defend_on_arrival", {
+      roomId: roomState.roomId,
+      playerId,
+      troopGroupId,
+      defendOnArrival: !currentValue,
+    });
+  };
+
   const handleRecallOccupyingTroops = (troopGroupId: string) => {
     socket.emit("player:recall_occupying_troops", {
       roomId: roomState.roomId,
       playerId,
       troopGroupId,
+    });
+  };
+
+  const handleRecallOccupyingTroopsToDefend = (troopGroupId: string) => {
+    socket.emit("player:recall_occupying_troops", {
+      roomId: roomState.roomId,
+      playerId,
+      troopGroupId,
+      defendOnArrival: true,
     });
   };
 
@@ -1319,7 +1349,9 @@ export default function GameControls({
                       </span>
                       <span className="troop-manage-target">
                         {isReturning
-                          ? "← Home"
+                          ? tg.defendOnArrival
+                            ? "← Defend"
+                            : "← Home"
                           : tg.isDonation
                             ? `🎁 → ${targetName}`
                             : `→ ${targetName}`}
@@ -1343,12 +1375,35 @@ export default function GameControls({
                         {isPaused ? "Resume" : "Pause"}
                       </button>
                       {!isReturning && (
+                        <>
+                          <button
+                            className="troop-action-btn"
+                            onClick={() => handleRecallTroops(tg.id)}
+                            disabled={controlsDisabled}
+                          >
+                            Recall
+                          </button>
+                          <button
+                            className="troop-action-btn troop-action-btn-defend"
+                            onClick={() => handleRecallTroopsToDefend(tg.id)}
+                            disabled={controlsDisabled}
+                          >
+                            Defend
+                          </button>
+                        </>
+                      )}
+                      {isReturning && (
                         <button
-                          className="troop-action-btn"
-                          onClick={() => handleRecallTroops(tg.id)}
+                          className={`troop-action-btn${tg.defendOnArrival ? " troop-action-btn-defend-active" : " troop-action-btn-defend"}`}
+                          onClick={() =>
+                            handleToggleDefendOnArrival(
+                              tg.id,
+                              !!tg.defendOnArrival,
+                            )
+                          }
                           disabled={controlsDisabled}
                         >
-                          Recall
+                          {tg.defendOnArrival ? "Defending" : "Defend"}
                         </button>
                       )}
                       {(redirectTargets.length > 0 || canRedirectToLand) && (
@@ -1443,6 +1498,16 @@ export default function GameControls({
                           style={{ fontSize: 11 }}
                         >
                           Recall
+                        </button>
+                        <button
+                          className="troop-action-btn troop-action-btn-defend"
+                          onClick={() =>
+                            handleRecallOccupyingTroopsToDefend(occ.id)
+                          }
+                          disabled={controlsDisabled}
+                          style={{ fontSize: 11 }}
+                        >
+                          Defend
                         </button>
                         {(occRedirectTargets.length > 0 ||
                           canRedirectToLand) && (

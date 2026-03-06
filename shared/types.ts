@@ -52,6 +52,7 @@ export interface TroopGroup {
   // Troop management
   paused?: boolean; // when true, turnsRemaining does NOT decrement
   isDonation?: boolean; // when true, troops join target's garrison on arrival instead of fighting
+  defendOnArrival?: boolean; // when true AND returning home, troops go to militaryDefending on arrival
 }
 
 // Broadcast payload — everything clients need to render

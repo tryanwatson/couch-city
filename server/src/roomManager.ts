@@ -695,11 +695,15 @@ function runUpdatePhase(room: ServerRoom): void {
       }
       continue;
     }
-    // Returning home: add to garrison
+    // Returning home: add to garrison or defending
     if (tg.attackerPlayerId === tg.targetPlayerId) {
       const player = room.players.get(tg.attackerPlayerId);
       if (player && player.alive) {
-        player.militaryAtHome[tg.troopType] += tg.units;
+        if (tg.defendOnArrival) {
+          player.militaryDefending[tg.troopType] += tg.units;
+        } else {
+          player.militaryAtHome[tg.troopType] += tg.units;
+        }
       }
       continue;
     }
@@ -1622,7 +1626,8 @@ function getTroopCurrentPosition(
 export function recallTroops(
   roomId: string,
   playerId: string,
-  troopGroupId: string
+  troopGroupId: string,
+  defendOnArrival?: boolean
 ): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
   const room = rooms.get(roomId);
   if (!room) return { error: 'Room not found' };
@@ -1647,6 +1652,7 @@ export function recallTroops(
   tg.turnsRemaining = returnTurns;
   tg.totalTurns = returnTurns;
   tg.paused = false;
+  tg.defendOnArrival = defendOnArrival ?? false;
 
   return { room };
 }
@@ -1691,6 +1697,31 @@ export function resumeTroops(
   if (!tg.paused) return { error: 'Troops are not paused' };
 
   tg.paused = false;
+  return { room };
+}
+
+export function setDefendOnArrival(
+  roomId: string,
+  playerId: string,
+  troopGroupId: string,
+  defendOnArrival: boolean
+): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
+  const room = rooms.get(roomId);
+  if (!room) return { error: 'Room not found' };
+
+  const guard = guardAction(room, playerId);
+  if (typeof guard === 'string') return { error: guard };
+
+  const tg = room.troopsInTransit.find(
+    t => t.id === troopGroupId && t.attackerPlayerId === playerId
+  );
+  if (!tg) return { error: 'Troop group not found' };
+  if (tg.attackerPlayerId !== tg.targetPlayerId) {
+    return { error: 'Troops are not returning home' };
+  }
+  if (tg.turnsRemaining <= 0) return { error: 'Troops have already arrived' };
+
+  tg.defendOnArrival = defendOnArrival;
   return { room };
 }
 
@@ -1748,6 +1779,7 @@ export function redirectTroops(
   tg.turnsRemaining = newTurns;
   tg.totalTurns = newTurns;
   tg.paused = false;
+  tg.defendOnArrival = false;
 
   return { room };
 }
@@ -1755,7 +1787,8 @@ export function redirectTroops(
 export function recallOccupyingTroops(
   roomId: string,
   playerId: string,
-  troopGroupId: string
+  troopGroupId: string,
+  defendOnArrival?: boolean
 ): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
   const room = rooms.get(roomId);
   if (!room) return { error: 'Room not found' };
@@ -1792,6 +1825,7 @@ export function recallOccupyingTroops(
     totalTurns: returnTurns,
     startX,
     startY,
+    defendOnArrival: defendOnArrival ?? false,
   });
 
   return { room };

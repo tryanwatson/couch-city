@@ -26,6 +26,7 @@ import {
   redirectTroops,
   recallOccupyingTroops,
   redirectOccupyingTroops,
+  setDefendOnArrival,
 } from './roomManager';
 import { generateCityName, ALL_UPGRADE_CATEGORIES } from '../../shared/constants';
 
@@ -255,7 +256,17 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
       socket.emit('room:error', { message: 'Missing required fields' });
       return;
     }
-    const result = recallTroops(data.roomId, data.playerId, data.troopGroupId);
+    const result = recallTroops(data.roomId, data.playerId, data.troopGroupId, data.defendOnArrival);
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
+    emitStateAfterAction(io, socket, data.roomId);
+  });
+
+  socket.on('player:set_defend_on_arrival', (data) => {
+    if (!data?.roomId || !data?.playerId || !data?.troopGroupId || data?.defendOnArrival == null) {
+      socket.emit('room:error', { message: 'Missing required fields' });
+      return;
+    }
+    const result = setDefendOnArrival(data.roomId, data.playerId, data.troopGroupId, data.defendOnArrival);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     emitStateAfterAction(io, socket, data.roomId);
   });
@@ -295,7 +306,7 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
       socket.emit('room:error', { message: 'Missing required fields' });
       return;
     }
-    const result = recallOccupyingTroops(data.roomId, data.playerId, data.troopGroupId);
+    const result = recallOccupyingTroops(data.roomId, data.playerId, data.troopGroupId, data.defendOnArrival);
     if (result.error) { socket.emit('room:error', { message: result.error }); return; }
     emitStateAfterAction(io, socket, data.roomId);
   });

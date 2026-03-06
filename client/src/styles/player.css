@@ -128,6 +128,9 @@
 }
 
 .color-circle {
+  -webkit-appearance: none;
+  appearance: none;
+  background: none;
   width: 44px;
   height: 44px;
   border-radius: 50%;
@@ -1612,6 +1615,22 @@
 .troop-action-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+.troop-action-btn-defend {
+  border-color: rgba(46, 204, 113, 0.4);
+  color: #2ecc71;
+  background: rgba(46, 204, 113, 0.08);
+}
+.troop-action-btn-defend:hover:not(:disabled) {
+  background: rgba(46, 204, 113, 0.25);
+}
+.troop-action-btn-defend-active {
+  border-color: rgba(46, 204, 113, 0.7);
+  background: rgba(46, 204, 113, 0.2);
+  color: #2ecc71;
+}
+.troop-action-btn-defend-active:hover:not(:disabled) {
+  background: rgba(46, 204, 113, 0.35);
 }
 
 .troop-redirect-select {
