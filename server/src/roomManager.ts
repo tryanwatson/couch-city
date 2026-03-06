@@ -1644,8 +1644,24 @@ export function recallTroops(
   if (tg.targetPlayerId === tg.attackerPlayerId) return { error: 'Troops are already returning home' };
   if (tg.turnsRemaining <= 0) return { error: 'Troops have already arrived' };
 
-  const currentPos = getTroopCurrentPosition(tg, room.players);
   const turnsTraveled = tg.totalTurns - tg.turnsRemaining;
+
+  // Instant recall: troops sent this turn haven't moved yet — return immediately
+  if (turnsTraveled === 0) {
+    const player = room.players.get(playerId);
+    if (player && player.alive) {
+      if (defendOnArrival) {
+        player.militaryDefending[tg.troopType] += tg.units;
+      } else {
+        player.militaryAtHome[tg.troopType] += tg.units;
+      }
+    }
+    const idx = room.troopsInTransit.indexOf(tg);
+    if (idx !== -1) room.troopsInTransit.splice(idx, 1);
+    return { room };
+  }
+
+  const currentPos = getTroopCurrentPosition(tg, room.players);
   const returnTurns = Math.max(1, turnsTraveled);
 
   tg.startX = currentPos.x;

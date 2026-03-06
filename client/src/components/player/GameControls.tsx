@@ -241,7 +241,6 @@ export default function GameControls({
     targetPlayerId: string,
     units: number,
     troopType: TroopType,
-    fromDefending?: boolean,
   ) => {
     socket.emit("player:send_attack", {
       roomId: roomState.roomId,
@@ -249,7 +248,6 @@ export default function GameControls({
       targetPlayerId,
       units,
       troopType,
-      fromDefending,
     });
   };
 
@@ -321,41 +319,11 @@ export default function GameControls({
     });
   };
 
-  const handleRecallTroopsToDefend = (troopGroupId: string) => {
-    socket.emit("player:recall_troops", {
-      roomId: roomState.roomId,
-      playerId,
-      troopGroupId,
-      defendOnArrival: true,
-    });
-  };
-
-  const handleToggleDefendOnArrival = (
-    troopGroupId: string,
-    currentValue: boolean,
-  ) => {
-    socket.emit("player:set_defend_on_arrival", {
-      roomId: roomState.roomId,
-      playerId,
-      troopGroupId,
-      defendOnArrival: !currentValue,
-    });
-  };
-
   const handleRecallOccupyingTroops = (troopGroupId: string) => {
     socket.emit("player:recall_occupying_troops", {
       roomId: roomState.roomId,
       playerId,
       troopGroupId,
-    });
-  };
-
-  const handleRecallOccupyingTroopsToDefend = (troopGroupId: string) => {
-    socket.emit("player:recall_occupying_troops", {
-      roomId: roomState.roomId,
-      playerId,
-      troopGroupId,
-      defendOnArrival: true,
     });
   };
 
@@ -470,10 +438,6 @@ export default function GameControls({
   const myTransit = roomState.troopsInTransit.filter(
     (tg) => tg.attackerPlayerId === playerId,
   );
-  const defendingTypes = TROOP_TYPES.filter(
-    (t) => me.militaryDefending[t] > 0,
-  );
-  const hasDefendingTroops = defendingTypes.length > 0;
 
   const alivePlayers = roomState.players.filter((p) => p.alive);
   const endedCount = alivePlayers.filter((p) => p.endedTurn).length;
@@ -527,7 +491,7 @@ export default function GameControls({
           </div>
           <div className="stats-col-cp">
             <span className="stats-col-value">⚔️ {totalCombatPower}</span>
-            <span className="stats-col-subtitle">Combat Power at Home</span>
+            <span className="stats-col-subtitle">CP Available</span>
             <div className="stats-upgrade-levels">
               <div className="stats-upgrade-row">
                 <span className="stats-upgrade-item">
@@ -570,8 +534,7 @@ export default function GameControls({
         >
           <span
             className={`section-chevron${expandedSections.population ? " section-chevron-open" : ""}`}
-          >
-          </span>
+          ></span>
           <span className="section-header-title">👥 Population</span>
           <span className="section-header-summary">
             <span className="summary-stockpile">
@@ -668,8 +631,7 @@ export default function GameControls({
         >
           <span
             className={`section-chevron${expandedSections.farming ? " section-chevron-open" : ""}`}
-          >
-          </span>
+          ></span>
           <span className="section-header-title">🌾 Farming</span>
           {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
           <div
@@ -778,8 +740,7 @@ export default function GameControls({
         >
           <span
             className={`section-chevron${expandedSections.mining ? " section-chevron-open" : ""}`}
-          >
-          </span>
+          ></span>
           <span className="section-header-title">🪨 Mining</span>
           {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
           <div
@@ -860,8 +821,7 @@ export default function GameControls({
         >
           <span
             className={`section-chevron${expandedSections.trade ? " section-chevron-open" : ""}`}
-          >
-          </span>
+          ></span>
           <span className="section-header-title">💰 Trade</span>
           {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
           <div
@@ -938,8 +898,7 @@ export default function GameControls({
         >
           <span
             className={`section-chevron${expandedSections.culture ? " section-chevron-open" : ""}`}
-          >
-          </span>
+          ></span>
           <span className="section-header-title">🏛️ Culture</span>
           <span className="section-header-summary">
             <span className="summary-detail">
@@ -1009,8 +968,7 @@ export default function GameControls({
         >
           <span
             className={`section-chevron${expandedSections.walls ? " section-chevron-open" : ""}`}
-          >
-          </span>
+          ></span>
           <span className="section-header-title">🧱 Walls</span>
           <span className="section-header-summary">
             <span className="summary-detail">{me.maxHp} max HP</span>
@@ -1053,16 +1011,15 @@ export default function GameControls({
               unlockLabel="📜 Unlock Fortification"
               effectText={
                 <>
-                  +{WALLS_HP_PER_LEVEL[me.upgradesCompleted.walls] ?? "?"}{" "}
-                  max HP
+                  +{WALLS_HP_PER_LEVEL[me.upgradesCompleted.walls] ?? "?"} max
+                  HP
                 </>
               }
               explainerText={
                 <>
-                  Reward: +{WALLS_HP_PER_LEVEL[me.upgradesCompleted.walls]}{" "}
-                  max HP (→{" "}
-                  {me.maxHp +
-                    WALLS_HP_PER_LEVEL[me.upgradesCompleted.walls]}{" "}
+                  Reward: +{WALLS_HP_PER_LEVEL[me.upgradesCompleted.walls]} max
+                  HP (→{" "}
+                  {me.maxHp + WALLS_HP_PER_LEVEL[me.upgradesCompleted.walls]}{" "}
                   total)
                 </>
               }
@@ -1079,8 +1036,7 @@ export default function GameControls({
         >
           <span
             className={`section-chevron${expandedSections.military ? " section-chevron-open" : ""}`}
-          >
-          </span>
+          ></span>
           <span className="section-header-title">⚔️ Military</span>
           <span className="section-header-summary">
             <span className="summary-detail">
@@ -1297,8 +1253,8 @@ export default function GameControls({
         </div>
       </div>
 
-      {/* TROOPS IN TRANSIT + DEFENDING — interactive management */}
-      {(myTransit.length > 0 || hasDefendingTroops) && (
+      {/* TROOPS IN TRANSIT — interactive management */}
+      {myTransit.length > 0 && (
         <div className="upgrades-section section-troops">
           <button
             className="section-header"
@@ -1306,16 +1262,11 @@ export default function GameControls({
           >
             <span
               className={`section-chevron${expandedSections.troops ? " section-chevron-open" : ""}`}
-            >
-            </span>
-            <span className="section-header-title">🚶 Troop Management</span>
+            ></span>
+            <span className="section-header-title">🚶 Troops In Transit</span>
             <span className="section-header-summary">
               <span className="summary-detail">
-                {myTransit.length > 0 &&
-                  `${myTransit.length} in transit`}
-                {myTransit.length > 0 && hasDefendingTroops && " · "}
-                {hasDefendingTroops &&
-                  `${defendingTypes.length} defending`}
+                {myTransit.length} group{myTransit.length !== 1 ? "s" : ""}
               </span>
             </span>
           </button>
@@ -1359,9 +1310,7 @@ export default function GameControls({
                       </span>
                       <span className="troop-manage-target">
                         {isReturning
-                          ? tg.defendOnArrival
-                            ? "← Defend"
-                            : "← Home"
+                          ? "← Home"
                           : tg.isDonation
                             ? `🎁 → ${targetName}`
                             : `→ ${targetName}`}
@@ -1385,35 +1334,12 @@ export default function GameControls({
                         {isPaused ? "Resume" : "Pause"}
                       </button>
                       {!isReturning && (
-                        <>
-                          <button
-                            className="troop-action-btn"
-                            onClick={() => handleRecallTroops(tg.id)}
-                            disabled={controlsDisabled}
-                          >
-                            Recall
-                          </button>
-                          <button
-                            className="troop-action-btn"
-                            onClick={() => handleRecallTroopsToDefend(tg.id)}
-                            disabled={controlsDisabled}
-                          >
-                            Defend
-                          </button>
-                        </>
-                      )}
-                      {isReturning && (
                         <button
                           className="troop-action-btn"
-                          onClick={() =>
-                            handleToggleDefendOnArrival(
-                              tg.id,
-                              !!tg.defendOnArrival,
-                            )
-                          }
+                          onClick={() => handleRecallTroops(tg.id)}
                           disabled={controlsDisabled}
                         >
-                          {tg.defendOnArrival ? "Defending" : "Defend"}
+                          Recall
                         </button>
                       )}
                       {(redirectTargets.length > 0 || canRedirectToLand) && (
@@ -1444,79 +1370,6 @@ export default function GameControls({
                 );
               })}
             </div>
-
-              {/* Defending troops — shown as manageable rows */}
-              {hasDefendingTroops && (
-                <div className="troop-manage-list">
-                  <div
-                    className="transit-row"
-                    style={{ fontWeight: 700, marginTop: myTransit.length > 0 ? 8 : 0 }}
-                  >
-                    Defending
-                  </div>
-                  {defendingTypes.map((type) => {
-                    const units = me.militaryDefending[type];
-                    const defendRedirectTargets = roomState.players.filter(
-                      (p) => p.alive && p.playerId !== playerId,
-                    );
-                    return (
-                      <div key={type} className="troop-manage-row">
-                        <div className="troop-manage-info">
-                          <span className="troop-manage-units">
-                            {units} {type}
-                          </span>
-                          <span className="troop-manage-target">
-                            Defending
-                          </span>
-                          <span className="troop-manage-eta">
-                            {units * COMBAT_POWER[type]} CP
-                          </span>
-                        </div>
-                        <div className="troop-manage-actions">
-                          <button
-                            className="troop-action-btn"
-                            onClick={() =>
-                              handleRecallDefenders(units, type)
-                            }
-                            disabled={controlsDisabled}
-                          >
-                            Recall
-                          </button>
-                          {(defendRedirectTargets.length > 0) && (
-                            <select
-                              className="troop-redirect-select"
-                              value=""
-                              onChange={(e) => {
-                                if (e.target.value)
-                                  handleSendAttack(
-                                    e.target.value,
-                                    units,
-                                    type,
-                                    true,
-                                  );
-                              }}
-                              disabled={controlsDisabled}
-                            >
-                              <option value="">Send to...</option>
-                              <option value={PROMISED_LAND_ID}>
-                                The Promised Land
-                              </option>
-                              {defendRedirectTargets.map((t) => (
-                                <option
-                                  key={t.playerId}
-                                  value={t.playerId}
-                                >
-                                  {t.name}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
           </div>
         </div>
       )}
@@ -1581,16 +1434,6 @@ export default function GameControls({
                           style={{ fontSize: 11 }}
                         >
                           Recall
-                        </button>
-                        <button
-                          className="troop-action-btn"
-                          onClick={() =>
-                            handleRecallOccupyingTroopsToDefend(occ.id)
-                          }
-                          disabled={controlsDisabled}
-                          style={{ fontSize: 11 }}
-                        >
-                          Defend
                         </button>
                         {(occRedirectTargets.length > 0 ||
                           canRedirectToLand) && (
