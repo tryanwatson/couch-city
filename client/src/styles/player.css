@@ -108,6 +108,50 @@
   color: var(--color-text-muted);
 }
 
+/* Color picker */
+.color-picker-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--color-text-muted);
+  margin-top: 8px;
+}
+
+.color-picker-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  max-width: 280px;
+  margin: 8px 0;
+}
+
+.color-circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s, border-color 0.12s, opacity 0.12s;
+  padding: 0;
+  outline: none;
+}
+
+.color-circle:hover:not(:disabled) {
+  transform: scale(1.15);
+}
+
+.color-circle-selected {
+  border-color: #fff;
+  transform: scale(1.15);
+}
+
+.color-circle-taken {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
 /* Answer buttons */
 .answer-screen {
   width: 100%;

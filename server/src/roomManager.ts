@@ -417,6 +417,30 @@ export function disconnectSocket(socketId: string): { roomId: string; wasHost: b
   return null;
 }
 
+export function chooseColor(
+  roomId: string,
+  playerId: string,
+  color: string
+): { error?: string } {
+  const room = rooms.get(roomId);
+  if (!room) return { error: 'Room not found' };
+  if (room.phase !== 'lobby') return { error: 'Game already started' };
+
+  const player = room.players.get(playerId);
+  if (!player) return { error: 'Player not found' };
+
+  if (!PLAYER_COLORS.includes(color)) return { error: 'Invalid color' };
+
+  for (const [id, p] of room.players) {
+    if (id !== playerId && p.color === color) {
+      return { error: 'Color already taken' };
+    }
+  }
+
+  player.color = color;
+  return {};
+}
+
 export function startGame(
   roomId: string,
   settings?: GameSettings
@@ -434,10 +458,18 @@ export function startGame(
 
   const playerList = Array.from(room.players.values());
 
-  // Assign colors and positions around the Promised Land using fixed slots.
+  // Respect colors chosen during lobby; assign remaining colors to players who didn't pick.
+  const chosenColors = new Set(playerList.map(p => p.color).filter(c => c !== ''));
+  const availableColors = PLAYER_COLORS.filter(c => !chosenColors.has(c));
+  let availIdx = 0;
+
+  // Assign positions around the Promised Land using fixed slots.
   // First 4 players get cardinal directions (W/E/N/S), rest fill gaps as opposite pairs.
   playerList.forEach((player, index) => {
-    player.color = PLAYER_COLORS[index % PLAYER_COLORS.length];
+    if (!player.color) {
+      player.color = availableColors[availIdx % availableColors.length];
+      availIdx++;
+    }
 
     const slot = PLAYER_SLOT_FILL_ORDER[index % PLAYER_SLOT_FILL_ORDER.length];
     const angle = (2 * Math.PI * slot) / PLAYER_POSITION_SLOTS;
@@ -600,9 +632,23 @@ function runUpdatePhase(room: ServerRoom): void {
     room.diceResults[player.playerId] = Math.floor(Math.random() * 6) + 1;
   }
 
+  // Snapshot defender counts before siege combat so we can defer casualties
+  const preResolvingDefenders = new Map<string, Record<TroopType, number>>();
+  for (const [pid, player] of room.players) {
+    preResolvingDefenders.set(pid, { ...player.militaryDefending });
+  }
+
   // Existing occupying troops fight garrison and deal siege damage
   room.combatHitPlayerIds = [];
   resolveSiege(room);
+
+  // Save post-combat defender counts, then restore pre-combat values for animation
+  const postResolvingDefenders = new Map<string, Record<TroopType, number>>();
+  for (const [pid, player] of room.players) {
+    postResolvingDefenders.set(pid, { ...player.militaryDefending });
+    const pre = preResolvingDefenders.get(pid);
+    if (pre) player.militaryDefending = { ...pre };
+  }
 
   // Advance all troops by 1 turn (skip paused troops)
   for (const tg of room.troopsInTransit) {
@@ -750,6 +796,11 @@ function runUpdatePhase(room: ServerRoom): void {
     }
     // Remove arrived troops and field combat casualties now that animation has played
     room.troopsInTransit = room.troopsInTransit.filter(tg => tg.turnsRemaining > 0 && tg.units > 0);
+    // Apply deferred defender casualties from siege combat
+    for (const [pid, post] of postResolvingDefenders) {
+      const player = room.players.get(pid);
+      if (player) player.militaryDefending = { ...post };
+    }
     room.combatHitPlayerIds = [];
 
     // Promised Land win condition: hold uncontested for N consecutive turns

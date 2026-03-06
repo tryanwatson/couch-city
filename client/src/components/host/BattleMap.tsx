@@ -17,6 +17,7 @@ import {
   PROMISED_LAND_X,
   PROMISED_LAND_Y,
   PROMISED_LAND_HOLD_TURNS,
+  PLAYER_CASTLE_IMAGES,
 } from "../../../../shared/constants";
 
 interface SpriteSheetConfig {
@@ -92,34 +93,6 @@ const SOURCE_BLUE_HUE = 207; // hue of #3498db
 
 function hueRotationForColor(targetHex: string): number {
   return hexToHue(targetHex) - SOURCE_BLUE_HUE;
-}
-
-function pureHueRgb(hex: string): { r: number; g: number; b: number } {
-  const h = hexToHue(hex) / 60;
-  const x = 1 - Math.abs((h % 2) - 1);
-  let r = 0,
-    g = 0,
-    b = 0;
-  if (h < 1) {
-    r = 1;
-    g = x;
-  } else if (h < 2) {
-    r = x;
-    g = 1;
-  } else if (h < 3) {
-    g = 1;
-    b = x;
-  } else if (h < 4) {
-    g = x;
-    b = 1;
-  } else if (h < 5) {
-    r = x;
-    b = 1;
-  } else {
-    r = 1;
-    b = x;
-  }
-  return { r, g, b };
 }
 
 const ATTACK_STANDOFF = 0.09;
@@ -368,13 +341,12 @@ function CityImageNode({
       )}
       {/* City castle */}
       <image
-        href={player.color === "#e94560" ? "/red-castle.png" : "/uncolored-castle.png"}
+        href={PLAYER_CASTLE_IMAGES[player.color] ?? "/uncolored-castle.png"}
         x={cx - 96}
         y={cy - 96}
         width={192}
         height={192}
         opacity={isDead ? 0.3 : 1}
-        filter={player.color === "#e94560" ? undefined : `url(#castle-${player.color.replace("#", "")})`}
       />
     </g>
   );
@@ -567,7 +539,7 @@ function PromisedLandSpot({
         <circle
           cx={cx}
           cy={cy}
-          r={65}
+          r={130}
           fill="none"
           stroke={ownerColor}
           strokeWidth={4}
@@ -575,7 +547,7 @@ function PromisedLandSpot({
         >
           <animate
             attributeName="r"
-            values="60;70;60"
+            values="120;140;120"
             dur="2s"
             repeatCount="indefinite"
           />
@@ -592,7 +564,7 @@ function PromisedLandSpot({
         <circle
           cx={cx}
           cy={cy}
-          r={65}
+          r={130}
           fill="none"
           stroke="#e74c3c"
           strokeWidth={3}
@@ -611,10 +583,10 @@ function PromisedLandSpot({
       {/* Promised land image */}
       <image
         href="/promised_land.png"
-        x={cx - 50}
-        y={cy - 50}
-        width={100}
-        height={100}
+        x={cx - 100}
+        y={cy - 100}
+        width={200}
+        height={200}
       />
     </g>
   );
@@ -728,25 +700,6 @@ export default function BattleMap({
         hueRotation: hueRotationForColor(p.color),
       }))
       .filter((f) => Math.abs(f.hueRotation) > 1);
-  }, [players]);
-
-  const castleColorFilters = useMemo(() => {
-    const seen = new Set<string>();
-    return players
-      .filter((p) => {
-        if (seen.has(p.color)) return false;
-        seen.add(p.color);
-        return true;
-      })
-      .map((p) => {
-        const { r, g, b } = pureHueRgb(p.color);
-        return {
-          filterId: `castle-${p.color.replace("#", "")}`,
-          r,
-          g,
-          b,
-        };
-      });
   }, [players]);
 
   const [troopPositions, setTroopPositions] = useState<
@@ -1080,15 +1033,6 @@ export default function BattleMap({
             <feColorMatrix type="hueRotate" values={String(hueRotation)} />
           </filter>
         ))}
-        {castleColorFilters.map(({ filterId, r, g, b }) => (
-          <filter key={filterId} id={filterId} colorInterpolationFilters="sRGB">
-            <feColorMatrix type="saturate" values="0" />
-            <feColorMatrix
-              type="matrix"
-              values={`${r * 1.3} 0 0 0 0 0 ${g * 1.3} 0 0 0 0 0 ${b * 1.3} 0 0 0 0 0 1 0`}
-            />
-          </filter>
-        ))}
       </defs>
 
       <image
@@ -1279,6 +1223,10 @@ export default function BattleMap({
           (t) => player.militaryDefending[t] > 0,
         );
         if (defendingTypes.length === 0 || !player.alive) return null;
+        const isUnderSiege = occupyingTroops.some(
+          (occ) => occ.targetPlayerId === player.playerId,
+        );
+        const isDefendingCombat = subPhase === "resolving" && isUnderSiege;
         return defendingTypes.map((type, i) => {
           const spread =
             defendingTypes.length > 1
@@ -1295,8 +1243,8 @@ export default function BattleMap({
               units={player.militaryDefending[type]}
               frameIndex={frameIndex}
               animTime={animTime}
-              isAttacking={false}
-              isIdle={true}
+              isAttacking={isDefendingCombat}
+              isIdle={!isDefendingCombat}
               facingLeft={player.x > PROMISED_LAND_X}
               troopType={type}
               playerColor={player.color}
@@ -1441,6 +1389,44 @@ export default function BattleMap({
             diceResult: result,
             diceCombatStartMs: resolvingStartRef.current,
           });
+        }
+
+        // Defending troops (siege defenders)
+        if (subPhase === "resolving" && resolvingStartRef.current != null) {
+          for (const player of players) {
+            if (!player.alive) continue;
+            const isUnderSiege = occupyingTroops.some(
+              (occ) => occ.targetPlayerId === player.playerId,
+            );
+            if (!isUnderSiege) continue;
+            const result = diceResultsRef.current.get(player.playerId);
+            if (result == null) continue;
+            const defendingTypes = TROOP_TYPES.filter(
+              (t) => player.militaryDefending[t] > 0,
+            );
+            for (let i = 0; i < defendingTypes.length; i++) {
+              const type = defendingTypes[i];
+              const spread =
+                defendingTypes.length > 1
+                  ? (i - (defendingTypes.length - 1) / 2) * 0.06
+                  : 0;
+              const units = player.militaryDefending[type];
+              const sheet = SPRITE_SHEETS[type];
+              const cx = (player.x + spread) * 1000;
+              const cy = (player.y + 0.04) * 1000;
+              diceEntries.push({
+                key: `defend-${player.playerId}-${type}`,
+                cx,
+                cy,
+                clusterRadius: units <= 1 ? 0 : 15 + Math.sqrt(units) * 8,
+                displaySize: sheet.displaySize,
+                playerColor: player.color,
+                diceSide: player.x > PROMISED_LAND_X ? "right" : "left",
+                diceResult: result,
+                diceCombatStartMs: resolvingStartRef.current,
+              });
+            }
+          }
         }
 
         const diceScale = DICE_DISPLAY_SIZE / DICE_FRAME_WIDTH;

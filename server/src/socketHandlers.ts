@@ -5,6 +5,7 @@ import {
   getRoom,
   attachHost,
   addPlayer,
+  chooseColor,
   disconnectSocket,
   startGame,
   allocateWorkers,
@@ -151,6 +152,16 @@ export function registerSocketHandlers(io: Server, socket: Socket): void {
     console.log(`Player "${cityName}" (${playerId}) joined room ${data.roomId}`);
     callback({ ok: true, playerId, cityName });
     emitStateAfterAction(io, socket, data.roomId);
+  });
+
+  socket.on('player:choose_color', (data) => {
+    if (!data?.roomId || !data?.playerId || !data?.color) {
+      socket.emit('room:error', { message: 'Missing required fields' });
+      return;
+    }
+    const result = chooseColor(data.roomId, data.playerId, data.color);
+    if (result.error) { socket.emit('room:error', { message: result.error }); return; }
+    broadcastRoom(io, data.roomId);
   });
 
   socket.on('player:allocate_workers', (data) => {

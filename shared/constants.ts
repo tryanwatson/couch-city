@@ -229,19 +229,35 @@ export function generateCityName(
 
 // City colors — assigned in join order
 export const PLAYER_COLORS = [
-  "#e94560",
-  "#3498db",
-  "#2ecc71",
-  "#f1c40f",
-  "#9b59b6",
-  "#e67e22",
-  "#1abc9c",
-  "#e91e63",
-  "#00bcd4",
-  "#ff5722",
-  "#8bc34a",
-  "#673ab7",
+  "#e6194b", // Red
+  "#3cb44b", // Green
+  "#4363d8", // Blue
+  "#f58231", // Orange
+  "#911eb4", // Purple
+  "#42d4f4", // Cyan
+  "#f032e6", // Magenta
+  "#bfef45", // Lime
+  "#fabed4", // Pink
+  "#469990", // Teal
+  "#dcbeff", // Lavender
+  "#ffe119", // Yellow
 ];
+
+// Pre-colored castle sprite for each player color
+export const PLAYER_CASTLE_IMAGES: Record<string, string> = {
+  "#e6194b": "/red-castle.png",
+  "#3cb44b": "/green-castle.png",
+  "#4363d8": "/blue-castle.png",
+  "#f58231": "/orange-castle.png",
+  "#911eb4": "/purple-castle.png",
+  "#42d4f4": "/cyan-castle.png",
+  "#f032e6": "/magenta-castle.png",
+  "#bfef45": "/lime-castle.png",
+  "#fabed4": "/pink-castle.png",
+  "#469990": "/teal-castle.png",
+  "#dcbeff": "/lavendar-castle.png",
+  "#ffe119": "/yellow-castle.png",
+};
 
 // Player position layout — 12 evenly-spaced slots at 30° intervals around the Promised Land
 // Slot i sits at angle (i * 2π / 12) radians: slot 0 = East, 3 = South, 6 = West, 9 = North

@@ -90,7 +90,7 @@ export default function JoinPage() {
       {error && <div className="error-banner">{error}</div>}
 
       {roomState.phase === 'lobby' && (
-        <WaitingRoom roomState={roomState} playerName={playerName} />
+        <WaitingRoom roomState={roomState} playerName={playerName} playerId={playerId} socket={socket} />
       )}
 
       {roomState.phase === 'playing' && (
