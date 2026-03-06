@@ -40,6 +40,7 @@ interface GameControlsProps {
 }
 
 type SectionId =
+  | "population"
   | "farming"
   | "mining"
   | "trade"
@@ -75,6 +76,7 @@ export default function GameControls({
   const [expandedSections, setExpandedSections] = useState<
     Record<SectionId, boolean>
   >({
+    population: false,
     farming: true,
     mining: false,
     trade: false,
@@ -482,29 +484,6 @@ export default function GameControls({
             >
               ⚠ Max reached, upgrade housing
             </div>
-            <div className="stats-row-growth">
-              <span
-                className={`pop-growth-projection${!isFed ? " rate-negative" : ""}`}
-              >
-                👥 {pop} → {projectedPop} (
-                {isFed
-                  ? `+${Math.round(effectiveGrowthRate * 100)}%`
-                  : `-${Math.round(POP_STARVATION_RATE * 100)}%`}
-                )
-              </span>
-              <div className="stats-growth-buttons">
-                {(VALID_GROWTH_MULTIPLIERS as readonly number[]).map((m) => (
-                  <button
-                    key={m}
-                    className={`growth-multiplier-btn${localGrowthMultiplier === m ? " active" : ""}`}
-                    onClick={() => handleSetGrowthMultiplier(m)}
-                    disabled={controlsDisabled}
-                  >
-                    {m}x
-                  </button>
-                ))}
-              </div>
-            </div>
             <div className={`stats-row-warning${netFood < 0 ? "" : " hidden"}`}>
               ⚠ {netFood < 0 ? Math.floor(me.food / Math.abs(netFood)) : 0}{" "}
               turns of food left
@@ -543,6 +522,109 @@ export default function GameControls({
                 </span>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ====== POPULATION SECTION ====== */}
+      <div className="upgrades-section section-population">
+        <button
+          className="section-header"
+          onClick={() => toggleSection("population")}
+        >
+          <span
+            className={`section-chevron${expandedSections.population ? " section-chevron-open" : ""}`}
+          >
+            &#9656;
+          </span>
+          <span className="section-header-title">👥 Population</span>
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div
+            className="section-header-workers"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {(VALID_GROWTH_MULTIPLIERS as readonly number[]).map((m) => (
+              <button
+                key={m}
+                className={`growth-multiplier-btn${localGrowthMultiplier === m ? " active" : ""}`}
+                onClick={() => handleSetGrowthMultiplier(m)}
+                disabled={controlsDisabled}
+              >
+                {m}x
+              </button>
+            ))}
+          </div>
+          <span className="section-header-summary">
+            <span className="summary-stockpile">
+              👥 {pop}
+              {housingCap < Infinity ? `/${housingCap}` : ""}
+            </span>
+            <span
+              className={`summary-rate${!isFed ? " rate-negative" : " rate-positive"}`}
+            >
+              {isFed
+                ? `+${Math.round(effectiveGrowthRate * 100)}%`
+                : `-${Math.round(POP_STARVATION_RATE * 100)}%`}
+              /t
+            </span>
+          </span>
+        </button>
+
+        <div
+          className={`section-body${expandedSections.population ? "" : " collapsed"}`}
+        >
+          <div className="section-body-inner">
+            {/* Growth multiplier */}
+            <div className="stats-row-growth">
+              <span
+                className={`pop-growth-projection${!isFed ? " rate-negative" : ""}`}
+              >
+                👥 {pop} → {projectedPop} (
+                {isFed
+                  ? `+${Math.round(effectiveGrowthRate * 100)}%`
+                  : `-${Math.round(POP_STARVATION_RATE * 100)}%`}
+                )
+              </span>
+            </div>
+
+            <p className="section-explainer">
+              When fed: population grows {Math.round(POP_GROWTH_RATE * 100)}% ×
+              multiplier per turn. At {localGrowthMultiplier}x, each citizen
+              eats {FOOD_PER_CITIZEN * localGrowthMultiplier} food/turn and pop
+              grows {Math.round(effectiveGrowthRate * 100)}%.
+            </p>
+            <p className="section-explainer">
+              When starving (food &lt; consumption): lose{" "}
+              {Math.round(POP_STARVATION_RATE * 100)}% pop/turn.
+            </p>
+            <p className="section-explainer">
+              Population is capped by housing level. Upgrade housing to raise
+              the cap.
+            </p>
+
+            {/* Housing upgrade */}
+            <BuildProgressBlock
+              category="housing"
+              me={me}
+              localBuilders={localBuilders}
+              onAdjustBuilder={adjustBuilder}
+              onUnlockUpgrade={handleUnlockUpgrade}
+              unassigned={unassigned}
+              controlsDisabled={controlsDisabled}
+              unlockCost={getUnlockCost("housing")}
+              progressBarClass="population-progress-fill"
+              buildingLabel="Building Housing"
+              maxLabel="All housing upgrades completed! (Uncapped)"
+              unlockLabel="🏠 Unlock Housing Upgrade"
+              effectText={
+                <>
+                  Cap: {housingCap} →{" "}
+                  {me.upgradesCompleted.housing + 1 < HOUSING_POP_CAPS.length
+                    ? HOUSING_POP_CAPS[me.upgradesCompleted.housing + 1]
+                    : "Uncapped"}
+                </>
+              }
+            />
           </div>
         </div>
       </div>
@@ -734,30 +816,6 @@ export default function GameControls({
                   Yield: {MATERIALS_PER_MINER} x {miningMult} ={" "}
                   {MATERIALS_PER_MINER * miningMult}/miner →{" "}
                   {MATERIALS_PER_MINER * (miningMult + 1)}/miner
-                </>
-              }
-            />
-
-            {/* Housing upgrade */}
-            <BuildProgressBlock
-              category="housing"
-              me={me}
-              localBuilders={localBuilders}
-              onAdjustBuilder={adjustBuilder}
-              onUnlockUpgrade={handleUnlockUpgrade}
-              unassigned={unassigned}
-              controlsDisabled={controlsDisabled}
-              unlockCost={getUnlockCost("housing")}
-              progressBarClass="mining-progress-fill"
-              buildingLabel="Building Housing"
-              maxLabel="All housing upgrades completed! (Uncapped)"
-              unlockLabel="🏠 Unlock Housing Upgrade"
-              effectText={
-                <>
-                  Cap: {housingCap} →{" "}
-                  {me.upgradesCompleted.housing + 1 < HOUSING_POP_CAPS.length
-                    ? HOUSING_POP_CAPS[me.upgradesCompleted.housing + 1]
-                    : "Uncapped"}
                 </>
               }
             />

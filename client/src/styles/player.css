@@ -987,6 +987,45 @@
   background: rgba(74, 144, 168, 0.35);
 }
 
+/* --- Population (Pale Blue) --- */
+.section-population {
+  background: var(--color-population-bg);
+  border-left: 3px solid var(--color-population-accent);
+}
+.section-population .section-header-title {
+  color: var(--color-population-accent);
+}
+.section-population .worker-row,
+.section-population .resource-row,
+.section-population .pop-growth-info {
+  background: var(--color-population-row);
+}
+.section-population .worker-btn {
+  border-color: var(--color-population-accent);
+  background: rgba(91, 155, 213, 0.15);
+}
+.section-population .worker-btn:hover:not(:disabled) {
+  background: rgba(91, 155, 213, 0.35);
+}
+.section-population .growth-multiplier-btn:hover:not(:disabled) {
+  border-color: var(--color-population-accent);
+  background: rgba(91, 155, 213, 0.1);
+}
+.section-population .growth-multiplier-btn.active {
+  border-color: var(--color-population-accent);
+  background: var(--color-population-accent);
+}
+.section-population .upgrade-science {
+  background: rgba(91, 155, 213, 0.2);
+  border-color: var(--color-population-accent);
+}
+.section-population .upgrade-science:hover:not(:disabled) {
+  background: rgba(91, 155, 213, 0.35);
+}
+.build-progress-bar-fill.population-progress-fill {
+  background: linear-gradient(90deg, #2b7cba, #5b9bd5);
+}
+
 /* Attack elements (now inside military section) */
 .section-military .target-row {
   background: var(--color-military-row);
