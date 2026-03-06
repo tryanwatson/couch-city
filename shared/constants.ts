@@ -33,7 +33,9 @@ export function getUpgradeUnlockCost(
   level: number,
 ): number {
   if (category === "housing") {
-    return HOUSING_UPGRADE_COSTS[Math.min(level, HOUSING_UPGRADE_COSTS.length - 1)];
+    return HOUSING_UPGRADE_COSTS[
+      Math.min(level, HOUSING_UPGRADE_COSTS.length - 1)
+    ];
   }
   const progressArr = UPGRADE_PROGRESS[category];
   const ratio =
@@ -43,12 +45,12 @@ export function getUpgradeUnlockCost(
 
 export const UPGRADE_PROGRESS: Record<UpgradeCategory, readonly number[]> = {
   culture: [3, 5, 8, 12, 16],
-  military: [4, 7, 12],
-  farming: [4, 8],
-  mining: [4, 8],
-  trade: [4, 8],
+  military: [4, 15, 30],
+  farming: [10, 20],
+  mining: [10, 20],
+  trade: [10, 20],
   defense: [5, 10, 16],
-  housing: [3, 5, 8, 12],
+  housing: [10, 25, 50, 100],
 };
 
 export const ALL_UPGRADE_CATEGORIES: readonly UpgradeCategory[] = [

@@ -1070,6 +1070,8 @@ export default function BattleMap({
           const inArrivalCombat =
             isResolving &&
             troop.turnsRemaining === 0 &&
+            !isReturningHome &&
+            !isDonation &&
             (!isPromisedLandTarget || isPromisedLandArrivalContested);
           positions.set(troop.id, {
             x: displayX,

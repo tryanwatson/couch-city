@@ -654,7 +654,6 @@ function runUpdatePhase(room: ServerRoom): void {
       if (recipient && recipient.alive) {
         recipient.militaryAtHome[tg.troopType] += tg.units;
       }
-      tg.units = 0; // mark as processed
       continue;
     }
     // Returning home: add to garrison
@@ -663,7 +662,6 @@ function runUpdatePhase(room: ServerRoom): void {
       if (player && player.alive) {
         player.militaryAtHome[tg.troopType] += tg.units;
       }
-      tg.units = 0; // mark as processed
       continue;
     }
   }
@@ -671,8 +669,10 @@ function runUpdatePhase(room: ServerRoom): void {
   // Batch attack arrivals by target city for simultaneous resolution
   const attacksByTarget = new Map<string, TroopGroup[]>();
   for (const tg of arrived) {
-    if (tg.units <= 0) continue; // already processed (donations/returns)
+    if (tg.units <= 0) continue;
     if (tg.targetPlayerId === PROMISED_LAND_ID) continue;
+    if (tg.isDonation) continue;
+    if (tg.attackerPlayerId === tg.targetPlayerId) continue;
     const list = attacksByTarget.get(tg.targetPlayerId) ?? [];
     list.push(tg);
     attacksByTarget.set(tg.targetPlayerId, list);
