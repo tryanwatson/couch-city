@@ -118,6 +118,7 @@ export default function HostPage() {
               promisedLandHoldTurns={roomState.promisedLandHoldTurns ?? 0}
               diceResults={roomState.diceResults}
               resolvingDurationMs={roomState.resolvingDurationMs}
+              combatHitPlayerIds={roomState.combatHitPlayerIds}
             />
             {roomState.subPhase === 'resolving' && (
               <div className="resolving-overlay">

@@ -109,6 +109,7 @@ interface BattleMapProps {
   promisedLandHoldTurns?: number;
   diceResults?: Record<string, number>;
   resolvingDurationMs?: number | null;
+  combatHitPlayerIds?: string[];
 }
 
 function resolveTargetPos(
@@ -680,6 +681,7 @@ export default function BattleMap({
   promisedLandHoldTurns = 0,
   diceResults,
   resolvingDurationMs,
+  combatHitPlayerIds,
 }: BattleMapProps) {
   const playerMap = useMemo(
     () => new Map(players.map((p) => [p.playerId, p])),
@@ -1084,7 +1086,7 @@ export default function BattleMap({
           ): entry is {
             troop: TroopGroup;
             posData: NonNullable<typeof entry.posData>;
-          } => entry.posData != null,
+          } => entry.posData != null && entry.posData.displayUnits > 0,
         )
         .sort((a, b) => a.posData.y - b.posData.y)
         .map(({ troop, posData }) => {
@@ -1225,7 +1227,7 @@ export default function BattleMap({
         if (defendingTypes.length === 0 || !player.alive) return null;
         const isUnderSiege = occupyingTroops.some(
           (occ) => occ.targetPlayerId === player.playerId,
-        );
+        ) || (combatHitPlayerIds ?? []).includes(player.playerId);
         const isDefendingCombat = subPhase === "resolving" && isUnderSiege;
         return defendingTypes.map((type, i) => {
           const spread =
@@ -1397,7 +1399,7 @@ export default function BattleMap({
             if (!player.alive) continue;
             const isUnderSiege = occupyingTroops.some(
               (occ) => occ.targetPlayerId === player.playerId,
-            );
+            ) || (combatHitPlayerIds ?? []).includes(player.playerId);
             if (!isUnderSiege) continue;
             const result = diceResultsRef.current.get(player.playerId);
             if (result == null) continue;

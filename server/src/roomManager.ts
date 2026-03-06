@@ -632,23 +632,22 @@ function runUpdatePhase(room: ServerRoom): void {
     room.diceResults[player.playerId] = Math.floor(Math.random() * 6) + 1;
   }
 
-  // Snapshot defender counts before siege combat so we can defer casualties
+  // Snapshot all combat-affected state before resolving so we can defer
+  // casualties for the animation broadcast (clients see pre-combat values
+  // during animation, then post-combat values are applied after timeout).
   const preResolvingDefenders = new Map<string, Record<TroopType, number>>();
   for (const [pid, player] of room.players) {
     preResolvingDefenders.set(pid, { ...player.militaryDefending });
   }
+  const preResolvingTransitUnits = new Map<string, number>();
+  for (const tg of room.troopsInTransit) {
+    preResolvingTransitUnits.set(tg.id, tg.units);
+  }
+  const preResolvingOccupiers = room.occupyingTroops.map(occ => ({ ...occ }));
 
   // Existing occupying troops fight garrison and deal siege damage
   room.combatHitPlayerIds = [];
   resolveSiege(room);
-
-  // Save post-combat defender counts, then restore pre-combat values for animation
-  const postResolvingDefenders = new Map<string, Record<TroopType, number>>();
-  for (const [pid, player] of room.players) {
-    postResolvingDefenders.set(pid, { ...player.militaryDefending });
-    const pre = preResolvingDefenders.get(pid);
-    if (pre) player.militaryDefending = { ...pre };
-  }
 
   // Advance all troops by 1 turn (skip paused troops)
   for (const tg of room.troopsInTransit) {
@@ -730,6 +729,26 @@ function runUpdatePhase(room: ServerRoom): void {
     resolveCombatBatched(room, targetId, attackGroups);
   }
 
+  // Save post-combat state, then restore pre-combat values for animation broadcast.
+  // Field combat troops are skipped — they already handle this via fieldCombatUnits.
+  const postResolvingDefenders = new Map<string, Record<TroopType, number>>();
+  for (const [pid, player] of room.players) {
+    postResolvingDefenders.set(pid, { ...player.militaryDefending });
+    const pre = preResolvingDefenders.get(pid);
+    if (pre) player.militaryDefending = { ...pre };
+  }
+  const postResolvingTransitUnits = new Map<string, number>();
+  for (const tg of room.troopsInTransit) {
+    postResolvingTransitUnits.set(tg.id, tg.units);
+  }
+  const postResolvingOccupiers = [...room.occupyingTroops];
+  for (const tg of room.troopsInTransit) {
+    if (tg.inFieldCombat) continue;
+    const preUnits = preResolvingTransitUnits.get(tg.id);
+    if (preUnits != null) tg.units = preUnits;
+  }
+  room.occupyingTroops = preResolvingOccupiers;
+
   // Auto-recall donations heading to dead cities
   for (const tg of room.troopsInTransit) {
     if (tg.isDonation && tg.turnsRemaining > 0) {
@@ -794,9 +813,14 @@ function runUpdatePhase(room: ServerRoom): void {
       tg.inFieldCombat = undefined;
       tg.fieldCombatUnits = undefined;
     }
-    // Remove arrived troops and field combat casualties now that animation has played
+    // Apply deferred combat casualties now that animation has played
+    for (const tg of room.troopsInTransit) {
+      const postUnits = postResolvingTransitUnits.get(tg.id);
+      if (postUnits != null) tg.units = postUnits;
+    }
+    room.occupyingTroops = postResolvingOccupiers;
+    // Remove arrived troops and field combat casualties (uses post-combat units)
     room.troopsInTransit = room.troopsInTransit.filter(tg => tg.turnsRemaining > 0 && tg.units > 0);
-    // Apply deferred defender casualties from siege combat
     for (const [pid, post] of postResolvingDefenders) {
       const player = room.players.get(pid);
       if (player) player.militaryDefending = { ...post };
