@@ -131,6 +131,7 @@ interface BattleMapProps {
   promisedLandOwnerId?: string | null;
   promisedLandHoldTurns?: number;
   diceResults?: Record<string, number>;
+  resolvingDurationMs?: number | null;
 }
 
 function resolveTargetPos(
@@ -758,6 +759,7 @@ export default function BattleMap({
   promisedLandOwnerId,
   promisedLandHoldTurns = 0,
   diceResults,
+  resolvingDurationMs,
 }: BattleMapProps) {
   const playerMap = useMemo(
     () => new Map(players.map((p) => [p.playerId, p])),
@@ -822,6 +824,7 @@ export default function BattleMap({
     new Map(),
   );
   const resolvingStartRef = useRef<number | null>(null);
+  const resolvingDurationRef = useRef<number>(RESOLVING_PHASE_DURATION_MS);
   const prevSubPhaseRef = useRef<PlayingSubPhase | null | undefined>(null);
   const diceResultsRef = useRef<Map<string, number>>(new Map());
 
@@ -835,6 +838,7 @@ export default function BattleMap({
       }
       prevPositionsRef.current = prev;
       resolvingStartRef.current = Date.now();
+      resolvingDurationRef.current = resolvingDurationMs ?? RESOLVING_PHASE_DURATION_MS;
       // Read dice results from server state
       const dice = new Map<string, number>();
       if (diceResults) {
@@ -907,7 +911,7 @@ export default function BattleMap({
       const animProgress = isResolving
         ? Math.min(
             1,
-            (now - resolvingStartRef.current!) / RESOLVING_PHASE_DURATION_MS,
+            (now - resolvingStartRef.current!) / resolvingDurationRef.current,
           )
         : 1;
 
@@ -1224,7 +1228,7 @@ export default function BattleMap({
               statusColor={sColor}
               diceResult={posData.isAttacking ? diceResultsRef.current.get(troop.attackerPlayerId) : undefined}
               diceCombatStartMs={posData.isAttacking && resolvingStartRef.current != null
-                ? resolvingStartRef.current + FIELD_COMBAT_WALK_FRAC * RESOLVING_PHASE_DURATION_MS
+                ? resolvingStartRef.current + FIELD_COMBAT_WALK_FRAC * resolvingDurationRef.current
                 : undefined}
               diceSide={posData.isAttacking ? (posData.facingLeft ? "right" : "left") : undefined}
             />

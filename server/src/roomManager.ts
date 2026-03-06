@@ -34,6 +34,7 @@ import {
   TROOP_TRAVEL_TURNS,
   VALID_ATTACK_AMOUNTS,
   RESOLVING_PHASE_DURATION_MS,
+  RESOLVING_PHASE_DURATION_SHORT_MS,
   troopGroupRadius,
   PROMISED_LAND_ID,
   PROMISED_LAND_X,
@@ -297,6 +298,7 @@ export function createRoom(hostSocketId: string): ServerRoom {
     winnerPlayerId: null,
     promisedLandOwnerId: null,
     promisedLandHoldTurns: 0,
+    resolvingDurationMs: null,
   };
 
   rooms.set(roomId, room);
@@ -721,6 +723,15 @@ function runUpdatePhase(room: ServerRoom): void {
     return;
   }
 
+  // Determine resolving duration based on whether visual events occurred
+  const hasVisualEvents =
+    room.troopsInTransit.some(tg => !tg.paused) ||
+    room.combatHitPlayerIds.length > 0;
+  const resolvingDuration = hasVisualEvents
+    ? RESOLVING_PHASE_DURATION_MS
+    : RESOLVING_PHASE_DURATION_SHORT_MS;
+  room.resolvingDurationMs = resolvingDuration;
+
   // Broadcast resolving state (clients can show animation)
   if (broadcastFn) broadcastFn(room.roomId);
 
@@ -754,11 +765,12 @@ function runUpdatePhase(room: ServerRoom): void {
     room.subPhase = 'planning';
     room.turnNumber += 1;
     room.diceResults = {};
+    room.resolvingDurationMs = null;
     for (const [, player] of room.players) {
       player.endedTurn = false;
     }
     if (broadcastFn) broadcastFn(room.roomId);
-  }, RESOLVING_PHASE_DURATION_MS);
+  }, resolvingDuration);
 }
 
 // ============================================================
@@ -1764,6 +1776,7 @@ export function resetRoom(
   room.winnerPlayerId = null;
   room.promisedLandOwnerId = null;
   room.promisedLandHoldTurns = 0;
+  room.resolvingDurationMs = null;
 
   for (const [, player] of room.players) {
     player.color = '';
@@ -1837,5 +1850,6 @@ export function sanitizeState(room: ServerRoom): RoomStatePayload {
     winnerPlayerId: room.winnerPlayerId,
     promisedLandOwnerId: room.promisedLandOwnerId,
     promisedLandHoldTurns: room.promisedLandHoldTurns,
+    resolvingDurationMs: room.resolvingDurationMs,
   };
 }

@@ -68,6 +68,7 @@ export interface RoomStatePayload {
   winnerPlayerId: string | null;
   promisedLandOwnerId: string | null; // playerId of uncontested holder, or null
   promisedLandHoldTurns: number; // consecutive turns held by current owner
+  resolvingDurationMs: number | null; // dynamic animation duration (null during planning)
 }
 
 /** Host-configurable initial economy values, sent with host:start_game. */
@@ -126,4 +127,5 @@ export interface ServerRoom {
   winnerPlayerId: string | null;
   promisedLandOwnerId: string | null;
   promisedLandHoldTurns: number;
+  resolvingDurationMs: number | null;
 }

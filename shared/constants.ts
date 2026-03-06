@@ -151,7 +151,8 @@ export const PROMISED_LAND_TRAVEL_TURNS = 2; // turns for troops to reach it (ar
 export const PROMISED_LAND_HOLD_TURNS = 3; // consecutive uncontested turns to win
 
 // Turn-based timing
-export const RESOLVING_PHASE_DURATION_MS = 5000; // client-side animation duration
+export const RESOLVING_PHASE_DURATION_MS = 5000; // full duration (visual events)
+export const RESOLVING_PHASE_DURATION_SHORT_MS = 1500; // short duration (no visual events)
 
 // City name generation
 export const CITY_SUFFIXES = [
