@@ -116,6 +116,7 @@ export default function HostPage() {
               turnNumber={roomState.turnNumber}
               promisedLandOwnerId={roomState.promisedLandOwnerId}
               promisedLandHoldTurns={roomState.promisedLandHoldTurns ?? 0}
+              diceResults={roomState.diceResults}
             />
             {roomState.subPhase === 'resolving' && (
               <div className="resolving-overlay">

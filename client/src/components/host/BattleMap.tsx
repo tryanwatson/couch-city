@@ -130,6 +130,7 @@ interface BattleMapProps {
   turnNumber?: number;
   promisedLandOwnerId?: string | null;
   promisedLandHoldTurns?: number;
+  diceResults?: Record<string, number>;
 }
 
 function resolveTargetPos(
@@ -756,6 +757,7 @@ export default function BattleMap({
   subPhase,
   promisedLandOwnerId,
   promisedLandHoldTurns = 0,
+  diceResults,
 }: BattleMapProps) {
   const playerMap = useMemo(
     () => new Map(players.map((p) => [p.playerId, p])),
@@ -833,10 +835,12 @@ export default function BattleMap({
       }
       prevPositionsRef.current = prev;
       resolvingStartRef.current = Date.now();
-      // Generate random dice results per player
+      // Read dice results from server state
       const dice = new Map<string, number>();
-      for (const p of players) {
-        dice.set(p.playerId, Math.floor(Math.random() * 6) + 1);
+      if (diceResults) {
+        for (const [pid, roll] of Object.entries(diceResults)) {
+          dice.set(pid, roll);
+        }
       }
       diceResultsRef.current = dice;
     } else if (subPhase !== "resolving") {

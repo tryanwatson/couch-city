@@ -24,6 +24,7 @@ import {
   ZERO_MILITARY,
   TROOP_TYPES,
   COMBAT_POWER,
+  DICE_CP_MULTIPLIER,
   TRAINING_CONFIG,
   SIEGE_DAMAGE_PER_CP,
   INITIAL_HP,
@@ -84,9 +85,9 @@ function clampWorkers(player: ServerCityPlayer): void {
   }
 }
 
-function cpBasedTrade(unitsA: number, cpPerA: number, unitsB: number, cpPerB: number): { survivorsA: number; survivorsB: number } {
-  const cpA = unitsA * cpPerA;
-  const cpB = unitsB * cpPerB;
+function cpBasedTrade(unitsA: number, cpPerA: number, unitsB: number, cpPerB: number, multiplierA = 1, multiplierB = 1): { survivorsA: number; survivorsB: number } {
+  const cpA = unitsA * cpPerA * multiplierA;
+  const cpB = unitsB * cpPerB * multiplierB;
   if (cpA > cpB) {
     return { survivorsA: unitsA - Math.ceil(cpB / cpPerA), survivorsB: 0 };
   } else if (cpB > cpA) {
@@ -99,6 +100,8 @@ function cpBasedTrade(unitsA: number, cpPerA: number, unitsB: number, cpPerB: nu
 function resolveMultiTypeCombat(
   sideA: Record<TroopType, number>,
   sideB: Record<TroopType, number>,
+  multiplierA = 1,
+  multiplierB = 1,
 ): { survivorsA: Record<TroopType, number>; survivorsB: Record<TroopType, number> } {
   let cpA = 0;
   let cpB = 0;
@@ -106,6 +109,8 @@ function resolveMultiTypeCombat(
     cpA += sideA[type] * COMBAT_POWER[type];
     cpB += sideB[type] * COMBAT_POWER[type];
   }
+  cpA *= multiplierA;
+  cpB *= multiplierB;
 
   if (cpA === 0 || cpB === 0) {
     return { survivorsA: { ...sideA }, survivorsB: { ...sideB } };
@@ -287,6 +292,7 @@ export function createRoom(hostSocketId: string): ServerRoom {
     troopsInTransit: [],
     occupyingTroops: [],
     combatHitPlayerIds: [],
+    diceResults: {},
     winnerPlayerId: null,
     promisedLandOwnerId: null,
     promisedLandHoldTurns: 0,
@@ -580,6 +586,12 @@ function runUpdatePhase(room: ServerRoom): void {
     player.hp = Math.min(player.maxHp, player.hp + regen);
   }
 
+  // Generate dice rolls per player for combat multipliers
+  room.diceResults = {};
+  for (const player of alivePlayers) {
+    room.diceResults[player.playerId] = Math.floor(Math.random() * 6) + 1;
+  }
+
   // Existing occupying troops fight garrison and deal siege damage
   room.combatHitPlayerIds = [];
   resolveSiege(room);
@@ -735,6 +747,7 @@ function runUpdatePhase(room: ServerRoom): void {
 
     room.subPhase = 'planning';
     room.turnNumber += 1;
+    room.diceResults = {};
     for (const [, player] of room.players) {
       player.endedTurn = false;
     }
@@ -785,7 +798,9 @@ function detectFieldCollisions(room: ServerRoom): void {
       // Collision! CP-based trade
       const result = cpBasedTrade(
         tg1.units, COMBAT_POWER[tg1.troopType],
-        tg2.units, COMBAT_POWER[tg2.troopType]
+        tg2.units, COMBAT_POWER[tg2.troopType],
+        DICE_CP_MULTIPLIER[room.diceResults[tg1.attackerPlayerId] ?? 3],
+        DICE_CP_MULTIPLIER[room.diceResults[tg2.attackerPlayerId] ?? 3],
       );
 
       // Collision point = midpoint of pre-advance positions (equal walk distances)
@@ -871,6 +886,11 @@ function resolvePromisedLandCombat(room: ServerRoom, arrivingPromisedLandGroups:
     }
     entry.arriving.push(tg);
     entry.totalCP += tg.units * COMBAT_POWER[tg.troopType];
+  }
+
+  // Apply dice multiplier to each player's total CP
+  for (const [pid, entry] of playerGroups) {
+    entry.totalCP *= DICE_CP_MULTIPLIER[room.diceResults[pid] ?? 3];
   }
 
   const playerIds = Array.from(playerGroups.keys());
@@ -979,10 +999,10 @@ function resolveCombatBatched(room: ServerRoom, targetId: string, attackGroups: 
   const defender = room.players.get(targetId);
   if (!defender || !defender.alive) return;
 
-  // === STEP 1: City takes full damage from ALL arriving attackers ===
+  // === STEP 1: City takes full damage from ALL arriving attackers (dice-adjusted) ===
   let totalAttackerCP = 0;
   for (const tg of attackGroups) {
-    totalAttackerCP += tg.units * COMBAT_POWER[tg.troopType];
+    totalAttackerCP += tg.units * COMBAT_POWER[tg.troopType] * DICE_CP_MULTIPLIER[room.diceResults[tg.attackerPlayerId] ?? 3];
   }
   defender.hp -= totalAttackerCP * SIEGE_DAMAGE_PER_CP;
 
@@ -1014,11 +1034,16 @@ function resolveCombatBatched(room: ServerRoom, targetId: string, attackGroups: 
 
   // === STEP 5: Attacker vs Defender combat ===
   const attackerForce: Record<TroopType, number> = { ...ZERO_MILITARY };
+  let attackerBaseCP = 0;
   for (const tg of attackGroups) {
     attackerForce[tg.troopType] += tg.units;
+    attackerBaseCP += tg.units * COMBAT_POWER[tg.troopType];
   }
+  // Weighted average dice multiplier for mixed-player attacker groups
+  const attackerMultiplier = attackerBaseCP > 0 ? totalAttackerCP / attackerBaseCP : 1;
+  const defenderMultiplier = DICE_CP_MULTIPLIER[room.diceResults[targetId] ?? 3];
 
-  const { survivorsA, survivorsB } = resolveMultiTypeCombat(attackerForce, defenderForce);
+  const { survivorsA, survivorsB } = resolveMultiTypeCombat(attackerForce, defenderForce, attackerMultiplier, defenderMultiplier);
 
   // === STEP 6: Apply results to defenders ===
   applyDefenderSurvivors(defender, defenderForce, survivorsB, nearHomeTroops);
@@ -1068,14 +1093,19 @@ function resolveSiege(room: ServerRoom): void {
 
     // Pool all occupiers into one multi-type attacker force
     const attackerForce: Record<TroopType, number> = { ...ZERO_MILITARY };
-    let attackerCP = 0;
+    let attackerBaseCP = 0;
+    let attackerDiceCP = 0;
     for (const occ of occupiers) {
       attackerForce[occ.troopType] += occ.units;
-      attackerCP += occ.units * COMBAT_POWER[occ.troopType];
+      const cp = occ.units * COMBAT_POWER[occ.troopType];
+      attackerBaseCP += cp;
+      attackerDiceCP += cp * DICE_CP_MULTIPLIER[room.diceResults[occ.attackerPlayerId] ?? 3];
     }
+    const siegeAttackerMultiplier = attackerBaseCP > 0 ? attackerDiceCP / attackerBaseCP : 1;
+    const siegeDefenderMultiplier = DICE_CP_MULTIPLIER[room.diceResults[targetId] ?? 3];
 
-    if (defenderCP > 0 && attackerCP > 0) {
-      const { survivorsA, survivorsB } = resolveMultiTypeCombat(attackerForce, defenderForce);
+    if (defenderCP > 0 && attackerBaseCP > 0) {
+      const { survivorsA, survivorsB } = resolveMultiTypeCombat(attackerForce, defenderForce, siegeAttackerMultiplier, siegeDefenderMultiplier);
 
       applyDefenderSurvivors(defender, defenderForce, survivorsB, nearHomeTroops);
       applyAttackerSurvivors(occupiers, attackerForce, survivorsA);
@@ -1089,11 +1119,11 @@ function resolveSiege(room: ServerRoom): void {
       }
     }
 
-    // Surviving occupiers deal siege damage
+    // Surviving occupiers deal siege damage (dice-adjusted)
     let survivingOccCP = 0;
     for (const occ of occupiers) {
       if (occ.units > 0) {
-        survivingOccCP += occ.units * COMBAT_POWER[occ.troopType];
+        survivingOccCP += occ.units * COMBAT_POWER[occ.troopType] * DICE_CP_MULTIPLIER[room.diceResults[occ.attackerPlayerId] ?? 3];
       }
     }
     if (survivingOccCP > 0) {
@@ -1797,6 +1827,7 @@ export function sanitizeState(room: ServerRoom): RoomStatePayload {
     troopsInTransit: room.troopsInTransit,
     occupyingTroops: room.occupyingTroops,
     combatHitPlayerIds: room.combatHitPlayerIds,
+    diceResults: room.diceResults,
     winnerPlayerId: room.winnerPlayerId,
     promisedLandOwnerId: room.promisedLandOwnerId,
     promisedLandHoldTurns: room.promisedLandHoldTurns,

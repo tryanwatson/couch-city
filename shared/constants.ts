@@ -83,6 +83,10 @@ export const COMBAT_POWER: Record<TroopType, number> = {
   truck: 100,
 };
 
+// Dice roll CP multiplier: index 1-6 maps to combat effectiveness
+// 1=80%, 2=90%, 3=100%, 4=105%, 5=120%, 6=150%
+export const DICE_CP_MULTIPLIER = [0, 0.8, 0.9, 1.0, 1.05, 1.2, 1.5];
+
 export const TRAINING_CONFIG: Record<
   TroopType,
   { gold: number; troops: number }

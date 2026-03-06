@@ -64,6 +64,7 @@ export interface RoomStatePayload {
   troopsInTransit: TroopGroup[];
   occupyingTroops: TroopGroup[];
   combatHitPlayerIds: string[];
+  diceResults: Record<string, number>; // playerId → dice roll 1-6
   winnerPlayerId: string | null;
   promisedLandOwnerId: string | null; // playerId of uncontested holder, or null
   promisedLandHoldTurns: number; // consecutive turns held by current owner
@@ -121,6 +122,7 @@ export interface ServerRoom {
   troopsInTransit: TroopGroup[];
   occupyingTroops: TroopGroup[];
   combatHitPlayerIds: string[];
+  diceResults: Record<string, number>;
   winnerPlayerId: string | null;
   promisedLandOwnerId: string | null;
   promisedLandHoldTurns: number;
