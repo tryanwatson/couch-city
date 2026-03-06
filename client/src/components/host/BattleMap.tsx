@@ -815,8 +815,8 @@ export default function BattleMap({
         }
       >();
 
-      // Pre-compute mine contest state for animation decisions
-      const mineOccupierPlayerIds = new Set(
+      // Pre-compute promised land contest state for animation decisions
+      const promisedLandOccupierPlayerIds = new Set(
         occupyingTroops
           .filter(
             (occ) => occ.targetPlayerId === PROMISED_LAND_ID && occ.units > 0,
@@ -892,7 +892,7 @@ export default function BattleMap({
               const advanceDist =
                 Math.abs(advanceX - midX) + Math.abs(advanceY - midY);
               if (advanceDist < 0.001) {
-                // No distance to advance (e.g. mine combat) — settle idle
+                // No distance to advance (e.g. promised land combat) — settle idle
                 posX = midX;
                 posY = midY;
                 idle = true;
@@ -922,13 +922,13 @@ export default function BattleMap({
 
         // Calculate current turn-based position
         const progress = getTroopProgress(troop);
-        const isMineTarget = troop.targetPlayerId === PROMISED_LAND_ID;
+        const isPromisedLandTarget = troop.targetPlayerId === PROMISED_LAND_ID;
         const isReturningHome = troop.targetPlayerId === troop.attackerPlayerId;
         const isDonation = troop.isDonation;
         const standoffFrac = dist > 0 ? ATTACK_STANDOFF / dist : 0;
         // Returning troops and donations walk all the way to the city; attackers stop at standoff distance
         const clampedProgress =
-          isMineTarget || isReturningHome || isDonation
+          isPromisedLandTarget || isReturningHome || isDonation
             ? progress
             : Math.min(progress, 1 - standoffFrac);
 
@@ -957,9 +957,9 @@ export default function BattleMap({
             displayUnits: troop.units,
           });
           // Check if troop has arrived (progress >= 1 - standoffFrac)
-          // Mine arrivals skip lingering — they become occupying troops on the server
+          // Promised land arrivals skip lingering — they become occupying troops on the server
         } else if (
-          !isMineTarget &&
+          !isPromisedLandTarget &&
           !isReturningHome &&
           !isDonation &&
           progress >= 1 - standoffFrac &&
@@ -979,17 +979,17 @@ export default function BattleMap({
             });
           }
         } else {
-          // Mine arrivals only attack-animate when enemies are present
-          const isMineArrivalContested =
-            isMineTarget &&
-            mineOccupierPlayerIds.size > 0 &&
-            Array.from(mineOccupierPlayerIds).some(
+          // Promised land arrivals only attack-animate when enemies are present
+          const isPromisedLandArrivalContested =
+            isPromisedLandTarget &&
+            promisedLandOccupierPlayerIds.size > 0 &&
+            Array.from(promisedLandOccupierPlayerIds).some(
               (id) => id !== troop.attackerPlayerId,
             );
           const inArrivalCombat =
             isResolving &&
             troop.turnsRemaining === 0 &&
-            (!isMineTarget || isMineArrivalContested);
+            (!isPromisedLandTarget || isPromisedLandArrivalContested);
           positions.set(troop.id, {
             x: displayX,
             y: displayY,
@@ -998,9 +998,9 @@ export default function BattleMap({
             isIdle:
               troop.paused ||
               !isResolving ||
-              (isMineTarget &&
+              (isPromisedLandTarget &&
                 troop.turnsRemaining === 0 &&
-                !isMineArrivalContested &&
+                !isPromisedLandArrivalContested &&
                 animProgress >= 1),
             opacity: 1,
             displayUnits: troop.units,
@@ -1171,7 +1171,7 @@ export default function BattleMap({
           />
         ))}
 
-      {/* Occupying siege troops — idle at standoff distance from target city, or on mine center */}
+      {/* Occupying siege troops — idle at standoff distance from target city, or on promised land center */}
       {/* Filter out occupiers whose ID is still in troopsInTransit (they're animating arrival) */}
       {occupyingTroops
         .filter((occ) => !troopsInTransit.some((tg) => tg.id === occ.id))
@@ -1181,7 +1181,7 @@ export default function BattleMap({
           if (!attacker || !targetPos) return null;
           const dx = targetPos.x - attacker.x;
           const dy = targetPos.y - attacker.y;
-          // Mine troops sit directly on the mine; city troops use standoff
+          // Promised land troops sit directly on the promised land; city troops use standoff
           let pos: { x: number; y: number };
           if (occ.targetPlayerId === PROMISED_LAND_ID) {
             pos = { x: PROMISED_LAND_X, y: PROMISED_LAND_Y };
@@ -1204,9 +1204,9 @@ export default function BattleMap({
         .filter((e): e is NonNullable<typeof e> => e != null)
         .sort((a, b) => a.pos.y - b.pos.y)
         .map((entry) => {
-          // Mine occupiers: only attack-animate when contested (multiple players at mine)
-          const isMineOccupier = entry.occ.targetPlayerId === PROMISED_LAND_ID;
-          const minePlayerIds = new Set(
+          // Promised land occupiers: only attack-animate when contested (multiple players at promised land)
+          const isPromisedLandOccupier = entry.occ.targetPlayerId === PROMISED_LAND_ID;
+          const promisedLandPlayerIds = new Set(
             occupyingTroops
               .filter(
                 (occ) =>
@@ -1214,12 +1214,12 @@ export default function BattleMap({
               )
               .map((occ) => occ.attackerPlayerId),
           );
-          const isMineContested = minePlayerIds.size > 1;
-          const isAttacking = isMineOccupier
-            ? subPhase === "resolving" && isMineContested
+          const isPromisedLandContested = promisedLandPlayerIds.size > 1;
+          const isAttacking = isPromisedLandOccupier
+            ? subPhase === "resolving" && isPromisedLandContested
             : subPhase === "resolving";
-          const sIcon = isMineOccupier ? "👑" : "⚔";
-          const sColor = isMineOccupier
+          const sIcon = isPromisedLandOccupier ? "👑" : "⚔";
+          const sColor = isPromisedLandOccupier
             ? "#ffffff"
             : (playerMap.get(entry.occ.targetPlayerId)?.color ?? "white");
           return (

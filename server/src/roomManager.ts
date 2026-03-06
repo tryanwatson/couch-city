@@ -590,10 +590,10 @@ function runUpdatePhase(room: ServerRoom): void {
   // Resolve arrived troop groups (turnsRemaining === 0, skip field combat casualties)
   const arrived = room.troopsInTransit.filter(tg => tg.turnsRemaining <= 0 && tg.units > 0);
 
-  // Batch mine arrivals for simultaneous resolution (prevents first-in-array advantage)
-  const mineArrivals = arrived.filter(tg => tg.targetPlayerId === PROMISED_LAND_ID);
-  if (mineArrivals.length > 0) {
-    resolveMineCombat(room, mineArrivals);
+  // Batch promised land arrivals for simultaneous resolution (prevents first-in-array advantage)
+  const promisedLandArrivals = arrived.filter(tg => tg.targetPlayerId === PROMISED_LAND_ID);
+  if (promisedLandArrivals.length > 0) {
+    resolvePromisedLandCombat(room, promisedLandArrivals);
   }
 
   // Promised Land ownership — after combat so it reflects this turn's outcome
@@ -744,7 +744,7 @@ function detectFieldCollisions(room: ServerRoom): void {
   for (let i = 0; i < transit.length; i++) {
     const tg1 = transit[i];
     if (tg1.units <= 0) continue;
-    // Skip mine-bound troops (separate lane, no player target to look up)
+    // Skip promised-land-bound troops (separate lane, no player target to look up)
     if (tg1.targetPlayerId === PROMISED_LAND_ID || tg1.attackerPlayerId === PROMISED_LAND_ID) continue;
     if (tg1.isDonation) continue; // donations are peaceful — no field combat
 
@@ -837,8 +837,8 @@ function detectFieldCollisions(room: ServerRoom): void {
 // Combat resolution
 // ============================================================
 
-function resolveMineCombat(room: ServerRoom, arrivingMineGroups: TroopGroup[]): void {
-  // Pool all troops at the mine per player (existing occupiers + new arrivals)
+function resolvePromisedLandCombat(room: ServerRoom, arrivingPromisedLandGroups: TroopGroup[]): void {
+  // Pool all troops at the promised land per player (existing occupiers + new arrivals)
   const playerGroups = new Map<string, {
     arriving: TroopGroup[];
     occupying: TroopGroup[];
@@ -856,7 +856,7 @@ function resolveMineCombat(room: ServerRoom, arrivingMineGroups: TroopGroup[]): 
     entry.totalCP += occ.units * COMBAT_POWER[occ.troopType];
   }
 
-  for (const tg of arrivingMineGroups) {
+  for (const tg of arrivingPromisedLandGroups) {
     let entry = playerGroups.get(tg.attackerPlayerId);
     if (!entry) {
       entry = { arriving: [], occupying: [], totalCP: 0 };
@@ -870,14 +870,14 @@ function resolveMineCombat(room: ServerRoom, arrivingMineGroups: TroopGroup[]): 
 
   // No combat if only one player involved — just merge arrivals
   if (playerIds.length <= 1) {
-    for (const tg of arrivingMineGroups) {
+    for (const tg of arrivingPromisedLandGroups) {
       mergeIntoOccupiers(room, tg);
     }
     return;
   }
 
   // Mark all arriving groups for combat animation
-  for (const tg of arrivingMineGroups) {
+  for (const tg of arrivingPromisedLandGroups) {
     tg.fieldCombatUnits = tg.units;
     tg.fieldCombatX = PROMISED_LAND_X;
     tg.fieldCombatY = PROMISED_LAND_Y;
@@ -904,7 +904,7 @@ function resolveMineCombat(room: ServerRoom, arrivingMineGroups: TroopGroup[]): 
       // Add synthetic transit entries for dying occupiers so they animate (fight → fade)
       for (const occ of entry.occupying) {
         room.troopsInTransit.push({
-          id: occ.id + '-minefight',
+          id: occ.id + '-promisedlandfight',
           attackerPlayerId: occ.attackerPlayerId,
           targetPlayerId: PROMISED_LAND_ID,
           troopType: occ.troopType,
@@ -932,7 +932,7 @@ function resolveMineCombat(room: ServerRoom, arrivingMineGroups: TroopGroup[]): 
     // Add synthetic transit entries for dying occupiers so they animate (fight → fade)
     for (const occ of entry.occupying) {
       room.troopsInTransit.push({
-        id: occ.id + '-minefight',
+        id: occ.id + '-promisedlandfight',
         attackerPlayerId: occ.attackerPlayerId,
         targetPlayerId: PROMISED_LAND_ID,
         troopType: occ.troopType,
@@ -960,7 +960,7 @@ function resolveMineCombat(room: ServerRoom, arrivingMineGroups: TroopGroup[]): 
   room.occupyingTroops = room.occupyingTroops.filter(occ => occ.units > 0);
 
   // Merge surviving arrivals into occupying troops
-  for (const tg of arrivingMineGroups) {
+  for (const tg of arrivingPromisedLandGroups) {
     if (tg.units > 0) {
       mergeIntoOccupiers(room, tg);
     }
@@ -1043,7 +1043,7 @@ function resolveSiege(room: ServerRoom): void {
   }
 
   for (const [targetId, occupiers] of occupiersByTarget) {
-    if (targetId === PROMISED_LAND_ID) continue; // Mine occupiers don't siege — handled separately
+    if (targetId === PROMISED_LAND_ID) continue; // Promised land occupiers don't siege — handled separately
     const defender = room.players.get(targetId);
     if (!defender || !defender.alive) continue;
 
@@ -1268,7 +1268,7 @@ export function sendAttack(
 
   if (attackerPlayerId === targetPlayerId) return { error: 'Cannot attack yourself' };
 
-  // Gold mine is always a valid target; player targets must exist and be alive
+  // Promised land is always a valid target; player targets must exist and be alive
   if (targetPlayerId !== PROMISED_LAND_ID) {
     const target = room.players.get(targetPlayerId);
     if (!target) return { error: 'Target not found' };
