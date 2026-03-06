@@ -1,7 +1,7 @@
 export type Phase = 'lobby' | 'playing' | 'gameover';
 export type PlayingSubPhase = 'planning' | 'resolving';
 export type TroopType = 'warrior' | 'cavalry' | 'rifleman' | 'truck';
-export type UpgradeCategory = 'culture' | 'military' | 'farming' | 'mining' | 'trade' | 'defense';
+export type UpgradeCategory = 'culture' | 'military' | 'farming' | 'mining' | 'trade' | 'defense' | 'housing';
 
 // Client-safe player stats — zeros during lobby, populated on startGame
 export interface CityPlayerInfo {
@@ -26,7 +26,6 @@ export interface CityPlayerInfo {
   builders: Record<UpgradeCategory, number>; // workers assigned to building per category
   upgradesCompleted: Record<UpgradeCategory, number>;  // completed upgrades per category
   upgradeProgress: Record<UpgradeCategory, number>;    // current build progress per category
-  housingLevel: number;  // 1–4, gates population cap via HOUSING_POP_CAPS
   hp: number;
   maxHp: number;
   x: number; // 0–1 normalized map position
@@ -106,7 +105,6 @@ export interface ServerCityPlayer {
   builders: Record<UpgradeCategory, number>;
   upgradesCompleted: Record<UpgradeCategory, number>;
   upgradeProgress: Record<UpgradeCategory, number>;
-  housingLevel: number;
   hp: number;
   maxHp: number;
   x: number;

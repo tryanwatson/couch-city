@@ -45,8 +45,6 @@ import {
   PLAYER_POSITION_RX,
   PLAYER_POSITION_RY,
   PLAYER_PLACEMENT_DIAMETER,
-  HOUSING_POP_CAPS,
-  HOUSING_UPGRADE_COSTS,
   getHousingCap,
 } from '../../shared/constants';
 import { generateRoomCode } from './utils';
@@ -370,7 +368,6 @@ export function addPlayer(
     builders: zeroUpgradeRecord(),
     upgradesCompleted: zeroUpgradeRecord(),
     upgradeProgress: zeroUpgradeRecord(),
-    housingLevel: 1,
     hp: 0,
     maxHp: MAX_HP,
     x: 0,
@@ -456,7 +453,6 @@ export function startGame(
     player.militaryAtHome = { ...ZERO_MILITARY };
     player.militaryDefending = { ...ZERO_MILITARY };
     player.population = INITIAL_POPULATION;
-    player.housingLevel = 1;
     player.culture = 0;
     player.upgradeLevel = zeroUpgradeRecord();
     player.builders = zeroUpgradeRecord();
@@ -584,7 +580,7 @@ function runUpdatePhase(room: ServerRoom): void {
     }
 
     // Housing cap — clamp population to current housing level
-    const housingCap = getHousingCap(player.housingLevel);
+    const housingCap = getHousingCap(player.upgradesCompleted.housing);
     if (player.population > housingCap) {
       player.population = housingCap;
     }
@@ -1268,28 +1264,6 @@ export function unlockUpgrade(
   return { room };
 }
 
-export function upgradeHousing(
-  roomId: string,
-  playerId: string,
-): { room: ServerRoom; error?: string } | { room?: undefined; error: string } {
-  const room = rooms.get(roomId);
-  if (!room) return { error: 'Room not found' };
-
-  const guard = guardAction(room, playerId);
-  if (typeof guard === 'string') return { error: guard };
-  const player = guard;
-
-  const maxLevel = HOUSING_POP_CAPS.length;
-  if (player.housingLevel >= maxLevel) return { error: 'Maximum housing level reached' };
-  const cost = HOUSING_UPGRADE_COSTS[player.housingLevel - 1];
-  if (player.materials < cost) return { error: 'Not enough materials' };
-
-  player.materials -= cost;
-  player.housingLevel += 1;
-
-  return { room };
-}
-
 export function spendMilitary(
   roomId: string,
   playerId: string,
@@ -1843,7 +1817,6 @@ export function sanitizeState(room: ServerRoom): RoomStatePayload {
     builders: p.builders,
     upgradesCompleted: p.upgradesCompleted,
     upgradeProgress: p.upgradeProgress,
-    housingLevel: p.housingLevel,
     hp: p.hp,
     maxHp: p.maxHp,
     x: p.x,

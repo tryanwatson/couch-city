@@ -17,11 +17,12 @@ export const VALID_GROWTH_MULTIPLIERS = [1, 2, 3] as const; // 1x/2x/3x food cos
 // Population
 export const INITIAL_POPULATION = 10;
 
-// Housing — population caps per level (indexed by housingLevel - 1)
-export const HOUSING_POP_CAPS = [50, 150, 300, 500] as const;
-export const HOUSING_UPGRADE_COSTS = [50, 100, 200] as const; // material cost to go from level N to N+1
-export function getHousingCap(housingLevel: number): number {
-  return HOUSING_POP_CAPS[Math.min(housingLevel - 1, HOUSING_POP_CAPS.length - 1)];
+// Housing — population caps per completed housing upgrade (index 0 = base, no upgrades)
+export const HOUSING_POP_CAPS = [50, 100, 150, 250] as const;
+export const HOUSING_UPGRADE_COSTS = [50, 100, 200, 400] as const; // material cost per unlock level
+export function getHousingCap(upgradesCompleted: number): number {
+  if (upgradesCompleted >= HOUSING_POP_CAPS.length) return Infinity;
+  return HOUSING_POP_CAPS[upgradesCompleted];
 }
 
 // Upgrades — unlock costs & build progress system
@@ -31,6 +32,9 @@ export function getUpgradeUnlockCost(
   category: UpgradeCategory,
   level: number,
 ): number {
+  if (category === "housing") {
+    return HOUSING_UPGRADE_COSTS[Math.min(level, HOUSING_UPGRADE_COSTS.length - 1)];
+  }
   const progressArr = UPGRADE_PROGRESS[category];
   const ratio =
     progressArr[Math.min(level, progressArr.length - 1)] / progressArr[0];
@@ -44,6 +48,7 @@ export const UPGRADE_PROGRESS: Record<UpgradeCategory, readonly number[]> = {
   mining: [4, 8],
   trade: [4, 8],
   defense: [5, 10, 16],
+  housing: [3, 5, 8, 12],
 };
 
 export const ALL_UPGRADE_CATEGORIES: readonly UpgradeCategory[] = [
@@ -53,6 +58,7 @@ export const ALL_UPGRADE_CATEGORIES: readonly UpgradeCategory[] = [
   "mining",
   "trade",
   "defense",
+  "housing",
 ] as const;
 
 export function zeroUpgradeRecord(): Record<UpgradeCategory, number> {
@@ -63,6 +69,7 @@ export function zeroUpgradeRecord(): Record<UpgradeCategory, number> {
     mining: 0,
     trade: 0,
     defense: 0,
+    housing: 0,
   };
 }
 
