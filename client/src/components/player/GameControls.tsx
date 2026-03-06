@@ -76,7 +76,7 @@ export default function GameControls({
   const [expandedSections, setExpandedSections] = useState<
     Record<SectionId, boolean>
   >({
-    population: false,
+    population: true,
     farming: true,
     mining: false,
     trade: false,
@@ -535,25 +535,8 @@ export default function GameControls({
           <span
             className={`section-chevron${expandedSections.population ? " section-chevron-open" : ""}`}
           >
-            &#9656;
           </span>
           <span className="section-header-title">👥 Population</span>
-          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-          <div
-            className="section-header-workers"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {(VALID_GROWTH_MULTIPLIERS as readonly number[]).map((m) => (
-              <button
-                key={m}
-                className={`growth-multiplier-btn${localGrowthMultiplier === m ? " active" : ""}`}
-                onClick={() => handleSetGrowthMultiplier(m)}
-                disabled={controlsDisabled}
-              >
-                {m}x
-              </button>
-            ))}
-          </div>
           <span className="section-header-summary">
             <span className="summary-stockpile">
               👥 {pop}
@@ -585,6 +568,18 @@ export default function GameControls({
                   : `-${Math.round(POP_STARVATION_RATE * 100)}%`}
                 )
               </span>
+              <div className="stats-growth-buttons">
+                {(VALID_GROWTH_MULTIPLIERS as readonly number[]).map((m) => (
+                  <button
+                    key={m}
+                    className={`growth-multiplier-btn${localGrowthMultiplier === m ? " active" : ""}`}
+                    onClick={() => handleSetGrowthMultiplier(m)}
+                    disabled={controlsDisabled}
+                  >
+                    {m}x
+                  </button>
+                ))}
+              </div>
             </div>
 
             <p className="section-explainer">
@@ -638,7 +633,6 @@ export default function GameControls({
           <span
             className={`section-chevron${expandedSections.farming ? " section-chevron-open" : ""}`}
           >
-            &#9656;
           </span>
           <span className="section-header-title">🌾 Farming</span>
           {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
@@ -749,7 +743,6 @@ export default function GameControls({
           <span
             className={`section-chevron${expandedSections.mining ? " section-chevron-open" : ""}`}
           >
-            &#9656;
           </span>
           <span className="section-header-title">🪨 Mining</span>
           {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
@@ -832,7 +825,6 @@ export default function GameControls({
           <span
             className={`section-chevron${expandedSections.trade ? " section-chevron-open" : ""}`}
           >
-            &#9656;
           </span>
           <span className="section-header-title">💰 Trade</span>
           {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
@@ -911,7 +903,6 @@ export default function GameControls({
           <span
             className={`section-chevron${expandedSections.culture ? " section-chevron-open" : ""}`}
           >
-            &#9656;
           </span>
           <span className="section-header-title">🏛️ Culture</span>
           <span className="section-header-summary">
@@ -983,7 +974,6 @@ export default function GameControls({
           <span
             className={`section-chevron${expandedSections.walls ? " section-chevron-open" : ""}`}
           >
-            &#9656;
           </span>
           <span className="section-header-title">🧱 Walls</span>
           <span className="section-header-summary">
@@ -1054,7 +1044,6 @@ export default function GameControls({
           <span
             className={`section-chevron${expandedSections.military ? " section-chevron-open" : ""}`}
           >
-            &#9656;
           </span>
           <span className="section-header-title">⚔️ Military</span>
           <span className="section-header-summary">
@@ -1282,7 +1271,6 @@ export default function GameControls({
             <span
               className={`section-chevron${expandedSections.troops ? " section-chevron-open" : ""}`}
             >
-              &#9656;
             </span>
             <span className="section-header-title">🚶 Troops In Transit</span>
             <span className="section-header-summary">
