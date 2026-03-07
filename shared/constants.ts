@@ -129,7 +129,7 @@ export const HP_REGEN_PERCENT = 0.03; // 3% of maxHp per turn (ceil'd) — scale
 export const WALLS_HP_PER_LEVEL: readonly number[] = [50, 75, 100];
 
 // Combat
-export const TROOP_TRAVEL_TURNS = 4; // turns for troops to reach target (5 positions: home,1,2,3,enemy)
+export const TROOP_TRAVEL_TURNS = 3; // turns for troops to reach target (4 positions: home,1,2,enemy)
 export const SIEGE_DAMAGE_PER_CP = 1; // HP damage per CP per turn from occupying troops
 export const VALID_ATTACK_AMOUNTS = [1, 5, 25] as const;
 

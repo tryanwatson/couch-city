@@ -1885,10 +1885,9 @@ export function redirectOccupyingTroops(
   // Calculate travel time based on distance
   const newTargetPos = resolveTargetPosition(newTargetPlayerId, room.players);
   const dist = Math.hypot(newTargetPos.x - startX, newTargetPos.y - startY);
-  const baseTurns = (newTargetPlayerId === PROMISED_LAND_ID || occ.targetPlayerId === PROMISED_LAND_ID)
+  const travelTurns = newTargetPlayerId === PROMISED_LAND_ID
     ? PROMISED_LAND_TRAVEL_TURNS
-    : TROOP_TRAVEL_TURNS;
-  const travelTurns = Math.max(1, Math.round(baseTurns * (dist / PLAYER_PLACEMENT_DIAMETER)));
+    : Math.max(1, Math.round(TROOP_TRAVEL_TURNS * (dist / PLAYER_PLACEMENT_DIAMETER)));
 
   // Move from occupying to transit (heading to new target)
   room.occupyingTroops.splice(occIndex, 1);
