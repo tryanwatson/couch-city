@@ -129,9 +129,16 @@ export const HP_REGEN_PERCENT = 0.03; // 3% of maxHp per turn (ceil'd) — scale
 export const WALLS_HP_PER_LEVEL: readonly number[] = [50, 75, 100];
 
 // Combat
-export const TROOP_TRAVEL_TURNS = 3; // turns for troops to reach target (4 positions: home,1,2,enemy)
 export const SIEGE_DAMAGE_PER_CP = 1; // HP damage per CP per turn from occupying troops
 export const VALID_ATTACK_AMOUNTS = [1, 5, 25] as const;
+
+// Hex-based movement speed (hexes per turn)
+export const MOVEMENT_SPEED: Record<TroopType, number> = {
+  warrior: 1,
+  cavalry: 2,
+  rifleman: 1,
+  truck: 3,
+};
 
 // Visual radius of a troop group in normalized (0–1) map coordinates
 // Matches the client's golden-angle spiral cluster + half sprite size
@@ -149,7 +156,6 @@ export const FIELD_COMBAT_ADVANCE_FRAC = 0.2; // 1000ms — winner advances to d
 export const PROMISED_LAND_ID = "__PROMISED_LAND__";
 export const PROMISED_LAND_X = 0.5;
 export const PROMISED_LAND_Y = 0.5;
-export const PROMISED_LAND_TRAVEL_TURNS = 2; // turns for troops to reach it (arrive the turn after sending)
 export const PROMISED_LAND_HOLD_TURNS = 3; // consecutive uncontested turns to win
 
 // Turn-based timing
@@ -266,6 +272,3 @@ export const PLAYER_START_ANGLE = Math.PI;
 export const PLAYER_POSITION_RX = 0.35;
 export const PLAYER_POSITION_RY = 0.35;
 
-/** Diameter of the player placement circle — used to normalize distance-based travel time. */
-export const PLAYER_PLACEMENT_DIAMETER =
-  PLAYER_POSITION_RX + PLAYER_POSITION_RY;

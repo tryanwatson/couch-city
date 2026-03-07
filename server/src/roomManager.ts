@@ -31,22 +31,21 @@ import {
   MAX_HP,
   HP_REGEN_PERCENT,
   WALLS_HP_PER_LEVEL,
-  TROOP_TRAVEL_TURNS,
+  MOVEMENT_SPEED,
   RESOLVING_PHASE_DURATION_MS,
   RESOLVING_PHASE_DURATION_SHORT_MS,
   DICE_LINGER_MS,
-  troopGroupRadius,
   PROMISED_LAND_ID,
   PROMISED_LAND_X,
   PROMISED_LAND_Y,
-  PROMISED_LAND_TRAVEL_TURNS,
   PROMISED_LAND_HOLD_TURNS,
   PLAYER_START_ANGLE,
   PLAYER_POSITION_RX,
   PLAYER_POSITION_RY,
-  PLAYER_PLACEMENT_DIAMETER,
   getHousingCap,
 } from '../../shared/constants';
+import { pixelToHex, hexToPixel, hexLineDraw, hexDistance, hexEqual, hexKey } from '../../shared/hexGrid';
+import type { Hex } from '../../shared/hexGrid';
 import { generateRoomCode } from './utils';
 
 const rooms = new Map<string, ServerRoom>();
@@ -82,6 +81,36 @@ function clampWorkers(player: ServerCityPlayer): void {
   for (const cat of ALL_UPGRADE_CATEGORIES) {
     if (player.upgradesCompleted[cat] >= player.upgradeLevel[cat]) {
       player.builders[cat] = 0;
+    }
+  }
+}
+
+/**
+ * Returns true if every alive player has either ended their turn or is disconnected,
+ * AND at least one alive player is still connected (game pauses if everyone leaves).
+ */
+function allAlivePlayersEffectivelyEnded(room: ServerRoom): boolean {
+  const alivePlayers = Array.from(room.players.values()).filter(p => p.alive);
+  if (alivePlayers.length === 0) return false;
+  if (!alivePlayers.some(p => p.connected)) return false;
+  return alivePlayers.every(p => p.endedTurn || !p.connected);
+}
+
+/**
+ * For each alive, disconnected player who hasn't ended their turn,
+ * set endedTurn = true and auto-allocate idle civilians to farming.
+ * Call this right before runUpdatePhase.
+ */
+function autoEndDisconnectedPlayers(room: ServerRoom): void {
+  for (const [, player] of room.players) {
+    if (player.alive && !player.connected && !player.endedTurn) {
+      player.endedTurn = true;
+      const civilians = Math.max(0, Math.floor(player.population));
+      const allocated = player.farmers + player.miners + player.merchants + totalBuilders(player.builders);
+      const idle = civilians - allocated;
+      if (idle > 0) {
+        player.farmers += idle;
+      }
     }
   }
 }
@@ -168,23 +197,22 @@ function applyAttackerSurvivors(
   }
 }
 
-/** Collect transit troops owned by defender within 1 turn of their home city. */
+/** Collect transit troops owned by defender within 1 move of their home city. */
 function gatherNearHomeTroops(room: ServerRoom, defenderId: string): TroopGroup[] {
+  const defender = room.players.get(defenderId);
+  if (!defender) return [];
   const nearHome: TroopGroup[] = [];
   for (const tg of room.troopsInTransit) {
     if (tg.attackerPlayerId !== defenderId) continue;
     if (tg.units <= 0) continue;
-    if (tg.turnsRemaining <= 0) continue; // already arrived, handled separately
     if (tg.paused) continue;
     if (tg.isDonation) continue;
     if (tg.targetPlayerId === PROMISED_LAND_ID) continue;
+    // Already at destination
+    if (tg.hexQ === tg.destHexQ && tg.hexR === tg.destHexR) continue;
 
-    const isHeadingHome = tg.targetPlayerId === tg.attackerPlayerId;
-    if (isHeadingHome) {
-      if (tg.turnsRemaining <= 1) nearHome.push(tg);
-    } else {
-      if ((tg.totalTurns - tg.turnsRemaining) <= 1) nearHome.push(tg);
-    }
+    const distToHome = hexDistance({ q: tg.hexQ, r: tg.hexR }, { q: defender.hexQ, r: defender.hexR });
+    if (distToHome <= MOVEMENT_SPEED[tg.troopType]) nearHome.push(tg);
   }
   return nearHome;
 }
@@ -215,16 +243,17 @@ function handleCityDeath(
     occ => occ.targetPlayerId === defender.playerId && occ.units > 0
   );
   for (const occ of occupiersHere) {
+    const home = room.players.get(occ.attackerPlayerId);
     room.troopsInTransit.push({
       id: occ.id + '-return',
       attackerPlayerId: occ.attackerPlayerId,
       targetPlayerId: occ.attackerPlayerId,
       troopType: occ.troopType,
       units: occ.units,
-      turnsRemaining: TROOP_TRAVEL_TURNS,
-      totalTurns: TROOP_TRAVEL_TURNS,
-      startX: defender.x,
-      startY: defender.y,
+      hexQ: defender.hexQ,
+      hexR: defender.hexR,
+      destHexQ: home?.hexQ ?? 0,
+      destHexR: home?.hexR ?? 0,
     });
   }
   room.occupyingTroops = room.occupyingTroops.filter(
@@ -234,16 +263,17 @@ function handleCityDeath(
   if (extraReturnGroups) {
     for (const tg of extraReturnGroups) {
       if (tg.units > 0) {
+        const home = room.players.get(tg.attackerPlayerId);
         room.troopsInTransit.push({
           id: tg.id + '-return',
           attackerPlayerId: tg.attackerPlayerId,
           targetPlayerId: tg.attackerPlayerId,
           troopType: tg.troopType,
           units: tg.units,
-          turnsRemaining: TROOP_TRAVEL_TURNS,
-          totalTurns: TROOP_TRAVEL_TURNS,
-          startX: defender.x,
-          startY: defender.y,
+          hexQ: defender.hexQ,
+          hexR: defender.hexR,
+          destHexQ: home?.hexQ ?? 0,
+          destHexR: home?.hexR ?? 0,
         });
       }
     }
@@ -260,14 +290,17 @@ function mergeIntoOccupiers(room: ServerRoom, tg: TroopGroup): void {
   if (existing) {
     existing.units += tg.units;
   } else {
+    const destHex = resolveTargetHex(tg.targetPlayerId, room.players);
     room.occupyingTroops.push({
       id: tg.id,
       attackerPlayerId: tg.attackerPlayerId,
       targetPlayerId: tg.targetPlayerId,
       troopType: tg.troopType,
       units: tg.units,
-      turnsRemaining: 0,
-      totalTurns: 0,
+      hexQ: destHex.q,
+      hexR: destHex.r,
+      destHexQ: destHex.q,
+      destHexR: destHex.r,
     });
   }
 }
@@ -330,6 +363,16 @@ export function addPlayer(
     existing.socketId = socketId;
     existing.connected = true;
     existing.lastSeen = Date.now();
+
+    // If this reconnection completes a paused turn (e.g. everyone disconnected
+    // and this player had already ended), finalize and advance.
+    if (room.phase === 'playing' && room.subPhase === 'planning') {
+      if (allAlivePlayersEffectivelyEnded(room)) {
+        autoEndDisconnectedPlayers(room);
+        runUpdatePhase(room);
+      }
+    }
+
     return { room };
   }
 
@@ -371,6 +414,8 @@ export function addPlayer(
     upgradeProgress: zeroUpgradeRecord(),
     hp: 0,
     maxHp: MAX_HP,
+    hexQ: 0,
+    hexR: 0,
     x: 0,
     y: 0,
     endedTurn: false,
@@ -392,19 +437,12 @@ export function disconnectSocket(socketId: string): { roomId: string; wasHost: b
         player.socketId = null;
         player.lastSeen = Date.now();
 
-        // Auto-end turn for disconnected player during planning
-        if (room.phase === 'playing' && room.subPhase === 'planning' && player.alive && !player.endedTurn) {
-          player.endedTurn = true;
-          // Auto-allocate idle civilians to farming
-          const civilians = Math.max(0, Math.floor(player.population));
-          const allocated = player.farmers + player.miners + player.merchants + totalBuilders(player.builders);
-          const idle = civilians - allocated;
-          if (idle > 0) {
-            player.farmers += idle;
-          }
-          const alivePlayers = Array.from(room.players.values()).filter(p => p.alive);
-          const allEnded = alivePlayers.every(p => p.endedTurn);
-          if (allEnded) {
+        // If this disconnect completes the turn (all remaining connected players already ended),
+        // finalize disconnected players and advance. Does NOT eagerly auto-end this player's turn
+        // to avoid the race condition where a disconnect after turn-reset triggers an extra turn.
+        if (room.phase === 'playing' && room.subPhase === 'planning') {
+          if (allAlivePlayersEffectivelyEnded(room)) {
+            autoEndDisconnectedPlayers(room);
             runUpdatePhase(room);
           }
         }
@@ -472,8 +510,15 @@ export function startGame(
     }
 
     const angle = PLAYER_START_ANGLE + (2 * Math.PI * index) / n;
-    player.x = parseFloat((PROMISED_LAND_X + PLAYER_POSITION_RX * Math.cos(angle)).toFixed(3));
-    player.y = parseFloat((PROMISED_LAND_Y + PLAYER_POSITION_RY * Math.sin(angle)).toFixed(3));
+    const rawX = PROMISED_LAND_X + PLAYER_POSITION_RX * Math.cos(angle);
+    const rawY = PROMISED_LAND_Y + PLAYER_POSITION_RY * Math.sin(angle);
+    // Snap to nearest hex
+    const hex = pixelToHex(rawX, rawY);
+    player.hexQ = hex.q;
+    player.hexR = hex.r;
+    const snapped = hexToPixel(hex);
+    player.x = parseFloat(snapped.x.toFixed(3));
+    player.y = parseFloat(snapped.y.toFixed(3));
 
     player.food = food;
     player.materials = materials;
@@ -537,11 +582,9 @@ export function endTurn(
     player.farmers += idle;
   }
 
-  // Check if all alive players have ended their turn
-  const alivePlayers = Array.from(room.players.values()).filter(p => p.alive);
-  const allEnded = alivePlayers.every(p => p.endedTurn);
-
-  if (allEnded) {
+  // Check if all alive players have ended (treating disconnected as effectively ended)
+  if (allAlivePlayersEffectivelyEnded(room)) {
+    autoEndDisconnectedPlayers(room);
     runUpdatePhase(room);
   }
 
@@ -549,6 +592,7 @@ export function endTurn(
 }
 
 function runUpdatePhase(room: ServerRoom): void {
+  if (room.subPhase === 'resolving') return; // guard against double-invocation
   room.subPhase = 'resolving';
 
   const alivePlayers = Array.from(room.players.values()).filter(p => p.alive);
@@ -642,18 +686,30 @@ function runUpdatePhase(room: ServerRoom): void {
   room.combatHitPlayerIds = [];
   resolveSiege(room);
 
-  // Advance all troops by 1 turn (skip paused troops)
+  // Advance all troops along hex path (skip paused troops)
   for (const tg of room.troopsInTransit) {
+    tg.prevHexQ = tg.hexQ;
+    tg.prevHexR = tg.hexR;
     if (!tg.paused) {
-      tg.turnsRemaining = Math.max(0, tg.turnsRemaining - 1);
+      const from: Hex = { q: tg.hexQ, r: tg.hexR };
+      const to: Hex = { q: tg.destHexQ, r: tg.destHexR };
+      if (!hexEqual(from, to)) {
+        const path = hexLineDraw(from, to);
+        const speed = MOVEMENT_SPEED[tg.troopType];
+        const stepIndex = Math.min(speed, path.length - 1);
+        tg.hexQ = path[stepIndex].q;
+        tg.hexR = path[stepIndex].r;
+      }
     }
   }
 
-  // Detect and resolve field collisions (turn-based)
+  // Detect and resolve field collisions (same-hex)
   detectFieldCollisions(room);
 
-  // Resolve arrived troop groups (turnsRemaining === 0, skip field combat casualties)
-  const arrived = room.troopsInTransit.filter(tg => tg.turnsRemaining <= 0 && tg.units > 0);
+  // Resolve arrived troop groups (reached destination hex)
+  const arrived = room.troopsInTransit.filter(
+    tg => tg.hexQ === tg.destHexQ && tg.hexR === tg.destHexR && tg.units > 0
+  );
 
   // Batch promised land arrivals for simultaneous resolution (prevents first-in-array advantage)
   const promisedLandArrivals = arrived.filter(tg => tg.targetPlayerId === PROMISED_LAND_ID);
@@ -748,16 +804,13 @@ function runUpdatePhase(room: ServerRoom): void {
 
   // Auto-recall donations heading to dead cities
   for (const tg of room.troopsInTransit) {
-    if (tg.isDonation && tg.turnsRemaining > 0) {
+    if (tg.isDonation && !(tg.hexQ === tg.destHexQ && tg.hexR === tg.destHexR)) {
       const recipient = room.players.get(tg.targetPlayerId);
       if (recipient && !recipient.alive) {
-        const currentPos = getTroopCurrentPosition(tg, room.players);
-        const turnsTraveled = tg.totalTurns - tg.turnsRemaining;
-        tg.startX = currentPos.x;
-        tg.startY = currentPos.y;
+        const home = room.players.get(tg.attackerPlayerId);
         tg.targetPlayerId = tg.attackerPlayerId;
-        tg.turnsRemaining = Math.max(1, turnsTraveled);
-        tg.totalTurns = tg.turnsRemaining;
+        tg.destHexQ = home?.hexQ ?? 0;
+        tg.destHexR = home?.hexR ?? 0;
         tg.isDonation = false;
       }
     }
@@ -805,8 +858,8 @@ function runUpdatePhase(room: ServerRoom): void {
     if (room.phase !== 'playing') return;
     // Clear field combat markers on survivors
     for (const tg of room.troopsInTransit) {
-      tg.fieldCombatX = undefined;
-      tg.fieldCombatY = undefined;
+      tg.fieldCombatHexQ = undefined;
+      tg.fieldCombatHexR = undefined;
       tg.inFieldCombat = undefined;
       tg.fieldCombatUnits = undefined;
     }
@@ -817,7 +870,9 @@ function runUpdatePhase(room: ServerRoom): void {
     }
     room.occupyingTroops = postResolvingOccupiers;
     // Remove arrived troops and field combat casualties (uses post-combat units)
-    room.troopsInTransit = room.troopsInTransit.filter(tg => tg.turnsRemaining > 0 && tg.units > 0);
+    room.troopsInTransit = room.troopsInTransit.filter(
+      tg => !(tg.hexQ === tg.destHexQ && tg.hexR === tg.destHexR) && tg.units > 0
+    );
     for (const [pid, post] of postResolvingDefenders) {
       const player = room.players.get(pid);
       if (player) player.militaryDefending = { ...post };
@@ -857,99 +912,57 @@ function runUpdatePhase(room: ServerRoom): void {
 }
 
 // ============================================================
-// Field combat detection (turn-based)
+// Field combat detection (same-hex collision)
 // ============================================================
 
 function detectFieldCollisions(room: ServerRoom): void {
-  const transit = room.troopsInTransit;
-  for (let i = 0; i < transit.length; i++) {
-    const tg1 = transit[i];
-    if (tg1.units <= 0) continue;
-    // Skip promised-land-bound troops (separate lane, no player target to look up)
-    if (tg1.targetPlayerId === PROMISED_LAND_ID || tg1.attackerPlayerId === PROMISED_LAND_ID) continue;
-    if (tg1.isDonation) continue; // donations are peaceful — no field combat
+  // Group all in-transit troops by their current hex
+  const byHex = new Map<string, TroopGroup[]>();
+  for (const tg of room.troopsInTransit) {
+    if (tg.units <= 0) continue;
+    if (tg.isDonation) continue; // donations are peaceful
+    const key = hexKey({ q: tg.hexQ, r: tg.hexR });
+    const list = byHex.get(key) ?? [];
+    list.push(tg);
+    byHex.set(key, list);
+  }
 
-    for (let j = i + 1; j < transit.length; j++) {
-      const tg2 = transit[j];
-      if (tg2.units <= 0) continue;
-      if (tg2.targetPlayerId === PROMISED_LAND_ID || tg2.attackerPlayerId === PROMISED_LAND_ID) continue;
-      if (tg2.isDonation) continue;
+  for (const [, groups] of byHex) {
+    if (groups.length < 2) continue;
 
-      // Only opposing groups on the same lane (A→B vs B→A)
-      if (
-        tg1.attackerPlayerId !== tg2.targetPlayerId ||
-        tg2.attackerPlayerId !== tg1.targetPlayerId
-      ) continue;
+    // Check for opposing owners on this hex
+    const owners = new Set(groups.map(tg => tg.attackerPlayerId));
+    if (owners.size < 2) continue;
 
-      // Calculate progress as fraction
-      const p1 = tg1.totalTurns > 0 ? (tg1.totalTurns - tg1.turnsRemaining) / tg1.totalTurns : 1;
-      const p2 = tg2.totalTurns > 0 ? (tg2.totalTurns - tg2.turnsRemaining) / tg2.totalTurns : 1;
+    // Resolve all pairwise combats on this hex
+    for (let i = 0; i < groups.length; i++) {
+      const tg1 = groups[i];
+      if (tg1.units <= 0) continue;
+      for (let j = i + 1; j < groups.length; j++) {
+        const tg2 = groups[j];
+        if (tg2.units <= 0) continue;
+        if (tg1.attackerPlayerId === tg2.attackerPlayerId) continue; // allies don't fight
 
-      // Account for visual radius
-      const att1 = room.players.get(tg1.attackerPlayerId)!;
-      const tgt1 = room.players.get(tg1.targetPlayerId)!;
-      const laneDist = Math.hypot(tgt1.x - att1.x, tgt1.y - att1.y);
-      const r1 = troopGroupRadius(tg1.units);
-      const r2 = troopGroupRadius(tg2.units);
-      const radiusOffset = laneDist > 0 ? (r1 + r2) / laneDist : 0;
-      const threshold = 1 - radiusOffset;
+        const result = cpBasedTrade(
+          tg1.units, COMBAT_POWER[tg1.troopType],
+          tg2.units, COMBAT_POWER[tg2.troopType],
+          DICE_CP_MULTIPLIER[room.diceResults[tg1.attackerPlayerId] ?? 3],
+          DICE_CP_MULTIPLIER[room.diceResults[tg2.attackerPlayerId] ?? 3],
+        );
 
-      if (p1 + p2 < threshold) continue;
+        // Mark field combat on this hex for animation
+        tg1.fieldCombatHexQ = tg1.hexQ;
+        tg1.fieldCombatHexR = tg1.hexR;
+        tg1.fieldCombatUnits = tg1.units;
+        tg2.fieldCombatHexQ = tg2.hexQ;
+        tg2.fieldCombatHexR = tg2.hexR;
+        tg2.fieldCombatUnits = tg2.units;
 
-      // Collision! CP-based trade
-      const result = cpBasedTrade(
-        tg1.units, COMBAT_POWER[tg1.troopType],
-        tg2.units, COMBAT_POWER[tg2.troopType],
-        DICE_CP_MULTIPLIER[room.diceResults[tg1.attackerPlayerId] ?? 3],
-        DICE_CP_MULTIPLIER[room.diceResults[tg2.attackerPlayerId] ?? 3],
-      );
+        tg1.inFieldCombat = true;
+        tg2.inFieldCombat = true;
 
-      // Collision point = midpoint of pre-advance positions (equal walk distances)
-      const att2 = room.players.get(tg2.attackerPlayerId)!;
-      const tgt2 = room.players.get(tg2.targetPlayerId)!;
-
-      const origin1x = tg1.startX ?? att1.x;
-      const origin1y = tg1.startY ?? att1.y;
-      const origin2x = tg2.startX ?? att2.x;
-      const origin2y = tg2.startY ?? att2.y;
-
-      const preP1 = tg1.totalTurns > 0 ? Math.max(0, tg1.totalTurns - tg1.turnsRemaining - 1) / tg1.totalTurns : 0;
-      const preP2 = tg2.totalTurns > 0 ? Math.max(0, tg2.totalTurns - tg2.turnsRemaining - 1) / tg2.totalTurns : 0;
-
-      const pre1x = origin1x + (tgt1.x - origin1x) * preP1;
-      const pre1y = origin1y + (tgt1.y - origin1y) * preP1;
-      const pre2x = origin2x + (tgt2.x - origin2x) * preP2;
-      const pre2y = origin2y + (tgt2.y - origin2y) * preP2;
-
-      const collisionX = (pre1x + pre2x) / 2;
-      const collisionY = (pre1y + pre2y) / 2;
-
-      // Mark field combat location for animation (preserved until setTimeout cleanup)
-      tg1.fieldCombatX = collisionX;
-      tg1.fieldCombatY = collisionY;
-      tg1.fieldCombatUnits = tg1.units;
-      tg2.fieldCombatX = collisionX;
-      tg2.fieldCombatY = collisionY;
-      tg2.fieldCombatUnits = tg2.units;
-
-      tg1.inFieldCombat = true;
-      tg2.inFieldCombat = true;
-
-      tg1.units = result.survivorsA;
-      tg2.units = result.survivorsB;
-
-      // Winner continues to their post-advance destination step
-      for (const tg of [tg1, tg2]) {
-        if (tg.units > 0) {
-          const attacker = room.players.get(tg.attackerPlayerId)!;
-          const target = room.players.get(tg.targetPlayerId)!;
-          const originX = tg.startX ?? attacker.x;
-          const originY = tg.startY ?? attacker.y;
-          const postProgress = tg.totalTurns > 0 ? (tg.totalTurns - tg.turnsRemaining) / tg.totalTurns : 1;
-          tg.startX = originX + (target.x - originX) * postProgress;
-          tg.startY = originY + (target.y - originY) * postProgress;
-          tg.totalTurns = tg.turnsRemaining; // remaining journey from new start
-        }
+        tg1.units = result.survivorsA;
+        tg2.units = result.survivorsB;
       }
     }
   }
@@ -1007,8 +1020,8 @@ function resolvePromisedLandCombat(room: ServerRoom, arrivingPromisedLandGroups:
   // Mark all arriving groups for combat animation
   for (const tg of arrivingPromisedLandGroups) {
     tg.fieldCombatUnits = tg.units;
-    tg.fieldCombatX = PROMISED_LAND_X;
-    tg.fieldCombatY = PROMISED_LAND_Y;
+    tg.fieldCombatHexQ = 0;
+    tg.fieldCombatHexR = 0;
     tg.inFieldCombat = true;
   }
 
@@ -1037,10 +1050,12 @@ function resolvePromisedLandCombat(room: ServerRoom, arrivingPromisedLandGroups:
           targetPlayerId: PROMISED_LAND_ID,
           troopType: occ.troopType,
           units: 0,
-          turnsRemaining: 0,
-          totalTurns: 0,
-          fieldCombatX: PROMISED_LAND_X,
-          fieldCombatY: PROMISED_LAND_Y,
+          hexQ: 0,
+          hexR: 0,
+          destHexQ: 0,
+          destHexR: 0,
+          fieldCombatHexQ: 0,
+          fieldCombatHexR: 0,
           fieldCombatUnits: occ.units,
           inFieldCombat: true,
         });
@@ -1065,12 +1080,14 @@ function resolvePromisedLandCombat(room: ServerRoom, arrivingPromisedLandGroups:
         targetPlayerId: PROMISED_LAND_ID,
         troopType: occ.troopType,
         units: 0,
-        turnsRemaining: 0,
-        totalTurns: 0,
-        fieldCombatX: PROMISED_LAND_X,
-        fieldCombatY: PROMISED_LAND_Y,
-        fieldCombatUnits: occ.units,
-        inFieldCombat: true,
+          hexQ: 0,
+          hexR: 0,
+          destHexQ: 0,
+          destHexR: 0,
+          fieldCombatHexQ: 0,
+          fieldCombatHexR: 0,
+          fieldCombatUnits: occ.units,
+          inFieldCombat: true,
       });
       occ.units = 0;
     }
@@ -1440,16 +1457,19 @@ export function sendAttack(
 
   source[troopType] -= units;
 
-  const travelTurns = targetPlayerId === PROMISED_LAND_ID ? PROMISED_LAND_TRAVEL_TURNS : TROOP_TRAVEL_TURNS;
+  // Resolve destination hex
+  const destHex = targetPlayerId === PROMISED_LAND_ID
+    ? { q: 0, r: 0 }
+    : { q: room.players.get(targetPlayerId)!.hexQ, r: room.players.get(targetPlayerId)!.hexR };
 
-  // Merge into existing group sent this same planning phase (same target, same type, freshly created)
+  // Merge into existing group sent this same planning phase (same hex, same target, same type)
   const existing = room.troopsInTransit.find(
     tg =>
       tg.attackerPlayerId === attackerPlayerId &&
       tg.targetPlayerId === targetPlayerId &&
       tg.troopType === troopType &&
-      tg.turnsRemaining === travelTurns &&
-      tg.totalTurns === travelTurns &&
+      tg.hexQ === attacker.hexQ && tg.hexR === attacker.hexR &&
+      tg.destHexQ === destHex.q && tg.destHexR === destHex.r &&
       !tg.isDonation,
   );
 
@@ -1462,8 +1482,10 @@ export function sendAttack(
       targetPlayerId,
       troopType,
       units,
-      turnsRemaining: travelTurns,
-      totalTurns: travelTurns,
+      hexQ: attacker.hexQ,
+      hexR: attacker.hexR,
+      destHexQ: destHex.q,
+      destHexR: destHex.r,
     });
   }
 
@@ -1499,7 +1521,7 @@ export function sendDonation(
 
   sender.militaryAtHome[troopType] -= units;
 
-  const travelTurns = PROMISED_LAND_TRAVEL_TURNS; // donations travel fast (2 turns)
+  const destHex = { q: target.hexQ, r: target.hexR };
 
   // Merge into existing donation group sent this same planning phase
   const existing = room.troopsInTransit.find(
@@ -1507,8 +1529,8 @@ export function sendDonation(
       tg.attackerPlayerId === senderPlayerId &&
       tg.targetPlayerId === targetPlayerId &&
       tg.troopType === troopType &&
-      tg.turnsRemaining === travelTurns &&
-      tg.totalTurns === travelTurns &&
+      tg.hexQ === sender.hexQ && tg.hexR === sender.hexR &&
+      tg.destHexQ === destHex.q && tg.destHexR === destHex.r &&
       tg.isDonation === true,
   );
 
@@ -1521,8 +1543,10 @@ export function sendDonation(
       targetPlayerId,
       troopType,
       units,
-      turnsRemaining: travelTurns,
-      totalTurns: travelTurns,
+      hexQ: sender.hexQ,
+      hexR: sender.hexR,
+      destHexQ: destHex.q,
+      destHexR: destHex.r,
       isDonation: true,
     });
   }
@@ -1588,40 +1612,16 @@ export function recallDefenders(
 // Troop management (recall, pause, resume, redirect)
 // ============================================================
 
-/** Resolve the map (x, y) position for a target (Promised Land or player city). */
-function resolveTargetPosition(
+/** Resolve the hex position for a target (Promised Land or player city). */
+function resolveTargetHex(
   targetPlayerId: string,
   players: Map<string, ServerCityPlayer>,
-  fallbackX = 0,
-  fallbackY = 0,
-): { x: number; y: number } {
+): Hex {
   if (targetPlayerId === PROMISED_LAND_ID) {
-    return { x: PROMISED_LAND_X, y: PROMISED_LAND_Y };
+    return { q: 0, r: 0 };
   }
   const target = players.get(targetPlayerId);
-  return { x: target?.x ?? fallbackX, y: target?.y ?? fallbackY };
-}
-
-/** Compute the current interpolated position of a troop group */
-function getTroopCurrentPosition(
-  tg: TroopGroup,
-  players: Map<string, ServerCityPlayer>
-): { x: number; y: number } {
-  const attacker = players.get(tg.attackerPlayerId);
-  const originX = tg.startX ?? (attacker?.x ?? 0);
-  const originY = tg.startY ?? (attacker?.y ?? 0);
-
-  const { x: targetX, y: targetY } = resolveTargetPosition(
-    tg.targetPlayerId, players, attacker?.x ?? 0, attacker?.y ?? 0
-  );
-
-  const progress = tg.totalTurns > 0
-    ? (tg.totalTurns - tg.turnsRemaining) / tg.totalTurns
-    : 1;
-  return {
-    x: originX + (targetX - originX) * progress,
-    y: originY + (targetY - originY) * progress,
-  };
+  return { q: target?.hexQ ?? 0, r: target?.hexR ?? 0 };
 }
 
 export function recallTroops(
@@ -1641,14 +1641,15 @@ export function recallTroops(
   );
   if (!tg) return { error: 'Troop group not found' };
   if (tg.targetPlayerId === tg.attackerPlayerId) return { error: 'Troops are already returning home' };
-  if (tg.turnsRemaining <= 0) return { error: 'Troops have already arrived' };
+  const arrived = tg.hexQ === tg.destHexQ && tg.hexR === tg.destHexR;
+  if (arrived) return { error: 'Troops have already arrived' };
 
-  const turnsTraveled = tg.totalTurns - tg.turnsRemaining;
+  const player = room.players.get(playerId);
+  if (!player) return { error: 'Player not found' };
 
-  // Instant recall: troops sent this turn haven't moved yet — return immediately
-  if (turnsTraveled === 0) {
-    const player = room.players.get(playerId);
-    if (player && player.alive) {
+  // Instant recall: troops still on home hex haven't moved yet — return immediately
+  if (tg.hexQ === player.hexQ && tg.hexR === player.hexR) {
+    if (player.alive) {
       if (defendOnArrival) {
         player.militaryDefending[tg.troopType] += tg.units;
       } else {
@@ -1660,14 +1661,9 @@ export function recallTroops(
     return { room };
   }
 
-  const currentPos = getTroopCurrentPosition(tg, room.players);
-  const returnTurns = Math.max(1, turnsTraveled);
-
-  tg.startX = currentPos.x;
-  tg.startY = currentPos.y;
   tg.targetPlayerId = tg.attackerPlayerId;
-  tg.turnsRemaining = returnTurns;
-  tg.totalTurns = returnTurns;
+  tg.destHexQ = player.hexQ;
+  tg.destHexR = player.hexR;
   tg.paused = false;
   tg.defendOnArrival = defendOnArrival ?? false;
 
@@ -1690,7 +1686,7 @@ export function pauseTroops(
   );
   if (!tg) return { error: 'Troop group not found' };
   if (tg.paused) return { error: 'Troops are already paused' };
-  if (tg.turnsRemaining <= 0) return { error: 'Troops have already arrived' };
+  if (tg.hexQ === tg.destHexQ && tg.hexR === tg.destHexR) return { error: 'Troops have already arrived' };
 
   tg.paused = true;
   return { room };
@@ -1736,7 +1732,7 @@ export function setDefendOnArrival(
   if (tg.attackerPlayerId !== tg.targetPlayerId) {
     return { error: 'Troops are not returning home' };
   }
-  if (tg.turnsRemaining <= 0) return { error: 'Troops have already arrived' };
+  if (tg.hexQ === tg.destHexQ && tg.hexR === tg.destHexR) return { error: 'Troops have already arrived' };
 
   tg.defendOnArrival = defendOnArrival;
   return { room };
@@ -1758,7 +1754,7 @@ export function redirectTroops(
     t => t.id === troopGroupId && t.attackerPlayerId === playerId
   );
   if (!tg) return { error: 'Troop group not found' };
-  if (tg.turnsRemaining <= 0) return { error: 'Troops have already arrived' };
+  if (tg.hexQ === tg.destHexQ && tg.hexR === tg.destHexR) return { error: 'Troops have already arrived' };
   if (newTargetPlayerId === playerId) return { error: 'Use recall to send troops home' };
   if (newTargetPlayerId === tg.targetPlayerId) return { error: 'Already heading to that target' };
 
@@ -1772,29 +1768,10 @@ export function redirectTroops(
     if (!newTarget.alive) return { error: 'Target is eliminated' };
   }
 
-  const currentPos = getTroopCurrentPosition(tg, room.players);
-
-  const newTargetPos = resolveTargetPosition(newTargetPlayerId, room.players);
-  const newDist = Math.hypot(newTargetPos.x - currentPos.x, newTargetPos.y - currentPos.y);
-
-  const oldTargetPos = resolveTargetPosition(tg.targetPlayerId, room.players, currentPos.x, currentPos.y);
-  const oldRemainingDist = Math.hypot(oldTargetPos.x - currentPos.x, oldTargetPos.y - currentPos.y);
-
-  let newTurns: number;
-  if (oldRemainingDist > 0.001) {
-    newTurns = Math.max(1, Math.round(tg.turnsRemaining * (newDist / oldRemainingDist)));
-  } else {
-    const baseTurns = (newTargetPlayerId === PROMISED_LAND_ID || tg.targetPlayerId === PROMISED_LAND_ID)
-      ? PROMISED_LAND_TRAVEL_TURNS
-      : TROOP_TRAVEL_TURNS;
-    newTurns = Math.max(1, Math.round(baseTurns * (newDist / PLAYER_PLACEMENT_DIAMETER)));
-  }
-
-  tg.startX = currentPos.x;
-  tg.startY = currentPos.y;
+  const newDestHex = resolveTargetHex(newTargetPlayerId, room.players);
   tg.targetPlayerId = newTargetPlayerId;
-  tg.turnsRemaining = newTurns;
-  tg.totalTurns = newTurns;
+  tg.destHexQ = newDestHex.q;
+  tg.destHexR = newDestHex.r;
   tg.paused = false;
   tg.defendOnArrival = false;
 
@@ -1820,28 +1797,22 @@ export function recallOccupyingTroops(
 
   const occ = room.occupyingTroops[occIndex];
 
-  // Determine start position (where the troops currently are)
-  const { x: startX, y: startY } = resolveTargetPosition(
-    occ.targetPlayerId, room.players, 0.5, 0.5
-  );
-
-  // PL is closer than a city — use the appropriate travel time
-  const returnTurns = occ.targetPlayerId === PROMISED_LAND_ID
-    ? PROMISED_LAND_TRAVEL_TURNS
-    : TROOP_TRAVEL_TURNS;
+  // Current hex = where they're occupying
+  const occHex = resolveTargetHex(occ.targetPlayerId, room.players);
+  const homeHex = resolveTargetHex(playerId, room.players);
 
   // Move from occupying to transit (heading home)
   room.occupyingTroops.splice(occIndex, 1);
   room.troopsInTransit.push({
     id: occ.id + '-recalled',
     attackerPlayerId: playerId,
-    targetPlayerId: playerId, // heading home
+    targetPlayerId: playerId,
     troopType: occ.troopType,
     units: occ.units,
-    turnsRemaining: returnTurns,
-    totalTurns: returnTurns,
-    startX,
-    startY,
+    hexQ: occHex.q,
+    hexR: occHex.r,
+    destHexQ: homeHex.q,
+    destHexR: homeHex.r,
     defendOnArrival: defendOnArrival ?? false,
   });
 
@@ -1876,17 +1847,8 @@ export function redirectOccupyingTroops(
     if (!newTarget.alive) return { error: 'Target is eliminated' };
   }
 
-  // Current position = where they're occupying
-  const { x: startX, y: startY } = resolveTargetPosition(
-    occ.targetPlayerId, room.players, 0.5, 0.5
-  );
-
-  // Calculate travel time based on distance
-  const newTargetPos = resolveTargetPosition(newTargetPlayerId, room.players);
-  const dist = Math.hypot(newTargetPos.x - startX, newTargetPos.y - startY);
-  const travelTurns = newTargetPlayerId === PROMISED_LAND_ID
-    ? PROMISED_LAND_TRAVEL_TURNS
-    : Math.max(1, Math.round(TROOP_TRAVEL_TURNS * (dist / PLAYER_PLACEMENT_DIAMETER)));
+  const occHex = resolveTargetHex(occ.targetPlayerId, room.players);
+  const newDestHex = resolveTargetHex(newTargetPlayerId, room.players);
 
   // Move from occupying to transit (heading to new target)
   room.occupyingTroops.splice(occIndex, 1);
@@ -1896,10 +1858,10 @@ export function redirectOccupyingTroops(
     targetPlayerId: newTargetPlayerId,
     troopType: occ.troopType,
     units: occ.units,
-    turnsRemaining: travelTurns,
-    totalTurns: travelTurns,
-    startX,
-    startY,
+    hexQ: occHex.q,
+    hexR: occHex.r,
+    destHexQ: newDestHex.q,
+    destHexR: newDestHex.r,
   });
 
   return { room };
@@ -1946,6 +1908,8 @@ export function resetRoom(
     player.upgradeProgress = zeroUpgradeRecord();
     player.hp = 0;
     player.maxHp = MAX_HP;
+    player.hexQ = 0;
+    player.hexR = 0;
     player.x = 0;
     player.y = 0;
     player.endedTurn = false;
@@ -1981,6 +1945,8 @@ export function sanitizeState(room: ServerRoom): RoomStatePayload {
     maxHp: p.maxHp,
     x: p.x,
     y: p.y,
+    hexQ: p.hexQ,
+    hexR: p.hexR,
     endedTurn: p.endedTurn,
   }));
 

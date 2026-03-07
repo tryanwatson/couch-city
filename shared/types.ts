@@ -28,8 +28,10 @@ export interface CityPlayerInfo {
   upgradeProgress: Record<UpgradeCategory, number>;    // current build progress per category
   hp: number;
   maxHp: number;
-  x: number; // 0–1 normalized map position
+  x: number; // 0–1 normalized map position (derived from hex)
   y: number;
+  hexQ: number; // axial hex coordinate
+  hexR: number;
   endedTurn: boolean;    // whether player clicked "End Turn" this round
 }
 
@@ -39,20 +41,22 @@ export interface TroopGroup {
   targetPlayerId: string;
   troopType: TroopType;
   units: number;
-  turnsRemaining: number;  // decrements each update phase; arrives at 0
-  totalTurns: number;      // original travel distance in turns (for progress calculation)
-  // Custom journey origin (set after field combat so survivors continue from collision point)
-  startX?: number;
-  startY?: number;
-  // Field combat (set when opposing groups collide mid-map)
-  fieldCombatX?: number;
-  fieldCombatY?: number;
-  inFieldCombat?: boolean; // resolved same turn during update phase
+  // Hex-based position & destination (axial coordinates)
+  hexQ: number;
+  hexR: number;
+  destHexQ: number;
+  destHexR: number;
+  prevHexQ?: number; // position before this turn's move (for animation)
+  prevHexR?: number;
+  // Field combat (set when opposing groups collide on the same hex)
+  fieldCombatHexQ?: number;
+  fieldCombatHexR?: number;
+  inFieldCombat?: boolean;
   fieldCombatUnits?: number; // original unit count before field combat (for animation)
   // Troop management
-  paused?: boolean; // when true, turnsRemaining does NOT decrement
-  isDonation?: boolean; // when true, troops join target's garrison on arrival instead of fighting
-  defendOnArrival?: boolean; // when true AND returning home, troops go to militaryDefending on arrival
+  paused?: boolean;
+  isDonation?: boolean;
+  defendOnArrival?: boolean;
 }
 
 // Broadcast payload — everything clients need to render
@@ -111,6 +115,8 @@ export interface ServerCityPlayer {
   maxHp: number;
   x: number;
   y: number;
+  hexQ: number;
+  hexR: number;
   endedTurn: boolean;
 }
 

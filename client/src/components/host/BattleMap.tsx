@@ -19,6 +19,11 @@ import {
   PROMISED_LAND_HOLD_TURNS,
   PLAYER_CASTLE_IMAGES,
 } from "../../../../shared/constants";
+import {
+  hexToPixel,
+  allGridHexes,
+  hexCorners,
+} from "../../../../shared/hexGrid";
 
 interface SpriteSheetConfig {
   image: string;
@@ -95,7 +100,6 @@ function hueRotationForColor(targetHex: string): number {
   return hexToHue(targetHex) - SOURCE_BLUE_HUE;
 }
 
-const ATTACK_STANDOFF = 0.09;
 const ATTACK_LINGER_MS = 5000;
 
 interface BattleMapProps {
@@ -685,10 +689,9 @@ function PromisedLandInfo({
   );
 }
 
-/** Calculate troop position based on turn-based progress */
-function getTroopProgress(troop: TroopGroup): number {
-  if (troop.totalTurns <= 0) return 1;
-  return (troop.totalTurns - troop.turnsRemaining) / troop.totalTurns;
+/** Check if troop has arrived at its destination hex */
+function troopHasArrived(troop: TroopGroup): boolean {
+  return troop.hexQ === troop.destHexQ && troop.hexR === troop.destHexR;
 }
 
 export default function BattleMap({
@@ -841,31 +844,37 @@ export default function BattleMap({
 
       for (const troop of troopsInTransit) {
         const attacker = playerMap.get(troop.attackerPlayerId);
-        const targetPos = resolveTargetPos(troop.targetPlayerId, playerMap);
-        if (!attacker || !targetPos) continue;
+        if (!attacker) continue;
 
-        const originX = troop.startX ?? attacker.x;
-        const originY = troop.startY ?? attacker.y;
-        const dx = targetPos.x - originX;
-        const dy = targetPos.y - originY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const facingLeft = dx < 0;
+        // Current and previous hex positions in normalized coords
+        const curPixel = hexToPixel({ q: troop.hexQ, r: troop.hexR });
+        const prevHex = troop.prevHexQ != null && troop.prevHexR != null
+          ? { q: troop.prevHexQ, r: troop.prevHexR }
+          : { q: troop.hexQ, r: troop.hexR };
+        const prevPixel = hexToPixel(prevHex);
+        const destPixel = hexToPixel({ q: troop.destHexQ, r: troop.destHexR });
+
+        const facingLeft = destPixel.x < curPixel.x;
+        const arrived = troopHasArrived(troop);
+        const isPromisedLandTarget = troop.targetPlayerId === PROMISED_LAND_ID;
+        const isReturningHome = troop.targetPlayerId === troop.attackerPlayerId;
+        const isDonation = troop.isDonation;
 
         // Field combat: 3-phase animation (walk → fight → advance/fade)
         if (
           isResolving &&
-          troop.fieldCombatX != null &&
-          troop.fieldCombatY != null
+          troop.fieldCombatHexQ != null &&
+          troop.fieldCombatHexR != null
         ) {
-          const midX = troop.fieldCombatX;
-          const midY = troop.fieldCombatY;
-          const prevPos = prevPositionsRef.current.get(troop.id);
-          const fromX = prevPos?.x ?? midX;
-          const fromY = prevPos?.y ?? midY;
+          const midPixel = hexToPixel({ q: troop.fieldCombatHexQ, r: troop.fieldCombatHexR });
+          const midX = midPixel.x;
+          const midY = midPixel.y;
+          const fromX = prevPixel.x;
+          const fromY = prevPixel.y;
           const isWinner = troop.units > 0;
-          const advanceX = troop.startX ?? midX;
-          const advanceY = troop.startY ?? midY;
-          // Face toward combat midpoint based on where troop is coming from
+          // Winner advances to their post-combat hex position
+          const advanceX = curPixel.x;
+          const advanceY = curPixel.y;
           const combatFacingLeft = fromX !== midX ? midX < fromX : facingLeft;
 
           const walkEnd = FIELD_COMBAT_WALK_FRAC;
@@ -878,17 +887,14 @@ export default function BattleMap({
           let displayUnits = troop.fieldCombatUnits ?? troop.units;
 
           if (animProgress < walkEnd) {
-            // Phase 1: Walk from previous position to midpoint
             const t = animProgress / walkEnd;
             posX = fromX + (midX - fromX) * t;
             posY = fromY + (midY - fromY) * t;
           } else if (animProgress < fightEnd) {
-            // Phase 2: Fight at midpoint
             posX = midX;
             posY = midY;
             attacking = true;
           } else {
-            // Phase 3: Winner advances to destination step; loser fades out
             const t = Math.min(
               1,
               (animProgress - fightEnd) / FIELD_COMBAT_ADVANCE_FRAC,
@@ -897,7 +903,6 @@ export default function BattleMap({
               const advanceDist =
                 Math.abs(advanceX - midX) + Math.abs(advanceY - midY);
               if (advanceDist < 0.001) {
-                // No distance to advance (e.g. promised land combat) — settle idle
                 posX = midX;
                 posY = midY;
                 idle = true;
@@ -925,66 +930,45 @@ export default function BattleMap({
           continue;
         }
 
-        // Calculate current turn-based position
-        const progress = getTroopProgress(troop);
-        const isPromisedLandTarget = troop.targetPlayerId === PROMISED_LAND_ID;
-        const isReturningHome = troop.targetPlayerId === troop.attackerPlayerId;
-        const isDonation = troop.isDonation;
-        const standoffFrac = dist > 0 ? ATTACK_STANDOFF / dist : 0;
-        // Returning troops and donations walk all the way to the city; attackers stop at standoff distance
-        const clampedProgress =
-          isPromisedLandTarget || isReturningHome || isDonation
-            ? progress
-            : Math.min(progress, 1 - standoffFrac);
+        // Hex-based position with animation interpolation
+        let displayX = curPixel.x;
+        let displayY = curPixel.y;
 
-        let displayX = originX + dx * clampedProgress;
-        let displayY = originY + dy * clampedProgress;
-
-        // During resolving animation, lerp from previous position to new position.
-        // For newly deployed troops with no previous position, animate from origin.
+        // During resolving animation, lerp from previous hex to current hex
         if (isResolving && animProgress < 1) {
-          const prevPos = prevPositionsRef.current.get(troop.id);
-          const fromX = prevPos?.x ?? originX;
-          const fromY = prevPos?.y ?? originY;
-          displayX = fromX + (displayX - fromX) * animProgress;
-          displayY = fromY + (displayY - fromY) * animProgress;
+          displayX = prevPixel.x + (curPixel.x - prevPixel.x) * animProgress;
+          displayY = prevPixel.y + (curPixel.y - prevPixel.y) * animProgress;
         }
 
-        // Returning troops and donations walk into their city — no lingering/attack animation
-        if ((isReturningHome || isDonation) && progress >= 1 && !isResolving) {
+        // Returning troops and donations that have arrived — idle at destination
+        if ((isReturningHome || isDonation) && arrived && !isResolving) {
           positions.set(troop.id, {
-            x: targetPos.x,
-            y: targetPos.y,
+            x: destPixel.x,
+            y: destPixel.y,
             facingLeft,
             isAttacking: false,
             isIdle: true,
             opacity: 1,
             displayUnits: troop.units,
           });
-          // Check if troop has arrived (progress >= 1 - standoffFrac)
-          // Promised land arrivals skip lingering — they become occupying troops on the server
         } else if (
           !isPromisedLandTarget &&
           !isReturningHome &&
           !isDonation &&
-          progress >= 1 - standoffFrac &&
+          arrived &&
           !isResolving
         ) {
+          // Attacking troops that arrived — linger with attack animation
           if (!lingeringRef.current.has(troop.id)) {
-            const nx = dist > 0 ? dx / dist : 0;
-            const ny = dist > 0 ? dy / dist : 0;
             lingeringRef.current.set(troop.id, {
               troop,
-              pos: {
-                x: targetPos.x - nx * ATTACK_STANDOFF,
-                y: targetPos.y - ny * ATTACK_STANDOFF,
-              },
+              pos: { x: curPixel.x, y: curPixel.y },
               facingLeft,
               startMs: now,
             });
           }
         } else {
-          // Promised land arrivals only attack-animate when enemies are present
+          // In-transit or promised land arrivals
           const isPromisedLandArrivalContested =
             isPromisedLandTarget &&
             promisedLandOccupierPlayerIds.size > 0 &&
@@ -993,7 +977,7 @@ export default function BattleMap({
             );
           const inArrivalCombat =
             isResolving &&
-            troop.turnsRemaining === 0 &&
+            arrived &&
             !isReturningHome &&
             !isDonation &&
             (!isPromisedLandTarget || isPromisedLandArrivalContested);
@@ -1006,7 +990,7 @@ export default function BattleMap({
               troop.paused ||
               !isResolving ||
               (isPromisedLandTarget &&
-                troop.turnsRemaining === 0 &&
+                arrived &&
                 !isPromisedLandArrivalContested &&
                 animProgress >= 1),
             opacity: 1,
@@ -1064,6 +1048,23 @@ export default function BattleMap({
         width="1000"
         height="1000"
       />
+
+      {/* Hex grid overlay */}
+      {allGridHexes().map((hex) => {
+        const corners = hexCorners(hex);
+        const points = corners
+          .map((c) => `${c.x * 1000},${c.y * 1000}`)
+          .join(" ");
+        return (
+          <polygon
+            key={`${hex.q},${hex.r}`}
+            points={points}
+            fill="none"
+            stroke="rgba(255,255,255,0.35)"
+            strokeWidth={1}
+          />
+        );
+      })}
 
       {/* The Promised Land spot — rendered before troops so troops paint on top */}
       {(() => {
@@ -1179,19 +1180,8 @@ export default function BattleMap({
           if (!attacker || !targetPos) return null;
           const dx = targetPos.x - attacker.x;
           const dy = targetPos.y - attacker.y;
-          // Promised land troops sit directly on the promised land; city troops use standoff
-          let pos: { x: number; y: number };
-          if (occ.targetPlayerId === PROMISED_LAND_ID) {
-            pos = { x: PROMISED_LAND_X, y: PROMISED_LAND_Y };
-          } else {
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            const nx = dist > 0 ? dx / dist : 0;
-            const ny = dist > 0 ? dy / dist : 0;
-            pos = {
-              x: targetPos.x - nx * ATTACK_STANDOFF,
-              y: targetPos.y - ny * ATTACK_STANDOFF,
-            };
-          }
+          // Position occupying troops on their hex
+          const pos = hexToPixel({ q: occ.hexQ, r: occ.hexR });
           return {
             occ,
             pos,
@@ -1387,18 +1377,8 @@ export default function BattleMap({
           if (result == null || resolvingStartRef.current == null) continue;
           const dx = targetPos.x - attacker.x;
           const dy = targetPos.y - attacker.y;
-          let pos: { x: number; y: number };
-          if (occ.targetPlayerId === PROMISED_LAND_ID) {
-            pos = { x: PROMISED_LAND_X, y: PROMISED_LAND_Y };
-          } else {
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            const nx = dist > 0 ? dx / dist : 0;
-            const ny = dist > 0 ? dy / dist : 0;
-            pos = {
-              x: targetPos.x - nx * ATTACK_STANDOFF,
-              y: targetPos.y - ny * ATTACK_STANDOFF,
-            };
-          }
+          // Position occupying troops on their hex
+          const pos = hexToPixel({ q: occ.hexQ, r: occ.hexR });
           const facingLeft = dx < 0;
           const sheet = SPRITE_SHEETS[occ.troopType];
           diceEntries.push({

@@ -27,7 +27,9 @@ import {
   PROGRESS_PER_BUILDER,
   HOUSING_POP_CAPS,
   getHousingCap,
+  MOVEMENT_SPEED,
 } from "../../../../shared/constants";
+import { hexDistance } from "../../../../shared/hexGrid";
 import BuildProgressBlock from "./BuildProgressBlock";
 import TargetModal from "./TargetModal";
 import type { TargetInfo } from "./TargetModal";
@@ -1317,7 +1319,7 @@ export default function GameControls({
                         {isPaused && " (PAUSED)"}
                       </span>
                       <span className="troop-manage-eta">
-                        {isPaused ? "Paused" : `${tg.turnsRemaining}t`}
+                        {isPaused ? "Paused" : `${Math.ceil(hexDistance({ q: tg.hexQ, r: tg.hexR }, { q: tg.destHexQ, r: tg.destHexR }) / MOVEMENT_SPEED[tg.troopType])}t`}
                       </span>
                     </div>
 
