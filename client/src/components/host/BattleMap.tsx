@@ -21,6 +21,7 @@ import {
 } from "../../../../shared/constants";
 import {
   hexToPixel,
+  hexKey,
   allGridHexes,
   hexCorners,
 } from "../../../../shared/hexGrid";
@@ -45,7 +46,7 @@ const SPRITE_SHEETS: Record<TroopType, SpriteSheetConfig> = {
     frameWidth: 32,
     sheetWidth: 512,
     sheetHeight: 32,
-    displaySize: 45,
+    displaySize: 38,
   },
   cavalry: {
     image: "/blue-horse-ss.png",
@@ -55,7 +56,7 @@ const SPRITE_SHEETS: Record<TroopType, SpriteSheetConfig> = {
     frameWidth: 32,
     sheetWidth: 512,
     sheetHeight: 32,
-    displaySize: 64,
+    displaySize: 45,
   },
   rifleman: {
     image: "/blue-soldier-rifle.png",
@@ -65,7 +66,7 @@ const SPRITE_SHEETS: Record<TroopType, SpriteSheetConfig> = {
     frameWidth: 32,
     sheetWidth: 544,
     sheetHeight: 32,
-    displaySize: 45,
+    displaySize: 38,
   },
   truck: {
     image: "/blue-truck.png",
@@ -75,7 +76,7 @@ const SPRITE_SHEETS: Record<TroopType, SpriteSheetConfig> = {
     frameWidth: 32,
     sheetWidth: 512,
     sheetHeight: 32,
-    displaySize: 64,
+    displaySize: 45,
   },
 };
 
@@ -135,6 +136,57 @@ const DICE_SHEET_WIDTH = 1024;
 const DICE_BOX_PAD = 4;
 const DICE_PAIR_GAP = 4;
 
+const MAX_VISIBLE_SPRITES = 25;
+
+interface SpriteSlot {
+  troopType: TroopType;
+}
+
+/** Allocate up to MAX_VISIBLE_SPRITES slots across multiple troop types, proportionally with min 1 each. */
+function buildSpriteSlots(
+  groups: { troopType: TroopType; units: number }[],
+): SpriteSlot[] {
+  const nonEmpty = groups.filter((g) => g.units > 0);
+  if (nonEmpty.length === 0) return [];
+  const totalUnits = nonEmpty.reduce((sum, g) => sum + g.units, 0);
+  const maxSlots = Math.min(totalUnits, MAX_VISIBLE_SPRITES);
+
+  // Proportional allocation with minimum 1 per type
+  const allocs = nonEmpty.map((g) =>
+    Math.max(1, Math.round((g.units / totalUnits) * maxSlots)),
+  );
+  let allocated = allocs.reduce((s, a) => s + a, 0);
+  while (allocated > maxSlots) {
+    let maxIdx = 0;
+    for (let i = 1; i < allocs.length; i++)
+      if (allocs[i] > allocs[maxIdx]) maxIdx = i;
+    if (allocs[maxIdx] <= 1) break;
+    allocs[maxIdx]--;
+    allocated--;
+  }
+  while (allocated < maxSlots) {
+    let bestIdx = 0;
+    let bestRatio = 0;
+    for (let i = 0; i < nonEmpty.length; i++) {
+      const ratio = nonEmpty[i].units / allocs[i];
+      if (ratio > bestRatio) {
+        bestRatio = ratio;
+        bestIdx = i;
+      }
+    }
+    allocs[bestIdx]++;
+    allocated++;
+  }
+
+  const slots: SpriteSlot[] = [];
+  for (let g = 0; g < nonEmpty.length; g++) {
+    for (let i = 0; i < allocs[g]; i++) {
+      slots.push({ troopType: nonEmpty[g].troopType });
+    }
+  }
+  return slots;
+}
+
 function TroopSprite({
   pos,
   units,
@@ -148,6 +200,8 @@ function TroopSprite({
   playerColor,
   statusIcon,
   statusColor,
+  spriteSlots,
+  totalCp,
 }: {
   pos: { x: number; y: number };
   units: number;
@@ -161,19 +215,34 @@ function TroopSprite({
   playerColor?: string;
   statusIcon?: string;
   statusColor?: string;
+  spriteSlots?: SpriteSlot[];
+  totalCp?: number;
 }) {
-  const sheet = SPRITE_SHEETS[troopType];
   const cx = pos.x * 1000;
   const cy = pos.y * 1000;
-  const displaySize = sheet.displaySize;
-  const scale = displaySize / sheet.frameWidth;
-  const clusterRadius = units <= 1 ? 0 : 15 + Math.sqrt(units) * 8;
+
+  // Determine visual sprite count (capped)
+  const visibleUnits = spriteSlots
+    ? spriteSlots.length
+    : Math.min(units, MAX_VISIBLE_SPRITES);
+  const clusterRadius = visibleUnits <= 1 ? 0 : Math.sqrt(visibleUnits) * 8;
+  const maxDisplaySize = spriteSlots
+    ? Math.max(...spriteSlots.map((s) => SPRITE_SHEETS[s.troopType].displaySize))
+    : SPRITE_SHEETS[troopType].displaySize;
 
   // Compute sprite positions first, then sort by Y for depth ordering
   const spriteData = [];
-  for (let i = 0; i < units; i++) {
+  for (let i = 0; i < visibleUnits; i++) {
+    const slotType = spriteSlots ? spriteSlots[i].troopType : troopType;
+    const sheet = SPRITE_SHEETS[slotType];
+    const displaySize = sheet.displaySize;
+    const scale = displaySize / sheet.frameWidth;
+
     const angle = i * GOLDEN_ANGLE;
-    const r = units <= 1 ? 0 : Math.sqrt((i + 0.5) / units) * clusterRadius;
+    const r =
+      visibleUnits <= 1
+        ? 0
+        : Math.sqrt((i + 0.5) / visibleUnits) * clusterRadius;
     const sx = cx + r * Math.cos(angle);
     const sy = cy + r * Math.sin(angle);
 
@@ -196,12 +265,22 @@ function TroopSprite({
       ? `translate(${2 * sx}, 0) scale(-1, 1)`
       : undefined;
 
-    spriteData.push({ i, sx, sy, frameX, flipTransform, breathScale });
+    spriteData.push({
+      i,
+      sx,
+      sy,
+      frameX,
+      flipTransform,
+      breathScale,
+      sheet,
+      displaySize,
+      scale,
+    });
   }
   spriteData.sort((a, b) => a.sy - b.sy);
 
   const sprites = spriteData.map(
-    ({ i, sx, sy, frameX, flipTransform, breathScale }) => (
+    ({ i, sx, sy, frameX, flipTransform, breathScale, sheet, displaySize, scale }) => (
       <g key={i} transform={flipTransform}>
         <g
           transform={
@@ -240,13 +319,13 @@ function TroopSprite({
     <g opacity={opacity}>
       <g filter={filterUrl}>{sprites}</g>
       {(() => {
-        const cp = units * COMBAT_POWER[troopType];
+        const cp = totalCp ?? units * COMBAT_POWER[troopType];
         const circleR = 14;
         const boxPad = 5;
         const cpTextWidth = 3 * 11; // fixed width for up to 3 digits at font 18
         const boxW = boxPad + circleR * 2 + 6 + cpTextWidth + boxPad;
         const boxH = circleR * 2 + boxPad * 2;
-        const boxY = cy + clusterRadius + displaySize / 2 - 20;
+        const boxY = cy + clusterRadius + maxDisplaySize / 2 - 20;
         const boxX = cx - boxW / 2;
         const circleCx = boxX + boxPad + circleR;
         const circleCy = boxY + boxPad + circleR;
@@ -1170,66 +1249,82 @@ export default function BattleMap({
           />
         ))}
 
-      {/* Occupying siege troops — idle at standoff distance from target city, or on promised land center */}
-      {/* Filter out occupiers whose ID is still in troopsInTransit (they're animating arrival) */}
-      {occupyingTroops
-        .filter((occ) => !troopsInTransit.some((tg) => tg.id === occ.id))
-        .map((occ) => {
+      {/* Occupying siege troops — grouped by hex+player into merged clusters */}
+      {(() => {
+        const filtered = occupyingTroops.filter(
+          (occ) => !troopsInTransit.some((tg) => tg.id === occ.id),
+        );
+        // Group by hex + attackerPlayerId
+        const groupMap = new Map<
+          string,
+          { occs: TroopGroup[]; pos: { x: number; y: number }; facingLeft: boolean; playerColor: string }
+        >();
+        for (const occ of filtered) {
           const attacker = playerMap.get(occ.attackerPlayerId);
           const targetPos = resolveTargetPos(occ.targetPlayerId, playerMap);
-          if (!attacker || !targetPos) return null;
-          const dx = targetPos.x - attacker.x;
-          const dy = targetPos.y - attacker.y;
-          // Position occupying troops on their hex
-          const pos = hexToPixel({ q: occ.hexQ, r: occ.hexR });
-          return {
-            occ,
-            pos,
-            facingLeft: dx < 0,
-            playerColor: attacker.color,
-          };
-        })
-        .filter((e): e is NonNullable<typeof e> => e != null)
-        .sort((a, b) => a.pos.y - b.pos.y)
-        .map((entry) => {
-          // Promised land occupiers: only attack-animate when contested (multiple players at promised land)
-          const isPromisedLandOccupier =
-            entry.occ.targetPlayerId === PROMISED_LAND_ID;
-          const promisedLandPlayerIds = new Set(
-            occupyingTroops
-              .filter(
-                (occ) =>
-                  occ.targetPlayerId === PROMISED_LAND_ID && occ.units > 0,
-              )
-              .map((occ) => occ.attackerPlayerId),
-          );
-          const isPromisedLandContested = promisedLandPlayerIds.size > 1;
-          const isAttacking = isPromisedLandOccupier
-            ? subPhase === "resolving" && isPromisedLandContested
-            : subPhase === "resolving";
-          const sIcon = isPromisedLandOccupier ? "👑" : "⚔";
-          const sColor = isPromisedLandOccupier
-            ? "#ffffff"
-            : (playerMap.get(entry.occ.targetPlayerId)?.color ?? "white");
-          return (
-            <TroopSprite
-              key={`siege-${entry.occ.id}`}
-              pos={entry.pos}
-              units={entry.occ.units}
-              frameIndex={frameIndex}
-              animTime={animTime}
-              isAttacking={isAttacking}
-              isIdle={!isAttacking}
-              facingLeft={entry.facingLeft}
-              troopType={entry.occ.troopType}
-              playerColor={entry.playerColor}
-              statusIcon={sIcon}
-              statusColor={sColor}
-            />
-          );
-        })}
+          if (!attacker || !targetPos) continue;
+          const key = `${hexKey({ q: occ.hexQ, r: occ.hexR })}_${occ.attackerPlayerId}`;
+          const existing = groupMap.get(key);
+          if (existing) {
+            existing.occs.push(occ);
+          } else {
+            const dx = targetPos.x - attacker.x;
+            groupMap.set(key, {
+              occs: [occ],
+              pos: hexToPixel({ q: occ.hexQ, r: occ.hexR }),
+              facingLeft: dx < 0,
+              playerColor: attacker.color,
+            });
+          }
+        }
+        const promisedLandPlayerIds = new Set(
+          occupyingTroops
+            .filter((occ) => occ.targetPlayerId === PROMISED_LAND_ID && occ.units > 0)
+            .map((occ) => occ.attackerPlayerId),
+        );
+        const isPromisedLandContested = promisedLandPlayerIds.size > 1;
+        return Array.from(groupMap.entries())
+          .sort(([, a], [, b]) => a.pos.y - b.pos.y)
+          .map(([key, group]) => {
+            const totalUnits = group.occs.reduce((s, o) => s + o.units, 0);
+            const totalCp = group.occs.reduce(
+              (s, o) => s + o.units * COMBAT_POWER[o.troopType],
+              0,
+            );
+            const slots = buildSpriteSlots(
+              group.occs.map((o) => ({ troopType: o.troopType, units: o.units })),
+            );
+            const isPromisedLandOccupier =
+              group.occs[0].targetPlayerId === PROMISED_LAND_ID;
+            const isAttacking = isPromisedLandOccupier
+              ? subPhase === "resolving" && isPromisedLandContested
+              : subPhase === "resolving";
+            const sIcon = isPromisedLandOccupier ? "👑" : "⚔";
+            const sColor = isPromisedLandOccupier
+              ? "#ffffff"
+              : (playerMap.get(group.occs[0].targetPlayerId)?.color ?? "white");
+            return (
+              <TroopSprite
+                key={`siege-${key}`}
+                pos={group.pos}
+                units={totalUnits}
+                frameIndex={frameIndex}
+                animTime={animTime}
+                isAttacking={isAttacking}
+                isIdle={!isAttacking}
+                facingLeft={group.facingLeft}
+                troopType={group.occs[0].troopType}
+                playerColor={group.playerColor}
+                statusIcon={sIcon}
+                statusColor={sColor}
+                spriteSlots={slots}
+                totalCp={totalCp}
+              />
+            );
+          });
+      })()}
 
-      {/* Defending troops — rendered after city images but before info boxes */}
+      {/* Defending troops — merged into one cluster per player */}
       {players.map((player) => {
         const defendingTypes = TROOP_TYPES.filter(
           (t) => player.militaryDefending[t] > 0,
@@ -1239,32 +1334,38 @@ export default function BattleMap({
           (occ) => occ.targetPlayerId === player.playerId,
         ) || (combatHitPlayerIds ?? []).includes(player.playerId);
         const isDefendingCombat = subPhase === "resolving" && isUnderSiege;
-        return defendingTypes.map((type, i) => {
-          const spread =
-            defendingTypes.length > 1
-              ? (i - (defendingTypes.length - 1) / 2) * 0.06
-              : 0;
-          const pos = {
-            x: player.x + spread,
-            y: player.y + 0.04,
-          };
-          return (
-            <TroopSprite
-              key={`defend-${player.playerId}-${type}`}
-              pos={pos}
-              units={player.militaryDefending[type]}
-              frameIndex={frameIndex}
-              animTime={animTime}
-              isAttacking={isDefendingCombat}
-              isIdle={!isDefendingCombat}
-              facingLeft={player.x > PROMISED_LAND_X}
-              troopType={type}
-              playerColor={player.color}
-              statusIcon="🛡"
-              statusColor={player.color}
-            />
-          );
-        });
+        const totalUnits = defendingTypes.reduce(
+          (s, t) => s + player.militaryDefending[t],
+          0,
+        );
+        const totalCp = defendingTypes.reduce(
+          (s, t) => s + player.militaryDefending[t] * COMBAT_POWER[t],
+          0,
+        );
+        const slots = buildSpriteSlots(
+          defendingTypes.map((t) => ({
+            troopType: t,
+            units: player.militaryDefending[t],
+          })),
+        );
+        return (
+          <TroopSprite
+            key={`defend-${player.playerId}`}
+            pos={{ x: player.x, y: player.y + 0.04 }}
+            units={totalUnits}
+            frameIndex={frameIndex}
+            animTime={animTime}
+            isAttacking={isDefendingCombat}
+            isIdle={!isDefendingCombat}
+            facingLeft={player.x > PROMISED_LAND_X}
+            troopType={defendingTypes[0]}
+            playerColor={player.color}
+            statusIcon="🛡"
+            statusColor={player.color}
+            spriteSlots={slots}
+            totalCp={totalCp}
+          />
+        );
       })}
 
       {/* Promised Land info box — rendered after troops so it appears on top */}
@@ -1320,7 +1421,7 @@ export default function BattleMap({
             key: `walk-${troop.id}`,
             cx: posData.x * 1000,
             cy: posData.y * 1000,
-            clusterRadius: units <= 1 ? 0 : 15 + Math.sqrt(units) * 8,
+            clusterRadius: units <= 1 ? 0 : Math.sqrt(Math.min(units, MAX_VISIBLE_SPRITES)) * 8,
             displaySize: sheet.displaySize,
             playerColor: playerMap.get(troop.attackerPlayerId)?.color ?? "#555",
             diceSide: posData.facingLeft ? "right" : "left",
@@ -1344,7 +1445,7 @@ export default function BattleMap({
             key: `attack-${lingering.troop.id}`,
             cx: lingering.pos.x * 1000,
             cy: lingering.pos.y * 1000,
-            clusterRadius: units <= 1 ? 0 : 15 + Math.sqrt(units) * 8,
+            clusterRadius: units <= 1 ? 0 : Math.sqrt(Math.min(units, MAX_VISIBLE_SPRITES)) * 8,
             displaySize: sheet.displaySize,
             playerColor:
               playerMap.get(lingering.troop.attackerPlayerId)?.color ?? "#555",
@@ -1385,7 +1486,7 @@ export default function BattleMap({
             key: `siege-${occ.id}`,
             cx: pos.x * 1000,
             cy: pos.y * 1000,
-            clusterRadius: occ.units <= 1 ? 0 : 15 + Math.sqrt(occ.units) * 8,
+            clusterRadius: occ.units <= 1 ? 0 : Math.sqrt(Math.min(occ.units, MAX_VISIBLE_SPRITES)) * 8,
             displaySize: sheet.displaySize,
             playerColor: attacker.color,
             diceSide: facingLeft ? "right" : "left",
@@ -1394,7 +1495,7 @@ export default function BattleMap({
           });
         }
 
-        // Defending troops (siege defenders)
+        // Defending troops (siege defenders) — one dice per player (merged cluster)
         if (subPhase === "resolving" && resolvingStartRef.current != null) {
           for (const player of players) {
             if (!player.alive) continue;
@@ -1404,31 +1505,24 @@ export default function BattleMap({
             if (!isUnderSiege) continue;
             const result = diceResultsRef.current.get(player.playerId);
             if (result == null) continue;
-            const defendingTypes = TROOP_TYPES.filter(
-              (t) => player.militaryDefending[t] > 0,
+            const totalDefending = TROOP_TYPES.reduce(
+              (s, t) => s + player.militaryDefending[t],
+              0,
             );
-            for (let i = 0; i < defendingTypes.length; i++) {
-              const type = defendingTypes[i];
-              const spread =
-                defendingTypes.length > 1
-                  ? (i - (defendingTypes.length - 1) / 2) * 0.06
-                  : 0;
-              const units = player.militaryDefending[type];
-              const sheet = SPRITE_SHEETS[type];
-              const cx = (player.x + spread) * 1000;
-              const cy = (player.y + 0.04) * 1000;
-              diceEntries.push({
-                key: `defend-${player.playerId}-${type}`,
-                cx,
-                cy,
-                clusterRadius: units <= 1 ? 0 : 15 + Math.sqrt(units) * 8,
-                displaySize: sheet.displaySize,
-                playerColor: player.color,
-                diceSide: player.x > PROMISED_LAND_X ? "right" : "left",
-                diceResult: result,
-                diceCombatStartMs: resolvingStartRef.current,
-              });
-            }
+            if (totalDefending === 0) continue;
+            const maxSheet = TROOP_TYPES.filter((t) => player.militaryDefending[t] > 0)
+              .reduce((best, t) => Math.max(best, SPRITE_SHEETS[t].displaySize), 0);
+            diceEntries.push({
+              key: `defend-${player.playerId}`,
+              cx: player.x * 1000,
+              cy: (player.y + 0.04) * 1000,
+              clusterRadius: totalDefending <= 1 ? 0 : Math.sqrt(Math.min(totalDefending, MAX_VISIBLE_SPRITES)) * 8,
+              displaySize: maxSheet,
+              playerColor: player.color,
+              diceSide: player.x > PROMISED_LAND_X ? "right" : "left",
+              diceResult: result,
+              diceCombatStartMs: resolvingStartRef.current,
+            });
           }
         }
 
