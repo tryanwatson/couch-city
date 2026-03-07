@@ -259,26 +259,8 @@ export const PLAYER_CASTLE_IMAGES: Record<string, string> = {
   "#ffe119": "/yellow-castle.png",
 };
 
-// Player position layout — 12 evenly-spaced slots at 30° intervals around the Promised Land
-// Slot i sits at angle (i * 2π / 12) radians: slot 0 = East, 3 = South, 6 = West, 9 = North
-export const PLAYER_POSITION_SLOTS = 12;
-
-// Fill order: player join index → slot index
-// Cardinals first (W/E/N/S), then opposite pairs filling largest gaps
-export const PLAYER_SLOT_FILL_ORDER: readonly number[] = [
-  6, // 1st: 180° (West)
-  0, // 2nd: 0°   (East)
-  9, // 3rd: 270° (North)
-  3, // 4th: 90°  (South)
-  2, // 5th: 60°
-  8, // 6th: 240°
-  5, // 7th: 150°
-  11, // 8th: 330°
-  1, // 9th: 30°
-  7, // 10th: 210°
-  4, // 11th: 120°
-  10, // 12th: 300°
-] as const;
+// Starting angle for the first player (radians). Math.PI = West/left side of map.
+export const PLAYER_START_ANGLE = Math.PI;
 
 // Oval radii for player placement (equal = circle, different = oval)
 export const PLAYER_POSITION_RX = 0.35;

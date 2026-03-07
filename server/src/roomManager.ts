@@ -41,8 +41,7 @@ import {
   PROMISED_LAND_Y,
   PROMISED_LAND_TRAVEL_TURNS,
   PROMISED_LAND_HOLD_TURNS,
-  PLAYER_POSITION_SLOTS,
-  PLAYER_SLOT_FILL_ORDER,
+  PLAYER_START_ANGLE,
   PLAYER_POSITION_RX,
   PLAYER_POSITION_RY,
   PLAYER_PLACEMENT_DIAMETER,
@@ -463,16 +462,16 @@ export function startGame(
   const availableColors = PLAYER_COLORS.filter(c => !chosenColors.has(c));
   let availIdx = 0;
 
-  // Assign positions around the Promised Land using fixed slots.
-  // First 4 players get cardinal directions (W/E/N/S), rest fill gaps as opposite pairs.
+  // Assign positions equidistantly around the Promised Land.
+  // N players are spaced 360/N degrees apart, starting from PLAYER_START_ANGLE (West).
+  const n = playerList.length;
   playerList.forEach((player, index) => {
     if (!player.color) {
       player.color = availableColors[availIdx % availableColors.length];
       availIdx++;
     }
 
-    const slot = PLAYER_SLOT_FILL_ORDER[index % PLAYER_SLOT_FILL_ORDER.length];
-    const angle = (2 * Math.PI * slot) / PLAYER_POSITION_SLOTS;
+    const angle = PLAYER_START_ANGLE + (2 * Math.PI * index) / n;
     player.x = parseFloat((PROMISED_LAND_X + PLAYER_POSITION_RX * Math.cos(angle)).toFixed(3));
     player.y = parseFloat((PROMISED_LAND_Y + PLAYER_POSITION_RY * Math.sin(angle)).toFixed(3));
 
