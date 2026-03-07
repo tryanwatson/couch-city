@@ -107,10 +107,10 @@ export const TRAINING_CONFIG: Record<
   TroopType,
   { gold: number; troops: number }
 > = {
-  warrior: { gold: 20, troops: 10 }, //1 2:1
-  cavalry: { gold: 50, troops: 10 }, //5 1:1
-  rifleman: { gold: 100, troops: 8 }, //25 .5:1
-  truck: { gold: 150, troops: 1 }, //100 .25:1
+  warrior: { gold: 40, troops: 10 }, //1 2:1
+  cavalry: { gold: 100, troops: 10 }, //5 1:1
+  rifleman: { gold: 200, troops: 8 }, //25 .5:1
+  truck: { gold: 300, troops: 1 }, //100 .25:1
 };
 
 export const ZERO_MILITARY: Record<TroopType, number> = {
@@ -271,4 +271,3 @@ export const PLAYER_START_ANGLE = Math.PI;
 // Oval radii for player placement (equal = circle, different = oval)
 export const PLAYER_POSITION_RX = 0.35;
 export const PLAYER_POSITION_RY = 0.35;
-
