@@ -695,7 +695,8 @@ function runUpdatePhase(room: ServerRoom): void {
       const to: Hex = { q: tg.destHexQ, r: tg.destHexR };
       if (!hexEqual(from, to)) {
         const path = hexLineDraw(from, to);
-        const speed = MOVEMENT_SPEED[tg.troopType];
+        const baseSpeed = MOVEMENT_SPEED[tg.troopType];
+        const speed = tg.targetPlayerId === PROMISED_LAND_ID ? baseSpeed * 2 : baseSpeed;
         const stepIndex = Math.min(speed, path.length - 1);
         tg.hexQ = path[stepIndex].q;
         tg.hexR = path[stepIndex].r;

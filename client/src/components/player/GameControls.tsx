@@ -1319,7 +1319,7 @@ export default function GameControls({
                         {isPaused && " (PAUSED)"}
                       </span>
                       <span className="troop-manage-eta">
-                        {isPaused ? "Paused" : `${Math.ceil(hexDistance({ q: tg.hexQ, r: tg.hexR }, { q: tg.destHexQ, r: tg.destHexR }) / MOVEMENT_SPEED[tg.troopType])}t`}
+                        {isPaused ? "Paused" : `${Math.ceil(hexDistance({ q: tg.hexQ, r: tg.hexR }, { q: tg.destHexQ, r: tg.destHexR }) / (MOVEMENT_SPEED[tg.troopType] * (tg.targetPlayerId === PROMISED_LAND_ID ? 2 : 1)))}t`}
                       </span>
                     </div>
 
