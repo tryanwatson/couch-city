@@ -75,6 +75,8 @@ export default function GameControls({
   });
   const [localGrowthMultiplier, setLocalGrowthMultiplier] = useState(1);
   const [selectedTarget, setSelectedTarget] = useState<TargetInfo | null>(null);
+  const [showNewTurn, setShowNewTurn] = useState(false);
+  const prevTurnRef = useRef(roomState.turnNumber);
   const [expandedSections, setExpandedSections] = useState<
     Record<SectionId, boolean>
   >({
@@ -99,6 +101,19 @@ export default function GameControls({
       return () => clearTimeout(id);
     }
   }, [roomState.combatHitPlayerIds, playerId]);
+
+  useEffect(() => {
+    if (
+      roomState.turnNumber > prevTurnRef.current &&
+      roomState.subPhase === "planning" &&
+      roomState.turnNumber > 1
+    ) {
+      setShowNewTurn(true);
+      const id = setTimeout(() => setShowNewTurn(false), 2500);
+      return () => clearTimeout(id);
+    }
+    prevTurnRef.current = roomState.turnNumber;
+  }, [roomState.turnNumber, roomState.subPhase]);
 
   const emitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAllocInteraction = useRef(0);
@@ -456,6 +471,13 @@ export default function GameControls({
     <div className={`game-controls${controlsDisabled ? " turn-ended" : ""}`}>
       {/* SCREEN EDGE FLASH ON ATTACK */}
       {hit && <div className="attack-flash-overlay" />}
+
+      {/* NEW TURN OVERLAY */}
+      {showNewTurn && (
+        <div className="new-turn-overlay" onClick={() => setShowNewTurn(false)}>
+          <div className="new-turn-text">Turn {roomState.turnNumber}</div>
+        </div>
+      )}
 
       {/* STICKY HP BAR */}
       <div className="hp-bar-sticky">

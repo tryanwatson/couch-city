@@ -347,6 +347,40 @@
   animation: screen-flash 1.2s ease-out forwards;
 }
 
+/* New turn overlay */
+.new-turn-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: new-turn-fade-in 0.3s ease-out;
+  cursor: pointer;
+}
+
+.new-turn-text {
+  font-size: 3rem;
+  font-weight: 800;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+  animation: new-turn-pop 0.4s ease-out;
+}
+
+@keyframes new-turn-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes new-turn-pop {
+  0% { transform: scale(0.5); opacity: 0; }
+  70% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 /* Culture progress bar (inside culture section) */
 .culture-bar-wrapper {
   position: relative;
